@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+      "target": "es2021",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
+      "module": "esnext",                                  /* Specify what module code is generated. */
+      "types": ["node"],                                   /* Specify type package names to be included without being referenced in a source file. */
+      "resolveJsonModule": true,
+      "esModuleInterop": true,
+      "moduleResolution": "Bundler",
+  
+      // 任意の相対パス
+      "baseUrl": ".",
+  
+      // 「入力ファイルを～」エラー回避に必須。
+      "outDir": "./.build",
+      "allowJs": true,
+      "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
+    },
+  
+    // ～対応する型宣言が～」エラー回避の為に必須
+    "include": [
+      "./src/**/*"
+    ],
+  }

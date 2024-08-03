@@ -1,0 +1,32 @@
+{
+    "name": "nadesiko3-highlight-extension",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.33.1"
+    },
+    "main": "./lib/extension.js",
+    "type": "commonjs",
+    "scripts": {
+        "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs"
+    },
+    "activationEvents": [
+        "onLanguage:nadesiko3"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "nadesiko3",
+                "extensions": [
+                    ".nako3"
+                ]
+            }
+        ]
+    },
+    "devDependencies": {
+        "@rollup/plugin-json": "^6.1.0",
+        "@types/node": "^22.0.0",
+        "@types/vscode": "^1.91.0",
+        "rollup": "^4.19.1",
+        "typescript": "^5.5.4"
+    }
+}
