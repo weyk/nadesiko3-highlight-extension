@@ -1132,7 +1132,8 @@ class Nako3Tokenizer {
         }
     }
 }
-class Nako3DocumentSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+
+export class Nako3DocumentSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
     async provideDocumentSemanticTokens(document: vscode.TextDocument, canceltoken: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
         // analyze the document and return semantic tokens
         //console.log('semantec syntax highlight: enter')

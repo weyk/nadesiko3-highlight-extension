@@ -1,0 +1,29 @@
+{
+    // 基本設定は、tsconfig.json から継承
+    "extends": [
+        "./tsconfig.json"
+    ],
+    "compilerOptions": {
+        "module": "CommonJS",                             /* Specify what module code is generated. */
+        "types": ["node", "mocha"],                       /* Specify type package names to be included without being referenced in a source file. */
+        "moduleResolution": "Node10",
+        // imoprt スコープの範囲を test 配下に狭める
+        "rootDir": "./test",
+        "outDir": "./.test",
+        "allowJs": false,
+    },
+  
+    // ～対応する型宣言が～」エラー回避の為に必須
+    "include": [
+        "./test/**/*"
+    ],
+
+    // 必須
+    // トランスパイルから除外する
+    // node_modules 等も必須
+    "exclude": [
+        "./src/**/*",
+        "node_modules",
+        "**/node_modules/"
+    ]
+}

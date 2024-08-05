@@ -10,6 +10,18 @@
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ]
+        },
+        {
+            "name": "Extension test",
+            "type": "extensionHost",
+            "request": "launch",
+            "runtimeExecutable": "${execPath}",
+            "preLaunchTask": "preTest",
+            "testConfiguration": "${workspaceFolder}/.vscode-test.mjs",
+            "args": [
+                "--disable-extensions",
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ]
         }
     ]
 }

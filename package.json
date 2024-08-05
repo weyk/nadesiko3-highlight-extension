@@ -1,14 +1,33 @@
 {
     "name": "nadesiko3-highlight-extension",
+    "displayName": "Nadesiko3: Syntax Highlighting",
+    "description": "Adds syntax highlighting support for nadesiko3",
     "version": "0.0.1",
     "engines": {
-        "vscode": "^1.33.1"
+        "vscode": "^1.91.0"
     },
     "main": "./lib/extension.js",
     "type": "commonjs",
     "scripts": {
+        "preTest": "npm run build && tsc -p ./tsconfig.test.json",
         "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs"
     },
+    "publisher": "weykan",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/weyk/nadesiko3-highlight-extension"
+    },
+    "files": [
+        "lib/extension.js",
+        "README.md",
+        "LICENSE",
+        "CHANGELOG.md",
+        "package.json"
+    ],
+    "categories": [
+        "Programming Languages"
+    ],
+    "license": "MIT",
     "activationEvents": [
         "onLanguage:nadesiko3"
     ],
@@ -24,8 +43,11 @@
     },
     "devDependencies": {
         "@rollup/plugin-json": "^6.1.0",
+        "@types/mocha": "^10.0.7",
         "@types/node": "^22.0.0",
         "@types/vscode": "^1.91.0",
+        "@vscode/test-cli": "^0.0.10",
+        "mocha": "^10.7.0",
         "rollup": "^4.19.1",
         "typescript": "^5.5.4"
     }
