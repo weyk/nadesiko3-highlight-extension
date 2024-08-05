@@ -4,7 +4,7 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 
 ## Install
 
-Search and install **`nadesiko3-highlight`** in VSCode extension marketplace.
+Search and install **`Nadesiko3: Syntax Highlighting`** in VSCode extension marketplace.
 
 ## License
 
