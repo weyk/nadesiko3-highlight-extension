@@ -8,6 +8,6 @@ export default {
     exports: "named",
     sourcemap: true,
   },
-  plugins: [json()],
+  plugins: [json({compact: true})],
   external: ['vscode']
 }

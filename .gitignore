@@ -40,6 +40,7 @@ build/Release
 .build
 .test
 lib
+*.vsix
 
 # Dependency directories
 node_modules/

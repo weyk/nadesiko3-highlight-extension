@@ -1,8 +1,8 @@
 {
     "name": "nadesiko3-highlight-extension",
-    "displayName": "Nadesiko3: Syntax Highlighting",
+    "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -20,7 +20,7 @@
     "files": [
         "lib/extension.js",
         "README.md",
-        "LICENSE",
+        "LICENSE.txt",
         "CHANGELOG.md",
         "package.json"
     ],
