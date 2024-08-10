@@ -11,6 +11,7 @@
         "rootDir": "./test",
         "outDir": "./.test",
         "allowJs": false,
+        "noImplicitAny": false,
     },
   
     // ～対応する型宣言が～」エラー回避の為に必須

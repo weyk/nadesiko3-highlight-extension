@@ -2,7 +2,7 @@
     "compilerOptions": {
       "target": "es2021",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
       "module": "esnext",                                  /* Specify what module code is generated. */
-      "types": ["node"],                                   /* Specify type package names to be included without being referenced in a source file. */
+      "types": ["node"],                          /* Specify type package names to be included without being referenced in a source file. */
       "resolveJsonModule": true,
       "esModuleInterop": true,
       "moduleResolution": "Bundler",
@@ -12,6 +12,7 @@
   
       // 「入力ファイルを～」エラー回避に必須。
       "outDir": "./.build",
+      "strict": true,
       "allowJs": true,
       "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
     },

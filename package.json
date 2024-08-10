@@ -2,13 +2,15 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "engines": {
         "vscode": "^1.91.0"
     },
     "main": "./lib/extension.js",
     "type": "commonjs",
     "scripts": {
+        "eslint": "eslint -c eslint.config.mjs",
+        "eslint:fix": "eslint . --ext ts,mts --fix",
         "preTest": "npm run build && tsc -p ./tsconfig.test.json",
         "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs"
     },
@@ -35,6 +37,11 @@
         "languages": [
             {
                 "id": "nadesiko3",
+                "aliases": [
+                    "Nadesiko3",
+                    "nadesiko3",
+                    "nako3"
+                ],
                 "extensions": [
                     ".nako3"
                 ]
@@ -43,10 +50,14 @@
     },
     "devDependencies": {
         "@rollup/plugin-json": "^6.1.0",
+        "@stylistic/eslint-plugin-ts": "^2.6.1",
         "@types/mocha": "^10.0.7",
         "@types/node": "^22.0.0",
         "@types/vscode": "^1.91.0",
+        "@typescript-eslint/parser": "^8.0.1",
         "@vscode/test-cli": "^0.0.10",
+        "eslint": "^9.8.0",
+        "eslint-plugin-mocha": "^10.5.0",
         "mocha": "^10.7.0",
         "rollup": "^4.19.1",
         "typescript": "^5.5.4"

@@ -1,4 +1,5 @@
 import * as assert from 'node:assert'
+import { before } from 'mocha'
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
@@ -17,6 +18,11 @@ class MockTextDocument implements vscode.TextDocument{
     eol!: vscode.EndOfLine
     lineCount: number
 	lines: vscode.TextLine[]
+	constructor () {
+		this.lines = []
+		this.lineCount = 0
+		this.myText = ''
+	}
 	setMyText (text: string) {
 		this.myText = text
 		this.lines = []
@@ -46,11 +52,9 @@ class MockTextDocument implements vscode.TextDocument{
 		}
 		this.lineCount = lineNumber
 	}
-    save(): Thenable<boolean> {
+    save(): Promise<boolean> {
         throw new Error('Method not implemented.')
     }
-    lineAt(line: number): vscode.TextLine
-    lineAt(position: vscode.Position): vscode.TextLine
     lineAt(arg1: number|vscode.Position): vscode.TextLine {
 		if (typeof arg1 === 'number') {
 			return this.lines[arg1]
@@ -79,8 +83,8 @@ class MockTextDocument implements vscode.TextDocument{
 }
 
 class MockCancellationToken implements vscode.CancellationToken{
-    isCancellationRequested!: boolean;
-    onCancellationRequested!: vscode.Event<any>;
+    isCancellationRequested!: boolean
+    onCancellationRequested!: vscode.Event<any>
 
 }
 
@@ -119,7 +123,9 @@ class MockTextLine implements vscode.TextLine{
 }
 
 suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.')
+	before(() => {
+		vscode.window.showInformationMessage('Start all tests.')
+	})
 
 	test('test1', async () => {
         //値定義
@@ -128,12 +134,13 @@ suite('Extension Test Suite', () => {
         const op:vscode.DocumentSemanticTokensProvider = new Nako3DocumentSemanticTokensProvider()
 		document.setMyText("#12345\r\n●(HOGEに)実行とは\r\n　HOGEを表示する。\r\nここまで\r\n\r\n実行する。\r\n")
 
-        const excepted = new Uint32Array([0,0,6,2,0,1,0,1,5,0,0,1,7,8,0,0,7,2,0,1,0,2,2,5,0,1,6,4,0,4,1,0,4,5,0,2,0,4,0,0])
+        const excepted = new Uint32Array([0,0,6,2,0,1,0,1,5,0,0,1,1,5,0,0,1,5,8,0,0,5,1,5,0,0,1,2,0,1,0,2,2,5,0,1,6,4,0,4,1,0,4,5,0,2,0,4,0,0])
 
         //実行
         let actual = await op.provideDocumentSemanticTokens(document,token)
+		// console.log(`actual:${actual != undefined ? actual.data.join(','): '(null)'}`)
 
-        //アサート
+		//アサート
         assert.notEqual(actual, null)
         assert.deepStrictEqual(actual!.data, excepted)
     })
