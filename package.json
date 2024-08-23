@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -12,7 +12,8 @@
         "eslint": "eslint -c eslint.config.mjs",
         "eslint:fix": "eslint . --ext ts,mts --fix",
         "preTest": "npm run build && tsc -p ./tsconfig.test.json",
-        "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs"
+        "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs  && node ./tools/copyjson.mjs",
+        "clean": "node ./tools/clean.mjs"
     },
     "publisher": "weykan",
     "repository": {
@@ -21,6 +22,8 @@
     },
     "files": [
         "lib/extension.js",
+        "lib/nako3/command.json",
+        "lib/nadesiko3.language-configuration.json",
         "README.md",
         "LICENSE.txt",
         "CHANGELOG.md",
@@ -30,10 +33,13 @@
         "Programming Languages"
     ],
     "license": "MIT",
-    "activationEvents": [
-        "onLanguage:nadesiko3"
-    ],
     "contributes": {
+        "configurationDefaults": {
+            "[nadesiko3]": {
+                "editor.wordSegmenterLocales": "ja",
+                "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?（）｛｝[]＊「」『』＝－＋÷×＜＞≦≧≠はとにをので"
+            }
+        },
         "languages": [
             {
                 "id": "nadesiko3",
@@ -44,7 +50,8 @@
                 ],
                 "extensions": [
                     ".nako3"
-                ]
+                ],
+                "configuration": "./lib/nadesiko3.language-configuration.json"
             }
         ]
     },

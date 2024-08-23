@@ -9,7 +9,7 @@ interface Indent {
     level: number
     len: number
 }
-interface Nako3Token {
+export interface Nako3Token {
     type: string
     len: number
     startLine: number
@@ -156,12 +156,16 @@ for (const pluginname of Object.keys(commandjson)) {
 export const COL_START = 0
 export const LINE_START = 0
 type ProcMap = { [K in ProcMapKey]: SubProc }
+interface UserFunctionInfo                          {
+    name: string
+    tokenIndex: number
+}
 export class Nako3Tokenizer {
     filename: string
     rawTokens: Nako3Token[]
     tokens: Nako3Token[]
-    userFunction: {[key:string]: boolean }
-    userVariable: {[key:string]: boolean }
+    userFunction: {[key:string]: UserFunctionInfo }
+    userVariable: {[key:string]: UserFunctionInfo }
     lengthLines: number[]
     procMap: ProcMap
     line: number
@@ -1133,7 +1137,7 @@ export class Nako3Tokenizer {
             let hasToha = false
             if (!isMumei && token.type === 'WORD') {
                 token.type = 'FUNCTION_NAME'
-                this.addUserFunction(token.value)
+                this.addUserFunction(token.value, index)
                 if (token.josi === 'とは') {
                     hasToha = true
                 }
@@ -1154,12 +1158,18 @@ export class Nako3Tokenizer {
         }
     }
 
-    addUserFunction (name: string):void {
+    addUserFunction (name: string, index: number):void {
         const nameTrimed = name.trim()
         const nameNormalized = this.trimOkurigana(nameTrimed)
-        this.userFunction[nameTrimed] = true
+        this.userFunction[nameTrimed] =  {
+            name: nameTrimed,
+            tokenIndex: index
+        }
         if (nameTrimed !== nameNormalized) {
-            this.userFunction[nameNormalized] = true
+            this.userFunction[nameNormalized] = {
+                name: nameTrimed,
+                tokenIndex: index
+            }
         }
     }
 }

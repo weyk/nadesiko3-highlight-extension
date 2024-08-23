@@ -1,5 +1,3 @@
-import json from '@rollup/plugin-json'
-
 export default {
   input: './.build/extension.mjs',
   output: {
@@ -8,6 +6,8 @@ export default {
     exports: "named",
     sourcemap: true,
   },
-  plugins: [json({compact: true})],
-  external: ['vscode']
+  external: [
+    'vscode',
+    './nako3/command.json'
+  ]
 }

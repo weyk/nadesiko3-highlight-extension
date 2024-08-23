@@ -1,3 +1,6 @@
+## 0.0.4
+- Add configuration for surroundingPairs and autoClosingPairs.
+
 ## 0.0.3
 - Add tokenize function parameter.
 
