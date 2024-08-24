@@ -22,20 +22,20 @@ export class Nako3DocumentHighlightProvider implements vscode.DocumentHighlightP
 		return nako3docs.getHighlight(document, position)
     }
 }
-/*
+
 export class Nako3DocumentSymbolProvider implements vscode.DocumentSymbolProvider {
     async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SymbolInformation[] | vscode.DocumentSymbol[]> {
         // console.log(`provide document symbol:${document.fileName}`)
 		nako3docs.setFullText(document)
 		return nako3docs.getSymbols(document)
-        
     }
 }
-*/
+
 const disposableSubscriptions : vscode.Disposable[] = []
 export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider(NAKO3_MODE, new Nako3DocumentSemanticTokensProvider(), legend))
     context.subscriptions.push(vscode.languages.registerDocumentHighlightProvider(NAKO3_MODE, new Nako3DocumentHighlightProvider()))
+    context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(NAKO3_MODE, new Nako3DocumentSymbolProvider()))
 
     disposableSubscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpen  :${e.languageId}:${e.fileName}`)

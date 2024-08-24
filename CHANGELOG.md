@@ -1,3 +1,6 @@
+## 0.0.5
+- Add document symbol support. 
+
 ## 0.0.4
 - Add configuration for surroundingPairs and autoClosingPairs.
 

@@ -1,14 +1,16 @@
 import {
     DocumentHighlight,
     DocumentHighlightKind,
+    DocumentSymbol,
     Position,
     Range,
     SemanticTokens,
     SemanticTokensBuilder,
     SemanticTokensLegend,
+    SymbolKind,
     TextDocument
 } from 'vscode'
-import { COL_START } from './nako3lexer.mjs'
+import { Nako3Token, COL_START } from './nako3lexer.mjs'
 import { Nako3Document } from './nako3document.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
@@ -95,21 +97,173 @@ const hilightMapping: HighlightMap = {
 
 export const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
+interface SymbolInfo {
+    name: string
+    type: string
+    token: Nako3Token
+    level: number
+}
+
 export class Nako3DocumentExt {
     nako3doc: Nako3Document
     validTokens: boolean
     semanticTokens?: SemanticTokens
+    documentSymbols: DocumentSymbol[]
     validSemanticTokens: boolean
+    validDocumentSymbols: boolean
     text: string
     textVersion: number|null
+    isIndentSemantic: boolean
 
     constructor (filename: string) {
         this.nako3doc = new Nako3Document(filename)
+        this.text = ''
+        this.textVersion = null
         this.validTokens = false
         this.semanticTokens = undefined
         this.validSemanticTokens = false
-        this.text = ''
-        this.textVersion = null
+        this.documentSymbols = []
+        this.validDocumentSymbols = false
+        this.isIndentSemantic = false
+    }
+
+    invalidate ():void {
+        this.validSemanticTokens = false
+        this.validDocumentSymbols = false
+    }
+
+    createDocumentSymbolFromToken (name: string, type: string, token:Nako3Token): DocumentSymbol {
+        let kind:SymbolKind
+        switch (type) {
+        case 'function':
+            kind = SymbolKind.Function
+            break
+        case 'variable':
+            kind = SymbolKind.Variable
+            break
+        case 'constant':
+            kind = SymbolKind.Constant
+            break
+        default:
+            console.log(`createDocumentSymbolFromToken: UnknownType${type}`)
+            kind = SymbolKind.Null
+        }
+        const start = new Position(token.startLine, token.startCol)
+        const end = new Position(token.endLine, token.resEndCol)
+        const range = new Range(start, end)
+        const symbol = new DocumentSymbol(name, '', kind, range, range)
+        return symbol
+    }
+
+    computeDocumentSymbols():void {
+        this.tokenize()
+        this.documentSymbols = []
+        this.isIndentSemantic = false
+        const tokens = this.nako3doc.lex.tokens
+        const tokenCount = tokens.length
+        let skipToken = 0
+        let currentLine = -1
+        let startCol = -1
+        let kokomadeIndex = -1
+        let kokomadeSymbolIndex = -1
+        let functionSymbolIndexPrev = -1
+        const symbols: SymbolInfo[] = []
+        for (let index = 0; index < tokenCount; index++) {
+            const token = tokens[index]
+            if (currentLine !== token.startLine ) {
+                startCol = token.startCol
+                currentLine = token.startLine
+            }
+            if (skipToken > 0) {
+                skipToken--
+                continue
+            }
+            if ((token.type === '定数' || token.type === '変数') || (token.type === 'WORD' && (token.value === '定数' || token.value === '変数'))) {
+                console.log(`const/var semantic?:${index}`)
+                if (index > 0) {
+                    console.log(`  prev token:${tokens[index-1].type}/${tokens[index-1].value}`)
+                }
+                console.log(`  curr token:${tokens[index+0].type}/${tokens[index+0].value}`)
+                if (index < tokenCount) {
+                    console.log(`  next token:${tokens[index+1].type}/${tokens[index+1].value}`)
+                }
+            }
+            if (token.type === 'ここまで') {
+                kokomadeIndex = index
+                kokomadeSymbolIndex = symbols.length - 1
+            } else
+            if (index+1 < tokenCount && token.type === 'NOT' && (token.value === '!' || token.value === '！') && tokens[index+1].type === 'インデント構文') {
+                console.log('indent semantic on')
+                this.isIndentSemantic = true
+                skipToken = 1
+            } else if (token.type === 'FUNCTION_NAME') {
+                if (!this.isIndentSemantic) {
+                    for (let i = functionSymbolIndexPrev + 1; i < kokomadeSymbolIndex + 1; i++) {
+                        symbols[i].level = 1
+                    }
+                }
+                const symbolInfo: SymbolInfo = {
+                    name: token.value,
+                    type: '関数',
+                    level: 0,
+                    token: token
+                }
+                symbols.push(symbolInfo)
+                functionSymbolIndexPrev = symbols.length -1
+            } else if (index+2 < tokenCount && token.type === 'WORD' && tokens[index+1].type === 'とは' && (tokens[index+2].type === '変数' || tokens[index+2].type === '定数')) {
+                const symbolInfo: SymbolInfo = {
+                    name: token.value,
+                    type: tokens[index + 2].type,
+                    level: this.isIndentSemantic && startCol > COL_START ? 1 : 0,
+                    token: token
+                }
+                symbols.push(symbolInfo)
+                skipToken = 2
+            } else if (index+1 < tokenCount && (token.type === '変数' || token.type === '定数') && (tokens[index+1].type === '変数' || tokens[index+1].type === 'WORD')) {
+                const symbolInfo: SymbolInfo = {
+                    name: tokens[index + 1].value,
+                    type: token.type,
+                    level: this.isIndentSemantic && startCol > COL_START ? 1 : 0,
+                    token: tokens[index + 1]
+                }
+                symbols.push(symbolInfo)
+                skipToken = 1
+            }
+            if (currentLine !== token.endLine) {
+                startCol = -1
+                currentLine = token.endLine
+            }
+        }
+        let isToplevel = false
+        let nestLevel = 0
+        let containerSymbol: DocumentSymbol|null = null
+        for (const symbolinfo of symbols) {
+            const nameTrimed = symbolinfo.name.trim()
+            const nameNormalized = this.nako3doc.lex.trimOkurigana(nameTrimed)
+            let type:string
+            switch (symbolinfo.type) {
+            case '定数':
+                type = 'constant'
+                break
+            case '変数':
+                type = 'variable'
+                break
+            case '関数':
+                type = 'function'
+                break
+            default:
+                type = ''
+            }
+            const symbol = this.createDocumentSymbolFromToken(nameNormalized, type, symbolinfo.token)
+            if (symbolinfo.level === 0) {
+                isToplevel = true
+                this.documentSymbols.push(symbol)
+                containerSymbol = symbol
+            } else if (containerSymbol !== null) {
+                containerSymbol.children.push(symbol)
+            }
+        }
+        this.validDocumentSymbols = true
     }
 
     computeSemanticToken():void {
@@ -191,7 +345,7 @@ export class Nako3DocumentExt {
             this.text = text
             this.textVersion = textVersion
             this.validTokens = false
-            this.validSemanticTokens = false
+            this.invalidate()
         }
     }
 
@@ -230,28 +384,42 @@ export class Nako3DocumentExt {
         }
         return []
     }
+
+    getDocumentSymbols (): DocumentSymbol[] {
+        if (!this.validDocumentSymbols) {
+            this.computeDocumentSymbols()
+        } else {
+            console.log('skip computeDocumentSymbols')
+        }
+        return this.documentSymbols
+    }
 }
 
 export class Nako3Documents {
     docs: Map<string, Nako3DocumentExt>
+
     constructor () {
         // console.log('nako3documnets constructed')
         this.docs = new Map()
     }
+
     open (document: TextDocument):void {
         // console.log('document open:enter')
         this.docs.set(document.fileName, new Nako3DocumentExt(document.fileName))
         // console.log('document open:leave')
     }
+
     close (document: TextDocument):void {
         if (!this.docs.has(document.fileName)) {
             console.log(`document close: no open(${document.fileName})`)
         }
         this.docs.delete(document.fileName)
     }
+
     get (document: TextDocument): Nako3DocumentExt|undefined {
         return this.docs.get(document.fileName)
     }
+
     setFullText (document: TextDocument):void {
         const doc = this.get(document)
         if (doc) {
@@ -260,6 +428,7 @@ export class Nako3Documents {
             console.log(`setFullText: document not opend`)
         }
     }
+
     getSemanticTokens(document: TextDocument): SemanticTokens {
         const doc = this.get(document)
         if (doc == null) {
@@ -269,6 +438,7 @@ export class Nako3Documents {
         }
         return doc.getSemanticTokens()
     }
+
     getHighlight (document: TextDocument, position: Position): DocumentHighlight[] {
         const doc = this.get(document)
         if (doc == null) {
@@ -276,5 +446,13 @@ export class Nako3Documents {
             return []
         }
         return doc.getHighlight(position)
+    }
+    getSymbols (document: TextDocument): DocumentSymbol[] {
+        const doc = this.get(document)
+        if (doc == null) {
+            console.log(`getSymbols: document not opend`)
+            return []
+        }
+        return doc.getDocumentSymbols()
     }
 }

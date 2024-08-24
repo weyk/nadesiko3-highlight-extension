@@ -46,7 +46,7 @@ const wordHasIjoIka = /^.+(以上|以下|超|未満)$/
 const wordSpecial = /^(かつ|または)/
 const unitRE = /^(円|ドル|元|歩|㎡|坪|度|℃|°|個|つ|本|冊|才|歳|匹|枚|皿|セット|羽|人|件|行|列|機|品|m|ｍ|mm|cm|ｃｍ|km|ｋｍ|g|ｇ|kg|ｋｇ|t|ｔ|px|ｐｘ|dot|ｄｏｔ|pt|ｐｔ|em|ｅｍ|b|ｂ|mb|ｍｂ|kb|ｋｂ|gb|ｇｂ)/
 
-const spaceRE = /^( |\t|・|⎿|└|｜)+/
+const spaceRE = /^( |　|\t|・|⎿|└|｜)+/
 
 const lexRules: LexRule[] = [
     { name: 'ここまで', pattern: ';;;' },
@@ -311,7 +311,7 @@ export class Nako3Tokenizer {
                 token.len = 1
                 token.text = text.substring(0,1)
                 token.value = text.substring(0,1)
-                // console.log(`character:${text.substring(0,1).codePointAt(0)}`)
+                console.log(`character:${text.substring(0,1).codePointAt(0)}`)
                 this.col = token.endCol
                 this.rawTokens.push(token)
                 len = 1

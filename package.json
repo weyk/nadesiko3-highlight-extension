@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -12,7 +12,8 @@
         "eslint": "eslint -c eslint.config.mjs",
         "eslint:fix": "eslint . --ext ts,mts --fix",
         "preTest": "npm run build && tsc -p ./tsconfig.test.json",
-        "build": "tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs  && node ./tools/copyjson.mjs",
+        "prebuild": "node ./tools/checkjosilist.mjs",
+        "build": "npm run prebuild && tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs  && node ./tools/copyjson.mjs",
         "clean": "node ./tools/clean.mjs"
     },
     "publisher": "weykan",
