@@ -156,14 +156,26 @@ for (const pluginname of Object.keys(commandjson)) {
 export const COL_START = 0
 export const LINE_START = 0
 type ProcMap = { [K in ProcMapKey]: SubProc }
-interface UserFunctionInfo                          {
+
+interface UserFunctionInfo {
     name: string
     tokenIndex: number
 }
+
+interface ErrorInfo {
+    type: string
+    message: string
+    startLine: number
+    startCol: number
+    endLine: number
+    endCol: number
+}
+
 export class Nako3Tokenizer {
     filename: string
     rawTokens: Nako3Token[]
     tokens: Nako3Token[]
+    errorInfos: ErrorInfo[]
     userFunction: {[key:string]: UserFunctionInfo }
     userVariable: {[key:string]: UserFunctionInfo }
     lengthLines: number[]
@@ -174,6 +186,7 @@ export class Nako3Tokenizer {
         this.filename = filename
         this.rawTokens = []
         this.tokens = []
+        this.errorInfos = []
         this.userFunction = {}
         this.userVariable = {}
         this.lengthLines = []
@@ -188,8 +201,36 @@ export class Nako3Tokenizer {
         }
     }
 
+    clearErrorInfos ():void {
+        this.errorInfos = []
+    }
+
+    addErrorInfo (type: string, message: string, token: Nako3Token|number, startCol?: number, endLine?: number, endCol?: number) {
+        let startLine: number
+        if (typeof token === 'number') {
+            startLine = token
+            startCol = startCol!
+            endLine = endLine!
+            endCol = endCol!
+        } else {
+            startLine = token.startLine
+            startCol = token.startCol
+            endLine = token.endLine
+            endCol = token.endCol
+        }
+        this.errorInfos.push({
+            type: type,
+            message: message,
+            startLine: startLine,
+            startCol: startCol,
+            endLine: endLine,
+            endCol: endCol
+        })
+    }
+ 
     tokenize (text: string):void {
         this.rawTokens = []
+        this.clearErrorInfos()
         this.line = LINE_START
         this.col = COL_START
         let indent: Indent
@@ -311,7 +352,7 @@ export class Nako3Tokenizer {
                 token.len = 1
                 token.text = text.substring(0,1)
                 token.value = text.substring(0,1)
-                console.log(`character:${text.substring(0,1).codePointAt(0)}`)
+                this.addErrorInfo('ERROR', `invalid character(code:${text.substring(0,1).codePointAt(0)})`, token)
                 this.col = token.endCol
                 this.rawTokens.push(token)
                 len = 1
@@ -381,36 +422,45 @@ export class Nako3Tokenizer {
         const startTag = opts[0]
         const endTag = opts[1]
         const index = text.indexOf(endTag, startTag.length)
-        const len = index >= 0 ? index + endTag.length : text.length
+        const len = index >= 0 ? index + endTag.length : startTag.length
         let comment = text.substring(0, len)
         let lineCount = 0
         let endCol = this.col
-        while (comment !== '') {
-            const crIndex = comment.indexOf('\r')
-            const lfIndex = comment.indexOf('\n')
-            if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
-                lineCount ++
-                endCol = lfIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                comment = comment.substring(crIndex + 2)
-            } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
-                lineCount ++
-                endCol = crIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                comment = comment.substring(crIndex + 1)
-            } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
-                lineCount ++
-                endCol = lfIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                comment = comment.substring(lfIndex + 1)
-            } else {
-                // crIndex === -1 && lfIndex === -1
-                endCol = this.col + comment.length
-                comment = ''
+        if (index >= 0) {
+            let crIndex = comment.indexOf('\r')
+            let lfIndex = comment.indexOf('\n')
+            while (comment !== '') {
+                if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
+                    lineCount ++
+                    endCol = lfIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    comment = comment.substring(crIndex + 2)
+                    crIndex = comment.indexOf('\r')
+                    lfIndex = comment.indexOf('\n')
+                } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
+                    lineCount ++
+                    endCol = crIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    comment = comment.substring(crIndex + 1)
+                    crIndex = comment.indexOf('\r')
+                } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
+                    lineCount ++
+                    endCol = lfIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    comment = comment.substring(lfIndex + 1)
+                    lfIndex = comment.indexOf('\n')
+                } else {
+                    // crIndex === -1 && lfIndex === -1
+                    endCol = this.col + comment.length
+                    comment = ''
+                }
             }
+        } else {
+            this.addErrorInfo('ERROR', 'unclose block comment', startLine, startCol, startLine, startCol + startTag.length)
+            endCol = endCol + startTag.length
         }
         this.line = this.line + lineCount
         this.col = endCol
@@ -439,36 +489,49 @@ export class Nako3Tokenizer {
         const endTag = opts[1]
         const type = opts[2]
         const index = text.indexOf(endTag, startTag.length)
-        let len = index >= 0 ? index + endTag.length : text.length
+        let len = index >= 0 ? index + endTag.length : startTag.length
         let str = text.substring(0, len)
         let lineCount = 0
         let endCol = this.col
-        while (str !== '') {
-            const crIndex = str.indexOf('\r')
-            const lfIndex = str.indexOf('\n')
-            if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
-                lineCount ++
-                endCol = lfIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                str = str.substring(crIndex + 2)
-            } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
-                lineCount ++
-                endCol = crIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                str = str.substring(crIndex + 1)
-            } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
-                lineCount ++
-                endCol = lfIndex
-                this.lengthLines.push(this.col + endCol)
-                this.col = COL_START
-                str = str.substring(lfIndex + 1)
-            } else {
-                // crIndex === -1 && lfIndex === -1
-                endCol = this.col + str.length
-                str = ''
+        const checkIndex = str.indexOf(startTag, startTag.length)
+        if (startTag !== endTag && checkIndex >= 0) {
+            this.addErrorInfo('WARN', `string start character in same string(${startTag})`, startLine, startCol, startLine, startCol + startTag.length)
+        }
+        if (index >= 0) {
+            let crIndex = str.indexOf('\r')
+            let lfIndex = str.indexOf('\n')
+            while (str !== '') {
+                if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
+                    lineCount ++
+                    endCol = lfIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    str = str.substring(crIndex + 2)
+                    crIndex = str.indexOf('\r')
+                    lfIndex = str.indexOf('\n')
+                } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
+                    lineCount ++
+                    endCol = crIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    str = str.substring(crIndex + 1)
+                    crIndex = str.indexOf('\r')
+                } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
+                    lineCount ++
+                    endCol = lfIndex
+                    this.lengthLines.push(this.col + endCol)
+                    this.col = COL_START
+                    str = str.substring(lfIndex + 1)
+                    lfIndex = str.indexOf('\n')
+                } else {
+                    // crIndex === -1 && lfIndex === -1
+                    endCol = this.col + str.length
+                    str = ''
+                }
             }
+        } else {
+            this.addErrorInfo('ERROR', 'unclose string', startLine, startCol, startLine, startCol + startTag.length)
+            endCol = endCol + startTag.length
         }
         const resEndCol = endCol
         const resLen = len
@@ -1094,7 +1157,7 @@ export class Nako3Tokenizer {
                     } else if (token.type === 'WORD') {
                         token.type = 'FUNCTION_ARG_PARAMETER'
                     } else {
-                        console.error(`unknown token in function parameters:${token.type}`)
+                        this.addErrorInfo('ERROR',`unknown token in function parameters(${token.type}`, token)
                     }
                 }
                 i++

@@ -11,6 +11,7 @@ export class Nako3DocumentSemanticTokensProvider implements vscode.DocumentSeman
         // console.log(`provide semantic tokens:${document.fileName}`)
         nako3docs.setFullText(document)
 		const tokens = nako3docs.getSemanticTokens(document)
+        nako3docs.getDiagnostics(document)
         return tokens
     }
 }
@@ -19,7 +20,9 @@ export class Nako3DocumentHighlightProvider implements vscode.DocumentHighlightP
     async provideDocumentHighlights(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.DocumentHighlight[]> {
         // console.log(`provide document highlight:${document.fileName}`)
 		nako3docs.setFullText(document)
-		return nako3docs.getHighlight(document, position)
+		const highlight = nako3docs.getHighlight(document, position)
+        nako3docs.getDiagnostics(document)
+		return highlight
     }
 }
 
@@ -27,7 +30,9 @@ export class Nako3DocumentSymbolProvider implements vscode.DocumentSymbolProvide
     async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SymbolInformation[] | vscode.DocumentSymbol[]> {
         // console.log(`provide document symbol:${document.fileName}`)
 		nako3docs.setFullText(document)
-		return nako3docs.getSymbols(document)
+		const symbols = nako3docs.getSymbols(document)
+        nako3docs.getDiagnostics(document)
+		return symbols
     }
 }
 
@@ -91,6 +96,9 @@ export function activate(context: vscode.ExtensionContext):void {
 export function deactivate() {
     for (const obj of disposableSubscriptions) {
         obj.dispose()
+    }
+    if (nako3docs) {
+        nako3docs[Symbol.dispose]()
     }
     return undefined
 }

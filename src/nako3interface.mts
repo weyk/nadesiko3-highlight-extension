@@ -1,4 +1,8 @@
 import {
+    languages,
+    Diagnostic,
+    DiagnosticCollection,
+    DiagnosticSeverity,
     DocumentHighlight,
     DocumentHighlightKind,
     DocumentSymbol,
@@ -8,7 +12,8 @@ import {
     SemanticTokensBuilder,
     SemanticTokensLegend,
     SymbolKind,
-    TextDocument
+    TextDocument,
+    Uri
 } from 'vscode'
 import { Nako3Token, COL_START } from './nako3lexer.mjs'
 import { Nako3Document } from './nako3document.mjs'
@@ -109,14 +114,18 @@ export class Nako3DocumentExt {
     validTokens: boolean
     semanticTokens?: SemanticTokens
     documentSymbols: DocumentSymbol[]
+    diagnostics: Diagnostic[]
     validSemanticTokens: boolean
     validDocumentSymbols: boolean
+    validDiagnostics: boolean
+    uri: Uri
     text: string
     textVersion: number|null
     isIndentSemantic: boolean
 
-    constructor (filename: string) {
+    constructor (filename: string, uri: Uri) {
         this.nako3doc = new Nako3Document(filename)
+        this.uri = uri
         this.text = ''
         this.textVersion = null
         this.validTokens = false
@@ -124,12 +133,38 @@ export class Nako3DocumentExt {
         this.validSemanticTokens = false
         this.documentSymbols = []
         this.validDocumentSymbols = false
+        this.diagnostics = []
+        this.validDiagnostics = false
         this.isIndentSemantic = false
     }
 
     invalidate ():void {
         this.validSemanticTokens = false
         this.validDocumentSymbols = false
+        this.validDiagnostics = false
+    }
+
+    computeDiagnostics () {
+        this.tokenize()
+        this.diagnostics = []
+        for (const errorInfo of this.nako3doc.lex.errorInfos) {
+            const startPos = new Position(errorInfo.startLine, errorInfo.startCol)
+            const endPos = new Position(errorInfo.endLine, errorInfo.endCol)
+            const range = new Range(startPos, endPos)
+            let kind:DiagnosticSeverity
+            switch (errorInfo.type) {
+            case 'ERROR':
+                kind = DiagnosticSeverity.Error
+                break
+            case 'WARN':
+                kind = DiagnosticSeverity.Warning
+                break
+            default:
+                kind = DiagnosticSeverity.Information
+            }
+            this.diagnostics.push(new Diagnostic(range, errorInfo.message, kind))
+        }
+        this.validDiagnostics = true
     }
 
     createDocumentSymbolFromToken (name: string, type: string, token:Nako3Token): DocumentSymbol {
@@ -178,7 +213,7 @@ export class Nako3DocumentExt {
                 skipToken--
                 continue
             }
-            if ((token.type === '定数' || token.type === '変数') || (token.type === 'WORD' && (token.value === '定数' || token.value === '変数'))) {
+            if (false && ((token.type === '定数' || token.type === '変数') || (token.type === 'WORD' && (token.value === '定数' || token.value === '変数')))) {
                 console.log(`const/var semantic?:${index}`)
                 if (index > 0) {
                     console.log(`  prev token:${tokens[index-1].type}/${tokens[index-1].value}`)
@@ -393,19 +428,36 @@ export class Nako3DocumentExt {
         }
         return this.documentSymbols
     }
+
+    getDiagnostics (): Diagnostic[] {
+        if (!this.validDiagnostics) {
+            this.computeDiagnostics()
+        } else {
+            console.log('skip computeDiagnostics')
+        }
+        return this.diagnostics
+    }
 }
 
-export class Nako3Documents {
+export class Nako3Documents implements Disposable {
     docs: Map<string, Nako3DocumentExt>
+    diagnosticsCollection: DiagnosticCollection
 
     constructor () {
         // console.log('nako3documnets constructed')
         this.docs = new Map()
+        this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
+    }
+
+    [Symbol.dispose](): void {
+        if (this.diagnosticsCollection) {
+            this.diagnosticsCollection.dispose()
+        }
     }
 
     open (document: TextDocument):void {
         // console.log('document open:enter')
-        this.docs.set(document.fileName, new Nako3DocumentExt(document.fileName))
+        this.docs.set(document.fileName, new Nako3DocumentExt(document.fileName, document.uri))
         // console.log('document open:leave')
     }
 
@@ -447,6 +499,7 @@ export class Nako3Documents {
         }
         return doc.getHighlight(position)
     }
+
     getSymbols (document: TextDocument): DocumentSymbol[] {
         const doc = this.get(document)
         if (doc == null) {
@@ -454,5 +507,19 @@ export class Nako3Documents {
             return []
         }
         return doc.getDocumentSymbols()
+    }
+
+    getDiagnostics (document?: TextDocument): DiagnosticCollection {
+        this.diagnosticsCollection.clear()
+        if (document) {
+            const doc = this.get(document)
+            if (doc == null) {
+                console.log(`getDiagnostics: document not opend`)
+            }
+        }
+        for (const [ , doc] of this.docs) {
+            this.diagnosticsCollection.set(doc.uri, doc.getDiagnostics())
+        }
+        return this.diagnosticsCollection
     }
 }
