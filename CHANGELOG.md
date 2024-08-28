@@ -1,3 +1,7 @@
+## 0.0.6
+- Fix range of multi line string.
+- Add document symbol of anonymous function.
+
 ## 0.0.5
 - Add document symbol support. 
 

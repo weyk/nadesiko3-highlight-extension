@@ -2,15 +2,17 @@ import reservedWords from './nako3/nako_reserved_words.mjs'
 // 助詞の一覧
 import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
 import commandjson from './nako3/command.json'
-import { AnyNsRecord } from 'dns'
+import { ErrorInfoManager } from './nako3errorinfo.mjs'
 
-interface Indent {
+export interface Indent {
     text: string
     level: number
     len: number
 }
+
 export interface Nako3Token {
     type: string
+    group: string
     len: number
     startLine: number
     startCol: number
@@ -24,13 +26,15 @@ export interface Nako3Token {
     unitStartCol?: number
     josi: ''|string
     josiStartCol?: number
+    indent: Indent
 }
 
 type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'
 type SubProcOptArgs = string[]
-type SubProc = (text:string, opts:SubProcOptArgs) => number
+type SubProc = (text: string, indent: Indent, opts: SubProcOptArgs) => number
 interface LexRule {
     name: string
+    group: string
     pattern: string|RegExp
     proc?: ProcMapKey
     procArgs?: SubProcOptArgs
@@ -49,87 +53,123 @@ const unitRE = /^(円|ドル|元|歩|㎡|坪|度|℃|°|個|つ|本|冊|才|歳|
 const spaceRE = /^( |　|\t|・|⎿|└|｜)+/
 
 const lexRules: LexRule[] = [
-    { name: 'ここまで', pattern: ';;;' },
-    { name: 'EOL', pattern: '\r\n' },
-    { name: 'EOL', pattern: '\r' },
-    { name: 'EOL', pattern: '\n' },
-    { name: 'SPACE', pattern: spaceRE },
-    { name: 'NUMBER_EX', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^0[bB][0-1]+(_[0-1]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^\d+(_\d+)*?n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', pattern: /^[０-９]+([_＿][０-９]+)*?[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^[０-９]+([_＿][０-９]+)*[.．]([０-９]+([_＿][０-９]+)*)?([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^[.．][０-９]+([_＿][０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', pattern: /^[０-９]+(_[０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'COMMENT_LINE', pattern: /^(#|＃|\/\/|／／)/, proc: 'cbCommentLine' },
-    { name: 'COMMENT_BLOCK', pattern: '/*', proc: 'cbCommentBlock', procArgs: ['/*', '*/']  },
-    { name: 'COMMENT_BLOCK', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
-    { name: 'def_func', pattern: '●', isFirstCol: true },
-    { name: 'STRING', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'STRING'] },
-    { name: 'STRING', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'STRING'] },
-    { name: 'STRING', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'STRING'] },
-    { name: 'STRING', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'STRING'] },
-    { name: 'STRING_EX', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'STRING_EX'] },
-    { name: 'STRING_EX', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'STRING_EX'] },
-    { name: 'STRING_EX', pattern: '“', proc: 'cbStringEx', procArgs: ['“', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', pattern: '🌴', proc: 'cbStringEx', procArgs: ['🌴', '🌴', 'STRING_EX'] },
-    { name: 'ここから', pattern: 'ここから' },
-    { name: 'ここまで', pattern: 'ここまで' },
-    { name: 'ここまで', pattern: '💧' },
-    { name: 'もし', pattern: /^もしも?/, withToten: true },
-    { name: '違えば', pattern: /^違(えば)?/, withToten: true },
-    { name: 'SHIFT_R0', pattern: /^(>>>|＞＞＞)/ },
-    { name: 'SHIFT_R', pattern: /^(>>|＞＞)/ },
-    { name: 'SHIFT_L', pattern: /^(<<|＜＜)/ },
-    { name: 'GE', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
-    { name: 'LE', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
-    { name: 'NE', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
-    { name: 'EQ', pattern: /^(==?|＝＝?)/ },
-    { name: 'NOT', pattern: /^(!|💡|！)/ },
-    { name: 'GT', pattern: /^(>|＞)/ },
-    { name: 'LT', pattern: /^(<|＜)/ },
-    { name: 'AND', pattern: /^(かつ|&&|and\s)/ },
-    { name: 'OR', pattern: /^(または|或いは|あるいは|or\s|\|\|)/ },
-    { name: '@', pattern: /^(@|＠)/ },
-    { name: '+', pattern: /^(\+|＋)/ },
-    { name: '-', pattern: /^(-|－)/ },
-    { name: '**', pattern: /^(××|\*\*|＊＊)/ },
-    { name: '*', pattern: /^(×|\*|＊)/ },
-    { name: '÷÷', pattern: '÷÷' },
-    { name: '÷', pattern: /^(÷|\/|／)/ },
-    { name: '%', pattern: /^(%|％)/ },
-    { name: '^', pattern: '^' },
-    { name: '&', pattern: /^(&|＆)/ },
-    { name: '[', pattern: /^(\[|［)/ },
-    { name: ']', pattern: /^(]|］)/, withJosi: true },
-    { name: '(', pattern: /^(\(|（)/ },
-    { name: ')', pattern: /^(\)|）)/, withJosi: true },
-    { name: '|', pattern: /^(\||｜)/ },
-    { name: '」', pattern: '」', withJosi: true },
-    { name: '』', pattern: '』', withJosi: true },
-    { name: '{', pattern: /^(\{|｛)/ },
-    { name: '}', pattern: /^(\}|｝)/, withJosi: true },
-    { name: ':', pattern: /^(:|：)/ },
-    { name: ',', pattern: /^(,|，|、)/ },
-    { name: 'WORD', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', pattern: /^《.+?》/, withJosi: true },
-    { name: 'WORD', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
+    { name: 'ここまで', group: '制御', pattern: ';;;' },
+    { name: 'EOL', group: '区切', pattern: '\r\n' },
+    { name: 'EOL', group: '区切', pattern: '\r' },
+    { name: 'EOL', group: '区切', pattern: '\n' },
+    { name: 'SPACE', group: '空白', pattern: spaceRE },
+    { name: 'NUMBER_EX', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*n/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^\d+(_\d+)*?n/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'NUMBER_EX', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*?[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*[.．]([０-９]+([_＿][０-９]+)*)?([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^[.．][０-９]+([_＿][０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+(_[０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'COMMENT_LINE', group: 'コメント', pattern: /^(#|＃|\/\/|／／)/, proc: 'cbCommentLine' },
+    { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '/*', proc: 'cbCommentBlock', procArgs: ['/*', '*/']  },
+    { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
+    { name: 'def_func', group: '記号', pattern: /^[●\*]/, isFirstCol: true },
+    { name: 'STRING', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'STRING'] },
+    { name: 'STRING', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'STRING'] },
+    { name: 'STRING', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'STRING'] },
+    { name: 'STRING', group: '文字列', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'STRING'] },
+    { name: 'STRING_EX', group: '文字列', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'STRING_EX'] },
+    { name: 'STRING_EX', group: '文字列', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'STRING_EX'] },
+    { name: 'STRING_EX', group: '文字列', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'STRING_EX'] },
+    { name: 'STRING_EX', group: '文字列', pattern: '“', proc: 'cbStringEx', procArgs: ['“', '”', 'STRING_EX'] },
+    { name: 'STRING_EX', group: '文字列', pattern: '🌴', proc: 'cbStringEx', procArgs: ['🌴', '🌴', 'STRING_EX'] },
+    { name: 'ここから', group: '制御', pattern: 'ここから' },
+    { name: 'ここまで', group: '制御', pattern: 'ここまで' },
+    { name: 'ここまで', group: '制御', pattern: '💧' },
+    { name: 'もし', group: '制御', pattern: /^もしも?/, withToten: true },
+    { name: '違えば', group: '制御', pattern: /^違(えば)?/, withToten: true },
+    { name: 'SHIFT_R0', group: '演算子', pattern: /^(>>>|＞＞＞)/ },
+    { name: 'SHIFT_R', group: '演算子', pattern: /^(>>|＞＞)/ },
+    { name: 'SHIFT_L', group: '演算子', pattern: /^(<<|＜＜)/ },
+    { name: 'GE', group: '演算子', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
+    { name: 'LE', group: '演算子', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
+    { name: 'NE', group: '演算子', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
+    { name: 'EQ', group: '演算子', pattern: /^(==?|＝＝?)/ },
+    { name: 'NOT', group: '演算子', pattern: /^(!|💡|！)/ },
+    { name: 'GT', group: '演算子', pattern: /^(>|＞)/ },
+    { name: 'LT', group: '演算子', pattern: /^(<|＜)/ },
+    { name: 'AND', group: '演算子', pattern: /^(かつ|&&|and\s)/ },
+    { name: 'OR', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\|)/ },
+    { name: '@', group: '記号', pattern: /^(@|＠)/ },
+    { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
+    { name: '-', group: '演算子', pattern: /^(-|−|－)/ },
+    { name: '**', group: '演算子', pattern: /^(××|\*\*|＊＊)/ },
+    { name: '*', group: '演算子', pattern: /^(×|\*|＊)/ },
+    { name: '÷÷', group: '演算子', pattern: '÷÷' },
+    { name: '÷', group: '演算子', pattern: /^(÷|\/|／)/ },
+    { name: '%', group: '演算子', pattern: /^(%|％)/ },
+    { name: '^', group: '演算子', pattern: '^' },
+    { name: '&', group: '演算子', pattern: /^(&|＆)/ },
+    { name: '[', group: '記号', pattern: /^(\[|［)/ },
+    { name: ']', group: '記号', pattern: /^(]|］)/, withJosi: true },
+    { name: '(', group: '演算子', pattern: /^(\(|（)/ },
+    { name: ')', group: '演算子', pattern: /^(\)|）)/, withJosi: true },
+    { name: '|', group: '演算子', pattern: /^(\||｜)/ },
+    { name: '」', group: '記号', pattern: '」', withJosi: true },
+    { name: '』', group: '記号', pattern: '』', withJosi: true },
+    { name: '{', group: '記号', pattern: /^(\{|｛)/ },
+    { name: '}', group: '記号', pattern: /^(\}|｝)/, withJosi: true },
+    { name: ':', group: '記号', pattern: /^(:|：)/ },
+    { name: ',', group: '記号', pattern: /^(,|，|、)/ },
+    { name: '。', group: '記号', pattern: /^(。)/ },
+    { name: 'WORD', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
+    { name: 'WORD', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
+    { name: 'WORD', group: '単語', pattern: /^《.+?》/, withJosi: true },
+    { name: 'WORD', group: '単語', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
 ]
+
+const reservedGroup: Map<string, string> = new Map([
+    ['回', '制御'],
+    ['間', '制御'],
+    ['繰返', '制御'],
+    ['増繰返', '制御'],
+    ['減繰返', '制御'],
+    ['後判定', '制御'],
+    ['反復', '制御'],
+    ['抜ける', '制御'],
+    ['続ける', '制御'],
+    ['戻る', '制御'],
+    ['先に', '制御'],
+    ['次に', '制御'],
+    ['代入', '命令'],
+    ['実行速度優先', '疑似命令'],
+    ['パフォーマンスモニタ適用', '疑似命令'],
+    ['定める', '宣言'],
+    ['逐次実行', '制御'],
+    ['条件分岐', '制御'],
+    ['増', '命令'],
+    ['減', '命令'],
+    ['変数', '宣言'],
+    ['定数', '宣言'],
+    ['エラー監視', '制御'],
+    ['エラー', '命令'],
+    ['def_func', '宣言'],
+    ['インデント構文', '！命令'],
+    ['非同期モード', '！命令'],
+    ['DNCLモード', '！命令'],
+    ['モード設定', '！命令'],
+    ['取込', '！命令'],
+    ['モジュール公開既定値', '！命令']
+  ])
+  
 
 type CmdSectionEntry = [string, string, string, string, string]
 type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
@@ -162,20 +202,11 @@ interface UserFunctionInfo {
     tokenIndex: number
 }
 
-interface ErrorInfo {
-    type: string
-    message: string
-    startLine: number
-    startCol: number
-    endLine: number
-    endCol: number
-}
-
 export class Nako3Tokenizer {
     filename: string
     rawTokens: Nako3Token[]
     tokens: Nako3Token[]
-    errorInfos: ErrorInfo[]
+    errorInfos: ErrorInfoManager
     userFunction: {[key:string]: UserFunctionInfo }
     userVariable: {[key:string]: UserFunctionInfo }
     lengthLines: number[]
@@ -186,7 +217,7 @@ export class Nako3Tokenizer {
         this.filename = filename
         this.rawTokens = []
         this.tokens = []
-        this.errorInfos = []
+        this.errorInfos = new ErrorInfoManager()
         this.userFunction = {}
         this.userVariable = {}
         this.lengthLines = []
@@ -201,39 +232,29 @@ export class Nako3Tokenizer {
         }
     }
 
-    clearErrorInfos ():void {
-        this.errorInfos = []
-    }
-
-    addErrorInfo (type: string, message: string, token: Nako3Token|number, startCol?: number, endLine?: number, endCol?: number) {
-        let startLine: number
-        if (typeof token === 'number') {
-            startLine = token
-            startCol = startCol!
-            endLine = endLine!
-            endCol = endCol!
-        } else {
-            startLine = token.startLine
-            startCol = token.startCol
-            endLine = token.endLine
-            endCol = token.endCol
-        }
-        this.errorInfos.push({
-            type: type,
-            message: message,
-            startLine: startLine,
-            startCol: startCol,
-            endLine: endLine,
-            endCol: endCol
-        })
-    }
- 
-    tokenize (text: string):void {
+    /** 
+     * 保持しているトークンや解析毛結果を削除し生トークンを生成する
+     * @param text トークン化する
+     */
+    tokenize (text: string): void {
         this.rawTokens = []
-        this.clearErrorInfos()
+        this.lengthLines = []
+        this.errorInfos.clear()
         this.line = LINE_START
         this.col = COL_START
-        let indent: Indent
+        this.tokenizeProc(text)
+    }
+
+    /**
+     * 渡されたtextを解くんに分解して自身の保存すすｒ。
+     * @param text 分析する対象の文字列を渡す            ,;.
+     */
+    private tokenizeProc (text: string):void {
+        let indent: Indent = {
+            len: 0,
+            text: '',
+            level: 0
+        }
         while (text !== '') {
             if (this.col === COL_START) {
                 if (text.startsWith(' ') || text.startsWith('　') || text.startsWith('\t')) {
@@ -251,6 +272,7 @@ export class Nako3Tokenizer {
             }
             let token: Nako3Token = {
                 type: 'UNKNOWN',
+                group: '不明',
                 startLine: this.line,
                 startCol: this.col,
                 endLine: this.line,
@@ -262,6 +284,7 @@ export class Nako3Tokenizer {
                 value: '',
                 unit: '',
                 josi: '',
+                indent,
             }
             let hit: boolean = false
             let len: number
@@ -286,10 +309,11 @@ export class Nako3Tokenizer {
                     if (rule.proc) {
                         const proc:SubProc = this.procMap[rule.proc]
                         const args = rule.procArgs || []
-                        const len = proc.apply(this, [text, args])
+                        const len = proc.apply(this, [text, indent, args])
                         text = text.substring(len)
                     } else {
                         token.type = rule.name
+                        token.group = rule.group
                         if (typeof rule.pattern === 'string') {
                             token.len = rule.pattern.length
                         } else if (r !== null) {
@@ -316,7 +340,7 @@ export class Nako3Tokenizer {
                                 let josi = r[0].replace(/^\s+/, '')
                                 text = text.substring(r[0].length)
                                 // 助詞の直後にあるカンマを無視 #877
-                                if (text.charAt(0) === ',' || text.charAt(0) === '，' || text.charAt(0) === '、') {
+                                if (text.charAt(0) === ',' || text.charAt(0) === '，' || text.charAt(0) === '、' || text.charAt(0) === '。') {
                                     text = text.substring(1)
                                     token.len += 1
                                 }
@@ -333,7 +357,7 @@ export class Nako3Tokenizer {
                             }
                         }
                         if (rule.withToten) {
-                            if (text.charAt(0) === '、') {
+                            if (text.charAt(0) === '、' || text.charAt(0) === '。') {
                                 text = text.substring(1)
                                 token.len += 1
                             }
@@ -352,7 +376,7 @@ export class Nako3Tokenizer {
                 token.len = 1
                 token.text = text.substring(0,1)
                 token.value = text.substring(0,1)
-                this.addErrorInfo('ERROR', `invalid character(code:${text.substring(0,1).codePointAt(0)})`, token)
+                this.errorInfos.addFromToken('ERROR', `invalid character(code:${text.substring(0,1).codePointAt(0)})`, token)
                 this.col = token.endCol
                 this.rawTokens.push(token)
                 len = 1
@@ -367,7 +391,12 @@ export class Nako3Tokenizer {
         }
     }    
 
-    parseIndent (text: string): Indent {
+    /**
+     * インデントの情報を返す。tokenizeProcの下請け。
+     * @param text インデントを判定するテキスト。いずれかの行の行頭のはず。
+     * @returns インデントの情報。処理した文字数とインデントの深さ
+     */
+    private parseIndent (text: string): Indent {
         let len = 0
         let level = 0
         for (let i = 0;i < text.length; i++) {
@@ -387,7 +416,12 @@ export class Nako3Tokenizer {
         return { text: '', len, level }
     }
 
-    parseLineComment (text: string): number {
+    /**
+     * 行コメントのトークンを切り出す。tokenizeProcの下請け。
+     * @param text 行コメントのトークンを切り出すテキスト。先頭位置が行コメントの先頭
+     * @returns トークンの切り出しによって処理済みとなった文字数
+     */
+    private parseLineComment (text: string, indent: Indent): number {
         const startCol = this.col
         const startTagLen = /^(#|＃|※)/.test(text) ? 1 : 2
         const r = /^[^\r\n]*/.exec(text)
@@ -400,6 +434,7 @@ export class Nako3Tokenizer {
         this.col += len
         const token: Nako3Token = {
             type: 'COMMENT_LINE',
+            group: 'コメント',
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -410,13 +445,20 @@ export class Nako3Tokenizer {
             josi: '',
             len,
             text: text.substring(0, len),
-            value: text.substring(startTagLen, len)
+            value: text.substring(startTagLen, len),
+            indent
         }
         this.rawTokens.push(token)
         return len
     }
 
-    parseBlockComment (text: string, opts: SubProcOptArgs): number {
+    /**
+     * ブロックコメントのトークンを切り出す。tokenizeProcの下請け。
+     * @param text ブロックコメントのトークンを切り出すテキスト。先頭位置がブロックコメントの先頭
+     * @param opts 開始タグ、終了タグの配列。
+     * @returns トークンの切り出しによって処理済みとなった文字数
+     */
+    private parseBlockComment (text: string, indent: Indent, opts: SubProcOptArgs): number {
         const startLine = this.line
         const startCol = this.col
         const startTag = opts[0]
@@ -427,45 +469,16 @@ export class Nako3Tokenizer {
         let lineCount = 0
         let endCol = this.col
         if (index >= 0) {
-            let crIndex = comment.indexOf('\r')
-            let lfIndex = comment.indexOf('\n')
-            while (comment !== '') {
-                if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
-                    lineCount ++
-                    endCol = lfIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    comment = comment.substring(crIndex + 2)
-                    crIndex = comment.indexOf('\r')
-                    lfIndex = comment.indexOf('\n')
-                } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
-                    lineCount ++
-                    endCol = crIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    comment = comment.substring(crIndex + 1)
-                    crIndex = comment.indexOf('\r')
-                } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
-                    lineCount ++
-                    endCol = lfIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    comment = comment.substring(lfIndex + 1)
-                    lfIndex = comment.indexOf('\n')
-                } else {
-                    // crIndex === -1 && lfIndex === -1
-                    endCol = this.col + comment.length
-                    comment = ''
-                }
-            }
+            lineCount = this.skipWithoutCrlf(comment)
+            endCol = this.col
         } else {
-            this.addErrorInfo('ERROR', 'unclose block comment', startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('ERROR', 'unclose block comment', startLine, startCol, startLine, startCol + startTag.length)
             endCol = endCol + startTag.length
         }
-        this.line = this.line + lineCount
         this.col = endCol
         const token: Nako3Token = {
             type: 'COMMENT_BLOCK',
+            group: 'コメント',
             startLine,
             startCol,
             endLine: this.line,
@@ -477,64 +490,129 @@ export class Nako3Tokenizer {
             josi: '',
             text: text.substring(0, len),
             value: text.substring(startTag.length, len - (index >= 0 ? endTag.length : 0)),
+            indent,
         }
         this.rawTokens.push(token)
         return len
     }
 
-    parseString (text: string, opts: SubProcOptArgs): number {
-        const startLine = this.line
-        const startCol = this.col
+    /**
+     * 文字列のトークンを切り出す。tokenizeProcの下請け。
+     * @param text 文字列のトークンを切り出すテキスト。先頭位置が文字列の先頭
+     * @param opts 開始タグ、終了タグ、文字列の種類の配列。
+     * @returns トークンの切り出しによって処理済みとなった文字数
+     */
+    private parseString (text: string, indent: Indent, opts: SubProcOptArgs): number {
+        // console.log(`stringex: enter(col=${this.col})`)
+        let startLine = this.line
+        let startCol = this.col
         const startTag = opts[0]
         const endTag = opts[1]
         const type = opts[2]
         const index = text.indexOf(endTag, startTag.length)
+        let lastPartIndex = 0
         let len = index >= 0 ? index + endTag.length : startTag.length
         let str = text.substring(0, len)
         let lineCount = 0
         let endCol = this.col
+        let isFirstStringPart = true
         const checkIndex = str.indexOf(startTag, startTag.length)
         if (startTag !== endTag && checkIndex >= 0) {
-            this.addErrorInfo('WARN', `string start character in same string(${startTag})`, startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('WARN', `string start character in same string(${startTag})`, startLine, startCol, startLine, startCol + startTag.length)
         }
         if (index >= 0) {
-            let crIndex = str.indexOf('\r')
-            let lfIndex = str.indexOf('\n')
+            let parenIndex = type === 'STRING_EX' ? str.search(/[\{｛]/) :  -1
             while (str !== '') {
-                if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
-                    lineCount ++
-                    endCol = lfIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    str = str.substring(crIndex + 2)
-                    crIndex = str.indexOf('\r')
-                    lfIndex = str.indexOf('\n')
-                } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
-                    lineCount ++
-                    endCol = crIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    str = str.substring(crIndex + 1)
-                    crIndex = str.indexOf('\r')
-                } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
-                    lineCount ++
-                    endCol = lfIndex
-                    this.lengthLines.push(this.col + endCol)
-                    this.col = COL_START
-                    str = str.substring(lfIndex + 1)
-                    lfIndex = str.indexOf('\n')
+                if (parenIndex >= 0) {
+                    let stringpart = str.substring(0, parenIndex)
+                    lineCount = this.skipWithoutCrlf(stringpart)
+                    const token: Nako3Token = {
+                        type: type,
+                        group :'記号',
+                        startLine,
+                        startCol,
+                        endLine: this.line,
+                        endCol: this.col,
+                        resEndCol: this.col,
+                        lineCount,
+                        len: parenIndex + (isFirstStringPart ? startTag.length : 0),
+                        unit: '',
+                        josi: '',
+                        text: str.substring(0, parenIndex),
+                        value: str.substring(isFirstStringPart ? startTag.length : 0, parenIndex),
+                        indent,
+                    }
+                    this.rawTokens.push(token)
+                    str = str.substring(parenIndex)
+                    isFirstStringPart = false
+                    const parenStartTag = str.charAt(0)
+                    const parenEndTag = parenStartTag === '{' ? '}' : '｝'
+                    let parenIndexEnd = str.indexOf(parenEndTag)
+                    if (parenIndexEnd !== -1) {
+                        let token: Nako3Token
+                        // "{" mark
+                        token = {
+                            type: 'STRING_INJECT_START',
+                            group: '記号',
+                            startLine: this.line,
+                            startCol: this.col,
+                            endLine: this.line,
+                            endCol: this.col + 1,
+                            resEndCol: this.col + 1,
+                            lineCount: 0,
+                            len: 1,
+                            unit: '',
+                            josi: '',
+                            text: parenStartTag,
+                            value: parenStartTag,
+                            indent,
+                        }
+                        this.rawTokens.push(token)
+                        this.col++
+                        const strex = str.substring(1, parenIndexEnd)
+                        this.tokenizeProc(strex)
+                        // "}" mark
+                        token = {
+                            type: 'STRING_INJECT_END',
+                            group: '記号',
+                            startLine: this.line,
+                            startCol: this.col,
+                            endLine: this.line,
+                            endCol: this.col + 1,
+                            resEndCol: this.col + 1,
+                            lineCount: 0,
+                            len: 1,
+                            unit: '',
+                            josi: '',
+                            text: parenEndTag,
+                            value: parenEndTag,
+                            indent,
+                        }
+                        this.rawTokens.push(token)
+                        this.col++
+                        str = str.substring(parenIndexEnd + 1) // 1 for "}" length
+                        lastPartIndex += parenIndex + parenIndexEnd + 1 // 1 for "}" length
+                        startLine = this.line
+                        startCol = this.col
+                        endCol = this.col
+                        parenIndex = str.search(/[\{｛]/)
+                    } else {
+                        this.errorInfos.add('ERROR', `unclose {} in template string`, this.line, this.col, this.line, this.col + 1)
+                        parenIndex = -1
+                    }
                 } else {
-                    // crIndex === -1 && lfIndex === -1
-                    endCol = this.col + str.length
+                    // no paren peair
+                    lineCount = this.skipWithoutCrlf (str)
+                    endCol = this.col
                     str = ''
                 }
             }
         } else {
-            this.addErrorInfo('ERROR', 'unclose string', startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('ERROR', 'unclose string', startLine, startCol, startLine, startCol + startTag.length)
             endCol = endCol + startTag.length
         }
         const resEndCol = endCol
-        const resLen = len
+        const resLen = len - lastPartIndex
         let josiStartCol:number|undefined
         const r = josiRE.exec(text.substring(len))
         let josi = ''
@@ -543,7 +621,7 @@ export class Nako3Tokenizer {
             josi = r[0].replace(/^\s+/, '')
             len += r[0].length
             endCol += r[0].length
-            if (text.charAt(len) === ',' || text.charAt(len) === '，' || text.charAt(len) === '、') {
+            if (text.charAt(len) === ',' || text.charAt(len) === '，' || text.charAt(len) === '、' || text.charAt(len) === '。') {
                 len += 1
                 endCol += 1
             }
@@ -557,28 +635,61 @@ export class Nako3Tokenizer {
             josi = ''
             josiStartCol = undefined
         }
-        this.line = this.line + lineCount
         this.col = endCol
         const token: Nako3Token = {
             type: type,
+            group: '文字列',
             startLine,
             startCol,
             endLine: this.line,
             endCol,
             resEndCol,
             lineCount,
-            len,
+            len: len - lastPartIndex,
             unit: '',
             josi,
             josiStartCol,
-            text: text.substring(0, len),
-            value: text.substring(startTag.length, resLen - (index >= 0 ? endTag.length : 0)),
+            text: text.substring(isFirstStringPart ? 0 : lastPartIndex, len),
+            value: text.substring(isFirstStringPart ? startTag.length : lastPartIndex, resLen + lastPartIndex - (index >= 0 ? endTag.length : 0)),
+            indent,
         }
         this.rawTokens.push(token)
+        // console.log(`stringex: leave(col=${this.col})`)
         return len
     }
 
-    parseWord (text: string, opts: SubProcOptArgs): number {
+    /**
+     * 改行を判定しcol/lineを更新する。複数行のparse系の下請け。
+     * @param str 処理する対象の文字列。
+     * @returns 行数を返す。
+     */
+    private skipWithoutCrlf (str: string): number {
+        let lineCount = 0
+        let endCol = this.col
+        while (str !== '') {
+            let crlfIndex = str.search(/[\r\n]/)
+            if (crlfIndex >= 0) {
+                // console.log(`stringEx: crlf loigc:${crlfIndex}`)
+                let crlfLen = 1
+                if (str.length > 1 && str.charAt(crlfIndex) === '\r' && str.charAt(crlfIndex + 1) === '\n') {
+                    crlfLen = 2
+                }
+                lineCount ++
+                endCol += crlfIndex
+                this.lengthLines.push(endCol)
+                endCol = COL_START
+                str = str.substring(crlfIndex + crlfLen)
+            } else {
+                endCol += str.length
+                str = ''
+            }
+        }
+        this.line += lineCount
+        this.col = endCol
+        return lineCount
+    }
+
+    private parseWord (text: string, indent: Indent, opts: SubProcOptArgs): number {
         const startCol = this.col
         const r = /^[^\r\n]*/.exec(text)
         let line = r ? r[0] : ''
@@ -598,7 +709,7 @@ export class Nako3Tokenizer {
                     josi = r[0].replace(/^\s+/, '')
                     len += r[0].length
                     line = line.substring(r[0].length)
-                    if (line.charAt(0) === ',' || line.charAt(0) === '，' || line.charAt(0) === '、') {
+                    if (line.charAt(0) === ',' || line.charAt(0) === '，' || line.charAt(0) === '、' || line.charAt(0) === '。') {
                         len += 1
                         line = line.substring(1)
                     }
@@ -621,7 +732,7 @@ export class Nako3Tokenizer {
         }
         if (len === 0 && resLen > 0) {
             len = resLen
-            if (line.charAt(0) === '、') {
+            if (line.charAt(0) === '、' || line.charAt(0) === '。') {
                 len += 1
                 line = line.substring(1)
             }
@@ -665,6 +776,7 @@ export class Nako3Tokenizer {
         this.col += len
         const token: Nako3Token = {
             type: 'WORD',
+            group: '単語',
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -677,277 +789,12 @@ export class Nako3Tokenizer {
             unit: '',
             josi,
             josiStartCol,
+            indent,
         }
         this.rawTokens.push(token)
         return len
     }
-/*
-    parseFunctionDeclare (text: string): number {
-        const startCol = this.col
-        let token: Nako3Token
-        const generateToken = (len: number) => {
-            token = {
-                type: 'FUNCTION_DECLARE',
-                startLine: this.line,
-                startCol,
-                endLine: this.line,
-                endCol: startCol + len,
-                resEndCol: startCol + len,
-                lineCount: 0,
-                len,
-                unit: '',
-                josi: '',
-                text: text.substring(0, len),
-                value: text.substring(0, len),
-            }
-            this.col = startCol + len
-            this.rawTokens.push(token)
-            return len
-        }
-        const skipSpace = (line: string): string => {
-            const r = spaceRE.exec(line)
-            if (r) {
-                const tokenLen = r[0].length
-                this.col += tokenLen
-                line = line.substring(tokenLen)
-            }
-            return line
-        }
-        let len = 0
-        const crIndex = text.indexOf('\r')
-        const lfIndex = text.indexOf('\n')
-        if (crIndex !== -1 && lfIndex !== -1 && crIndex + 1 === lfIndex) {
-            len = crIndex
-        } else if (crIndex !== -1 && ((lfIndex !== -1 && crIndex < lfIndex) || lfIndex === -1)) {
-            len = crIndex
-        } else if (lfIndex !== -1 && ((crIndex !== -1 && lfIndex <= crIndex) || crIndex === -1)) {
-            len = lfIndex
-        } else {
-            // crIndex === -1 && lfIndex === -1
-            len = text.length
-        }
-        let line = text.substring(0, len)
-        let isMumei = false
-        let tokenLen:number
-        // 関数宣言であることのマーク(keyword)を取り出す
-        if (/^(●|\*)/.test(line)) {
-            tokenLen = 1
-        } else if (/^(関数)/.test(line)) {
-            tokenLen = 2
-        } else if (/^(には|は~|は～)/.test(line)) {
-            isMumei = true
-            tokenLen = 2
-        } else {
-            return generateToken(len)
-        }
-        token = {
-            type: 'FUNCTION_DECLARE',
-            startLine: this.line,
-            startCol: this.col,
-            endLine: this.line,
-            endCol: this.col + tokenLen,
-            resEndCol: this.col + tokenLen,
-            lineCount: 0,
-            len: tokenLen,
-            unit: '',
-            josi: '',
-            text: line.substring(0, tokenLen),
-            value: line.substring(0, tokenLen),
-        }
-        this.rawTokens.push(token)
-        this.col += tokenLen
-        line = line.substring(tokenLen)
 
-        line = skipSpace(line)
-
-        // 関数の属性(公開非公開とか)の指定を読み取る(あれば)
-        if (!isMumei && /^(\{|｛)/.test(line)) {
-            const r = /^(\{|｛)([^}｝]*)(\}|｝)/.exec(line)
-            if (!r) {
-                return generateToken(len)
-            }
-            tokenLen = r[0].length
-            token = {
-                type: 'FUNCTION_ATTTRIBUTE',
-                startLine: this.line,
-                startCol: this.col,
-                endLine: this.line,
-                endCol: this.col + tokenLen,
-                resEndCol: this.col + tokenLen,
-                lineCount: 0,
-                len: tokenLen,
-                text: line.substring(0, tokenLen),
-                value: line.substring(1, tokenLen - 2),
-            }
-            this.rawTokens.push(token)
-            this.col += tokenLen
-            line = line.substring(tokenLen)
-
-            line = skipSpace(line)
-        }
-
-        // 引数の定義があれば読み取る
-        if (/^(\(|（)/.test(line)) {
-            const r = /^(\(|（)([^)）]*)(\)|）)/.exec(line)
-            if (!r) {
-                return generateToken(len)
-            }
-            tokenLen = r[0].length
-            token = {
-                type: 'FUNCTION_ARGSTRING',
-                startLine: this.line,
-                startCol: this.col,
-                endLine: this.line,
-                endCol: this.col + tokenLen,
-                resEndCol: this.col + tokenLen,
-                lineCount: 0,
-                len: tokenLen,
-                text: line.substring(0, tokenLen),
-                value: line.substring(1, tokenLen - 2),
-            }
-            this.rawTokens.push(token)
-            this.col += tokenLen
-            line = line.substring(tokenLen)
-
-            line = skipSpace(line)
-        }
-
-        let resText = line
-        const r = /(\(|（)([^)）]*)(\)|）)/.exec(line)
-        if (!isMumei && r) {
-            let name = line.substring(0, r.index)
-            tokenLen = name.length
-            token = {
-                type: 'FUNCTION_NAME',
-                startLine: this.line,
-                startCol: this.col,
-                endLine: this.line,
-                endCol: this.col + tokenLen,
-                resEndCol: this.col + tokenLen,
-                lineCount: 0,
-                len:  tokenLen,
-                text: name,
-                value: name.trim(),
-            }
-            this.rawTokens.push(token)
-            this.col += tokenLen
-            this.addUserFunction(name)
-            let arg = r[1]
-            tokenLen = arg.length
-            token = {
-                type: 'FUNCTION_ARGSTRING',
-                startLine: this.line,
-                startCol: this.col,
-                endLine: this.line,
-                endCol: this.col + tokenLen,
-                resEndCol: this.col + tokenLen,
-                lineCount: 0,
-                len:  tokenLen,
-                text: arg,
-                value: arg.slice(1).slice(0, -1),
-            }
-            this.rawTokens.push(token)
-            this.col += tokenLen
-            line = line.substring(tokenLen)
-            resText = line
-            let toha = ''
-            let comma = ''
-            if (resText.endsWith('、') || resText.endsWith('，') || resText.endsWith(',')) {
-                comma = resText.slice(-1)
-                resText = resText.slice(0, -1)
-            }
-            if (resText.endsWith('とは') || resText.endsWith('は～') || resText.endsWith('は~')) {
-                toha = resText.slice(-2)
-                resText = resText.slice(0, -2)
-                tokenLen = resText.length
-            }
-            if (resText.length > 0) {
-                return generateToken(len)
-            }
-            if (toha.length > 0) {
-                tokenLen = toha.length + comma.length
-                token = {
-                    type: 'とは',
-                    startLine: this.line,
-                    startCol: this.col,
-                    endLine: this.line,
-                    endCol: this.col + tokenLen,
-                    resEndCol: this.col + toha.length,
-                    lineCount: 0,
-                    len: tokenLen,
-                    text: toha,
-                    value: 'とは',
-                }
-                this.rawTokens.push(token)
-                this.col += tokenLen
-            } else if (comma.length > 0) {
-                tokenLen = comma.length
-                token = {
-                    type: ',',
-                    startLine: this.line,
-                    startCol: this.col,
-                    endLine: this.line,
-                    endCol: this.col + tokenLen,
-                    resEndCol: this.col + comma.length,
-                    lineCount: 0,
-                    len: tokenLen,
-                    text: comma,
-                    value: ',',
-                }
-                this.rawTokens.push(token)
-                this.col += tokenLen
-            }
-        } else {
-            tokenLen = line.length
-            let toha = ''
-            let comma = ''
-            if (resText.endsWith('、') || resText.endsWith('，') || resText.endsWith(',')) {
-                comma = resText.slice(-1)
-                resText = resText.slice(0, -1)
-            }
-            if (resText.endsWith('とは') || resText.endsWith('は～') || resText.endsWith('は~')) {
-                toha = resText.slice(-2)
-                resText = resText.slice(0, -2)
-                tokenLen = resText.length
-            }
-            token = {
-                type: 'FUNCTION_NAME',
-                startLine: this.line,
-                startCol: this.col,
-                endLine: this.line,
-                endCol: this.col + tokenLen,
-                resEndCol: this.col + resText.length,
-                lineCount: 0,
-                len: tokenLen,
-                text: line.substring(0, tokenLen),
-                value: resText,
-            }
-            this.rawTokens.push(token)
-            this.col += tokenLen
-            this.addUserFunction(resText)
-            if (toha.length > 0) {
-                tokenLen = toha.length + comma.length
-                token = {
-                    type: 'とは',
-                    startLine: this.line,
-                    startCol: this.col,
-                    endLine: this.line,
-                    endCol: this.col + tokenLen,
-                    resEndCol: this.col + toha.length,
-                    lineCount: 0,
-                    len: tokenLen,
-                    text: toha,
-                    value: 'とは',
-                }
-                this.rawTokens.push(token)
-                this.col += tokenLen
-            }
-        }
-        
-        this.col = startCol + len
-        return len
-    }
-*/
     trimOkurigana (str: string): string {
         // ひらがなから始まらない場合、送り仮名を削除。(例)置換する
         if (!hira.test(str)) {
@@ -957,36 +804,6 @@ export class Nako3Tokenizer {
         if (allHiragana.test(str)) { return str }
         // 末尾のひらがなのみ (例)お願いします →お願
         return str.replace(/[ぁ-ん]+$/g, '')
-    }
-
-    applyFunction() {
-        for (const token of this.tokens) {
-            let type = token.type
-            if (type === 'WORD') {
-                const rtype = this.userFunction[token.value] || this.userFunction[this.trimOkurigana(token.value)]
-                if (rtype) {
-                    type = 'ユーザー関数'
-                    token.type = type
-                }
-            }
-            if (type === 'WORD') {
-                const rtype = reservedWords.get(token.value) || reservedWords.get(this.trimOkurigana(token.value))
-                if (rtype) {
-                    type = rtype
-                    token.type = type
-                }
-                if (token.value === 'そう') {
-                    token.value = 'それ'
-                }
-            }
-            if (type === 'WORD') {
-                const rtype = commandlist[token.value] || commandlist[this.trimOkurigana(token.value)]
-                if (rtype) {
-                    type = rtype
-                    token.type = type
-                }
-            }
-        }
     }
 
     fixTokens ():void {
@@ -1023,6 +840,7 @@ export class Nako3Tokenizer {
                         resEndCol: rawToken.endCol,
                         len: 1,
                         type: '回',
+                        group: '制御',
                         text: '回',
                         value: '回',
                     })
@@ -1046,6 +864,7 @@ export class Nako3Tokenizer {
                 reenterToken.push(token)
                 token = Object.assign({}, rawToken, {
                     type: 'には',
+                    group: '制御',
                     len: rawToken.len - rawToken.josiStartCol,
                     josi: '',
                     josiStartCol: null,
@@ -1069,6 +888,7 @@ export class Nako3Tokenizer {
                 reenterToken.push(token)
                 token = Object.assign({}, rawToken, {
                     type: 'EQ',
+                    group: '演算子',
                     len: 1,
                     text: '=',
                     value: '=',
@@ -1092,6 +912,7 @@ export class Nako3Tokenizer {
                 reenterToken.push(token)
                 token = Object.assign({}, rawToken, {
                     type: 'とは',
+                    group: '制御',
                     len: rawToken.len - rawToken.josiStartCol!,
                     josi: '',
                     josiStartCol: null,
@@ -1117,6 +938,7 @@ export class Nako3Tokenizer {
                 reenterToken.push(token)
                 token = Object.assign({}, rawToken, {
                     type: 'ならば',
+                    group: '制御',
                     len: rawToken.len - rawToken.josiStartCol,
                     text: rawJosi,
                     value: josi,
@@ -1131,6 +953,9 @@ export class Nako3Tokenizer {
             if (requirePush) { 
                 if ((type === 'def_func' || type === '*') && rawToken.startCol === 0 && rawToken.josi === '') {
                     functionIndex.push(this.tokens.length)
+                    if (type === '*') {
+                        console.log(`tokenize: function start with token-type '*'. not 'def_fund'`)
+                    }
                 } else if (type === 'には') {
                     functionIndex.push(this.tokens.length)
                 }
@@ -1143,8 +968,9 @@ export class Nako3Tokenizer {
 
     enumlateFunction (functionIndex: number[]):void {
         const parseArguments = (i:number):number => {
+            // jに先頭位置、iに最短の')'またはEOLの位置を求める。
             let j = i
-            for (;i < this.tokens.length && this.tokens[i].type !== ')' && this.tokens[i].type !== 'EOF';i++) {
+            for (;i < this.tokens.length && this.tokens[i].type !== ')' && this.tokens[i].type !== 'EOL';i++) {
                 //
             }
             if (this.tokens[i].type === ')') {
@@ -1157,10 +983,12 @@ export class Nako3Tokenizer {
                     } else if (token.type === 'WORD') {
                         token.type = 'FUNCTION_ARG_PARAMETER'
                     } else {
-                        this.addErrorInfo('ERROR',`unknown token in function parameters(${token.type}`, token)
+                        this.errorInfos.addFromToken('ERROR',`unknown token in function parameters(${token.type}`, token)
                     }
                 }
                 i++
+            } else {
+                this.errorInfos.addFromToken('ERROR',`not found right parentis in function parameters(${this.tokens[j].type}`, this.tokens[j])
             }
             return i
         }
@@ -1179,7 +1007,7 @@ export class Nako3Tokenizer {
             token = this.tokens[i]
             if (!isMumei && token.type === '{') {
                 let j = i
-                for (;i < this.tokens.length && this.tokens[i].type !== '}' && this.tokens[i].type !== 'EOF';i++) {
+                for (;i < this.tokens.length && this.tokens[i].type !== '}' && this.tokens[i].type !== 'EOL';i++) {
                     //
                 }
                 if (this.tokens[i].type === '}') {
@@ -1232,6 +1060,37 @@ export class Nako3Tokenizer {
             this.userFunction[nameNormalized] = {
                 name: nameTrimed,
                 tokenIndex: index
+            }
+        }
+    }
+
+    applyFunction() {
+        for (const token of this.tokens) {
+            let type = token.type
+            if (type === 'WORD') {
+                const rtype = this.userFunction[token.value] || this.userFunction[this.trimOkurigana(token.value)]
+                if (rtype) {
+                    type = 'ユーザー関数'
+                    token.type = type
+                }
+            }
+            if (type === 'WORD') {
+                const rtype = reservedWords.get(token.value) || reservedWords.get(this.trimOkurigana(token.value))
+                if (rtype) {
+                    type = rtype
+                    token.type = type
+                    token.group = reservedGroup.get(type)!
+                }
+                if (token.value === 'そう') {
+                    token.value = 'それ'
+                }
+            }
+            if (type === 'WORD') {
+                const rtype = commandlist[token.value] || commandlist[this.trimOkurigana(token.value)]
+                if (rtype) {
+                    type = rtype
+                    token.type = type
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
-import { legend, Nako3Documents } from './nako3interface.mjs'
+import { legend } from './nako3documentext.mjs'
+import { Nako3Documents } from './nako3interface.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
