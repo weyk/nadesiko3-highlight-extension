@@ -1,0 +1,13 @@
+{
+    "configuration.title": "なでしこ３ ハイライト",
+    "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
+    "useRuntimeSnako.descriptions": "snakoの標準プラグインを用いる",
+    "useRuntimeCnako.descriptions": "cnakoの標準プラグインを用いる",
+    "useRuntimeWnako.descriptions": "wnakoの標準プラグインを用いる",
+    "trace.label.off": "無し",
+    "trace.label.messages": "通常",
+    "trace.label.verbose": "詳細",
+    "trace.label.debug": "デバッグ",
+    "trace.label.all": "詳細デバッグ",
+    "trace.descriptions": "本拡張機能のトレースを取得する。"
+}

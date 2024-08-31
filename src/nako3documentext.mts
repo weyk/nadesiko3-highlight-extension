@@ -1,9 +1,11 @@
 import {
+    l10n,
     Diagnostic,
     DiagnosticSeverity,
     DocumentHighlight,
     DocumentHighlightKind,
     DocumentSymbol,
+    Hover,
     Position,
     Range,
     SemanticTokens,
@@ -14,7 +16,8 @@ import {
 } from 'vscode'
 import { Nako3Token, COL_START } from './nako3lexer.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
-import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { ErrorInfoManager, messages } from './nako3errorinfo.mjs'
+import { logger } from './logger.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
 export const tokenModifiers = ['declaration', 'documentation', 'defaultLibrary', 'deprecated', 'readonly']
@@ -116,6 +119,8 @@ export class Nako3DocumentExt {
     textVersion: number|null
     isErrorClear: boolean
     errorInfos: ErrorInfoManager
+    problemsLimit: number
+    runtimeEnv: string
 
     constructor (filename: string, uri: Uri) {
         this.nako3doc = new Nako3Document(filename)
@@ -131,6 +136,8 @@ export class Nako3DocumentExt {
         this.validDiagnostics = false
         this.errorInfos = new ErrorInfoManager()
         this.isErrorClear = true
+        this.problemsLimit = 100
+        this.runtimeEnv = 'wnako'
     }
 
     invalidate ():void {
@@ -139,11 +146,24 @@ export class Nako3DocumentExt {
         this.validDiagnostics = false
     }
 
+    setRuntimeEnv (runtime: string) {
+        this.runtimeEnv = runtime
+        this.nako3doc.runtimeEnv = runtime
+        this.nako3doc.lex.runtimeEnv = runtime
+    }
+    
     addDiagnosticsFromErrorInfos (errorInfos: ErrorInfoManager) {
         for (const errorInfo of errorInfos.getAll()) {
+            const messageId = errorInfo.messageId
             const startPos = new Position(errorInfo.startLine, errorInfo.startCol)
             const endPos = new Position(errorInfo.endLine, errorInfo.endCol)
             const range = new Range(startPos, endPos)
+            let message = l10n.t(messageId)
+            if (message === messageId) {
+                message = l10n.t(messages.get(messageId)!, errorInfo.args)
+            } else {
+                message = l10n.t(messageId, errorInfo.args)
+            }
             let kind:DiagnosticSeverity
             switch (errorInfo.type) {
             case 'ERROR':
@@ -152,20 +172,35 @@ export class Nako3DocumentExt {
             case 'WARN':
                 kind = DiagnosticSeverity.Warning
                 break
+            case 'INFO':
+                kind = DiagnosticSeverity.Information
+                break
+            case 'HINT':
+                kind = DiagnosticSeverity.Hint
+                break
             default:
                 kind = DiagnosticSeverity.Information
             }
-            this.diagnostics.push(new Diagnostic(range, errorInfo.message, kind))
+            this.diagnostics.push(new Diagnostic(range, message, kind))
         }
     }
 
     computeDiagnostics () {
-        this.clearError()
         this.tokenize()
         this.diagnostics = []
+        let problemsRemain = this.problemsLimit
+
+        this.nako3doc.lex.setProblemsLimit(problemsRemain)
         this.addDiagnosticsFromErrorInfos(this.nako3doc.lex.errorInfos)
+        problemsRemain -= this.nako3doc.lex.errorInfos.count
+
+        this.nako3doc.setProblemsLimit(problemsRemain)
         this.addDiagnosticsFromErrorInfos(this.nako3doc.errorInfos)
+        problemsRemain -= this.nako3doc.errorInfos.count
+
+        this.setProblemsLimit(problemsRemain)
         this.addDiagnosticsFromErrorInfos(this.errorInfos)
+
         this.validDiagnostics = true
     }
 
@@ -248,7 +283,6 @@ export class Nako3DocumentExt {
     }
 
     computeSemanticToken():void {
-        this.clearError()
         this.tokenize()
         const tokensBuilder = new SemanticTokensBuilder()
         for (const token of this.nako3doc.lex.tokens) {
@@ -315,12 +349,19 @@ export class Nako3DocumentExt {
 
     tokenize (): void {
         if (!this.validTokens) {
+            this.clearError()
+            this.nako3doc.clearError()
             this.nako3doc.tokenize(this.text)
             this.validTokens = true
             this.isErrorClear = false
+            logger.info('process tokenize')
         } else {
-            console.log('skip tokenize')
+            logger.info('skip tokenize')
         }
+    }
+
+    setProblemsLimit (limit: number) {
+        this.problemsLimit = limit
     }
 
     clearError ():void {
@@ -341,14 +382,14 @@ export class Nako3DocumentExt {
     getSemanticTokens (): SemanticTokens {
         if (!this.validSemanticTokens) {
             this.computeSemanticToken()
+            logger.info('process computeSemanticToken')
         } else {
-            console.log('skip computeSemanticToken')
+            logger.info('skip computeSemanticToken')
         }
         return this.semanticTokens!
     }
     
     getHighlight (position: Position): DocumentHighlight[] {
-        this.clearError()
         this.tokenize()
         const line = position.line
         const col = position.character
@@ -375,11 +416,51 @@ export class Nako3DocumentExt {
         return []
     }
 
+    getHover (position: Position): Hover|null {
+        this.tokenize()
+        const line = position.line
+        const col = position.character
+        const token = this.nako3doc.getTokenByPosition(line, col)
+        if (token !== null && ['システム関数','システム変数','システム定数'].includes(token.type)) {
+            const commandInfo = this.nako3doc.lex.getCommandInfo(token.value)
+            if (!commandInfo) {
+                return null
+            }
+            let range:Range
+            if (token.josi !== '' && typeof token.josiStartCol === 'number') {
+                if (col < token.josiStartCol) {
+                    const startPos = new Position(token.startLine, token.startCol)
+                    const endPos = new Position(token.endLine, token.josiStartCol)
+                    range = new Range(startPos, endPos)
+                } else {
+                    return null
+                }
+            } else {
+                const startPos = new Position(token.startLine, token.startCol)
+                const endPos = new Position(token.endLine, token.endCol)
+                range = new Range(startPos, endPos)
+            }
+            let cmd:string
+            if (['システム変数','システム定数'].includes(token.type)) {
+                cmd = `${token.type.slice(-2)} ${commandInfo.command}`
+            } else {
+                if (commandInfo.args.length > 0) {
+                    cmd = `命令 (${commandInfo.args})${commandInfo.command}`
+                } else {
+                    cmd = `命令 ${commandInfo.command}`
+                }
+            }
+            return new Hover([cmd, commandInfo.hint], range)
+        }
+        return null
+    }
+
     getDocumentSymbols (): DocumentSymbol[] {
         if (!this.validDocumentSymbols) {
             this.computeDocumentSymbols()
+            logger.log('process computeDocumentSymbols')
         } else {
-            console.log('skip computeDocumentSymbols')
+            logger.log('skip computeDocumentSymbols')
         }
         return this.documentSymbols
     }
@@ -387,8 +468,9 @@ export class Nako3DocumentExt {
     getDiagnostics (): Diagnostic[] {
         if (!this.validDiagnostics) {
             this.computeDiagnostics()
+            logger.log('process computeDiagnostics')
         } else {
-            console.log('skip computeDiagnostics')
+            logger.log('skip computeDiagnostics')
         }
         return this.diagnostics
     }

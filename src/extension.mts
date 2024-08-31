@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { legend } from './nako3documentext.mjs'
 import { Nako3Documents } from './nako3interface.mjs'
+import { logger } from './logger.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
@@ -37,11 +38,55 @@ export class Nako3DocumentSymbolProvider implements vscode.DocumentSymbolProvide
     }
 }
 
+export class Nako3HoverProvider implements vscode.HoverProvider {
+    async provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Hover|null> {
+        // console.log(`provide document symbol:${document.fileName}`)
+		nako3docs.setFullText(document)
+		const hover = nako3docs.getHover(document, position)
+        nako3docs.getDiagnostics(document)
+		return hover
+    }
+}
+
 const disposableSubscriptions : vscode.Disposable[] = []
 export function activate(context: vscode.ExtensionContext):void {
+    const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+    const traceLevel = conf.get('trace')
+    logger.info(`activate :workspace.trace:${traceLevel}`)
+    if (typeof traceLevel === 'string') {
+        let level:string
+        if (traceLevel === 'all') {
+            level = 'LOG'
+        } else if (traceLevel === 'debug') {
+            level = 'DEBUG'
+        } else if (traceLevel === 'vervose') {
+            level = 'INFO'
+        } else if (traceLevel === 'messages') {
+            level = 'ERROR'
+        } else {
+            level = 'NONE'
+        }
+        logger.setLevel(level)
+    }
+
+    const limit = conf.get('maxNumberOfProblems')
+    if (typeof limit === 'number') {
+        nako3docs.setProblemsLimit(limit)
+    }
+    const runtime = conf.get('runtimeMode')
+    if (typeof runtime === 'string') {
+        nako3docs.setRuntimeEnv(runtime)
+    }
+    for (const document of vscode.workspace.textDocuments) {
+        // console.log(`  ${document.fileName}:${document.languageId}:${!document.isClosed}`)
+        if (!document.isClosed && document.languageId === 'nadesiko3') {
+            nako3docs.open(document)
+        }
+    }
     context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider(NAKO3_MODE, new Nako3DocumentSemanticTokensProvider(), legend))
     context.subscriptions.push(vscode.languages.registerDocumentHighlightProvider(NAKO3_MODE, new Nako3DocumentHighlightProvider()))
     context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(NAKO3_MODE, new Nako3DocumentSymbolProvider()))
+    context.subscriptions.push(vscode.languages.registerHoverProvider(NAKO3_MODE, new Nako3HoverProvider()))
 
     disposableSubscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpen  :${e.languageId}:${e.fileName}`)
@@ -56,15 +101,50 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     disposableSubscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
-        console.log(`onDidChange:${e.document.languageId}:${e.document.fileName}`)
+        logger.log(`onDidChange:${e.document.languageId}:${e.document.fileName}`)
         if (e.document.languageId === 'nadesiko3') {
         }
     }))
     disposableSubscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
-        console.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
-        console.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
+        logger.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
+        logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
         //console.log(e)
 
+    }))
+    disposableSubscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration('nadesiko3Highlight.maxNumberOfProblems')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+            const limit = conf.get('maxNumberOfProblems')
+            if (typeof limit === 'number') {
+                nako3docs.setProblemsLimit(limit)
+            }
+        } else if (e.affectsConfiguration('nadesiko3Highlight.runtimeMode')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+            const runtime = conf.get('runtimeMode')
+            if (typeof runtime === 'string') {
+                nako3docs.setRuntimeEnv(runtime)
+            }
+        } else if (e.affectsConfiguration('nadesiko3Highlight.trace')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+            const traceLevel = conf.get('trace')
+
+            console.log(`onDidChangeConnfiguratioon :workspace.trace:${traceLevel}`)
+            if (typeof traceLevel === 'string') {
+                let level:string
+                if (traceLevel === 'all') {
+                    level = 'LOG'
+                } else if (traceLevel === 'debug') {
+                    level = 'DEBUG'
+                } else if (traceLevel === 'vervose') {
+                    level = 'INFO'
+                } else if (traceLevel === 'messages') {
+                    level = 'ERROR'
+                } else {
+                    level = 'NONE'
+                }
+                logger.setLevel(level)
+            }
+        }
     }))
     // disposableSubscriptions.push(vscode.window.tabGroups.onDidChangeTabGroups(e => {
     //     console.log(`onTabGroupChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
@@ -86,12 +166,6 @@ export function activate(context: vscode.ExtensionContext):void {
     //     }
     // }
     // console.log(`initial text document:${vscode.workspace.textDocuments.length}`)
-    for (const document of vscode.workspace.textDocuments) {
-        // console.log(`  ${document.fileName}:${document.languageId}:${!document.isClosed}`)
-        if (!document.isClosed && document.languageId === 'nadesiko3') {
-            nako3docs.open(document)
-        }
-    }
 }
 
 export function deactivate() {

@@ -1,3 +1,8 @@
+## 0.0.7
+- Add hover hint for built-in plugin instruction.
+- Add localize for ja.
+- Add configuration.
+
 ## 0.0.6
 - Fix range of multi line string.
 - Add document symbol of anonymous function.

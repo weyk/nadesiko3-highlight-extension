@@ -1,8 +1,11 @@
 import reservedWords from './nako3/nako_reserved_words.mjs'
 // 助詞の一覧
 import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
-import commandjson from './nako3/command.json'
+
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { Nako3Command, CommandInfo } from './nako3command.mjs'
+import { logger } from './logger.mjs'
+import { deactivate } from './extension.mjs'
 
 export interface Indent {
     text: string
@@ -81,7 +84,8 @@ const lexRules: LexRule[] = [
     { name: 'COMMENT_LINE', group: 'コメント', pattern: /^(#|＃|\/\/|／／)/, proc: 'cbCommentLine' },
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '/*', proc: 'cbCommentBlock', procArgs: ['/*', '*/']  },
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
-    { name: 'def_func', group: '記号', pattern: /^[●\*]/, isFirstCol: true },
+    { name: 'def_func', group: '記号', pattern: '●' },
+    { name: 'def_func', group: '記号', pattern: '*', isFirstCol: true },
     { name: 'STRING', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'STRING'] },
     { name: 'STRING', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'STRING'] },
     { name: 'STRING', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'STRING'] },
@@ -171,28 +175,7 @@ const reservedGroup: Map<string, string> = new Map([
   ])
   
 
-type CmdSectionEntry = [string, string, string, string, string]
-type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
-type CmdJsonEntry = { [pluginName:string]: CmdPluginEntry }
-let commandlist:{ [name:string]: string } = {}
-for (const pluginname of Object.keys(commandjson)) {
-    const plugin = (commandjson as unknown as CmdJsonEntry)[pluginname] as CmdPluginEntry
-    for (const sectioname of Object.keys(plugin)) {
-        const section = plugin[sectioname]
-        for (const entry of section) {
-            let type = entry[0]
-            const name = entry[1]
-            if (type === '定数') {
-                type = 'システム定数'
-            } else if (type === '関数') {
-                type = 'システム関数'
-            } else if (type === '変数') {
-                type = 'システム変数'
-            }
-            commandlist[name] = type
-        }
-    }
-}
+
 export const COL_START = 0
 export const LINE_START = 0
 type ProcMap = { [K in ProcMapKey]: SubProc }
@@ -213,6 +196,10 @@ export class Nako3Tokenizer {
     procMap: ProcMap
     line: number
     col: number
+    commands: Nako3Command|null
+    runtimeEnv: string
+    pluginNames: string[]
+
     constructor (filename: string) {
         this.filename = filename
         this.rawTokens = []
@@ -223,6 +210,9 @@ export class Nako3Tokenizer {
         this.lengthLines = []
         this.line = 0
         this.col = 0
+        this.commands = null
+        this.pluginNames = []
+        this.runtimeEnv = 'wnako'
         this.procMap = {
             cbCommentBlock: this.parseBlockComment,
             cbCommentLine: this.parseLineComment,
@@ -243,6 +233,10 @@ export class Nako3Tokenizer {
         this.line = LINE_START
         this.col = COL_START
         this.tokenizeProc(text)
+    }
+
+    setProblemsLimit (limit: number) {
+        this.errorInfos.problemsLimit = limit
     }
 
     /**
@@ -376,7 +370,7 @@ export class Nako3Tokenizer {
                 token.len = 1
                 token.text = text.substring(0,1)
                 token.value = text.substring(0,1)
-                this.errorInfos.addFromToken('ERROR', `invalid character(code:${text.substring(0,1).codePointAt(0)})`, token)
+                this.errorInfos.addFromToken('ERROR', 'invalidChar', { code: text.substring(0,1).codePointAt(0)!}, token)
                 this.col = token.endCol
                 this.rawTokens.push(token)
                 len = 1
@@ -472,7 +466,7 @@ export class Nako3Tokenizer {
             lineCount = this.skipWithoutCrlf(comment)
             endCol = this.col
         } else {
-            this.errorInfos.add('ERROR', 'unclose block comment', startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('ERROR', 'unclosedBlockComment', {} , startLine, startCol, startLine, startCol + startTag.length)
             endCol = endCol + startTag.length
         }
         this.col = endCol
@@ -518,7 +512,7 @@ export class Nako3Tokenizer {
         let isFirstStringPart = true
         const checkIndex = str.indexOf(startTag, startTag.length)
         if (startTag !== endTag && checkIndex >= 0) {
-            this.errorInfos.add('WARN', `string start character in same string(${startTag})`, startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('WARN', 'stringInStringStartChar', { startTag }, startLine, startCol, startLine, startCol + startTag.length)
         }
         if (index >= 0) {
             let parenIndex = type === 'STRING_EX' ? str.search(/[\{｛]/) :  -1
@@ -597,7 +591,7 @@ export class Nako3Tokenizer {
                         endCol = this.col
                         parenIndex = str.search(/[\{｛]/)
                     } else {
-                        this.errorInfos.add('ERROR', `unclose {} in template string`, this.line, this.col, this.line, this.col + 1)
+                        this.errorInfos.add('ERROR', 'unclosedPlaceHolder', {},  this.line, this.col, this.line, this.col + 1)
                         parenIndex = -1
                     }
                 } else {
@@ -608,7 +602,7 @@ export class Nako3Tokenizer {
                 }
             }
         } else {
-            this.errorInfos.add('ERROR', 'unclose string', startLine, startCol, startLine, startCol + startTag.length)
+            this.errorInfos.add('ERROR', 'unclosedString', {},  startLine, startCol, startLine, startCol + startTag.length)
             endCol = endCol + startTag.length
         }
         const resEndCol = endCol
@@ -983,12 +977,12 @@ export class Nako3Tokenizer {
                     } else if (token.type === 'WORD') {
                         token.type = 'FUNCTION_ARG_PARAMETER'
                     } else {
-                        this.errorInfos.addFromToken('ERROR',`unknown token in function parameters(${token.type}`, token)
+                        this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
                     }
                 }
                 i++
             } else {
-                this.errorInfos.addFromToken('ERROR',`not found right parentis in function parameters(${this.tokens[j].type}`, this.tokens[j])
+                this.errorInfos.addFromToken('ERROR', 'noFunctionParamParentisR', {token:this.tokens[j].type}, this.tokens[j])
             }
             return i
         }
@@ -1066,16 +1060,18 @@ export class Nako3Tokenizer {
 
     applyFunction() {
         for (const token of this.tokens) {
+            const v = token.value
+            const tv = this.trimOkurigana(v)
             let type = token.type
             if (type === 'WORD') {
-                const rtype = this.userFunction[token.value] || this.userFunction[this.trimOkurigana(token.value)]
+                const rtype = this.userFunction[v] || this.userFunction[tv]
                 if (rtype) {
                     type = 'ユーザー関数'
                     token.type = type
                 }
             }
             if (type === 'WORD') {
-                const rtype = reservedWords.get(token.value) || reservedWords.get(this.trimOkurigana(token.value))
+                const rtype = reservedWords.get(v) || reservedWords.get(tv)
                 if (rtype) {
                     type = rtype
                     token.type = type
@@ -1085,13 +1081,27 @@ export class Nako3Tokenizer {
                     token.value = 'それ'
                 }
             }
-            if (type === 'WORD') {
-                const rtype = commandlist[token.value] || commandlist[this.trimOkurigana(token.value)]
-                if (rtype) {
-                    type = rtype
+            if (type === 'WORD' && this.commands) {
+                const commandInfo = this.getCommandInfo(v)
+                if (commandInfo) {
+                    type = commandInfo.type
                     token.type = type
                 }
             }
         }
+    }
+
+    getCommandInfo (command: string): CommandInfo|null {
+        const tv = this.trimOkurigana(command)
+        for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
+            const commandEntry = this.commands!.get(key)
+            if (commandEntry) {
+                const commandInfo = commandEntry.get(command) || commandEntry.get(tv)
+                if (commandInfo) {
+                    return commandInfo
+                }
+            }
+        }
+        return null
     }
 }

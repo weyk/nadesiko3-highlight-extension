@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -17,6 +17,9 @@
         "clean": "node ./tools/clean.mjs"
     },
     "publisher": "weykan",
+    "author": {
+        "name": "weyk"
+    },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/weyk/nadesiko3-highlight-extension"
@@ -25,16 +28,67 @@
         "lib/extension.js",
         "lib/nako3/command.json",
         "lib/nadesiko3.language-configuration.json",
+        "l10n/bundle.l10n.ja.json",
         "README.md",
         "LICENSE.txt",
         "CHANGELOG.md",
-        "package.json"
+        "package.json",
+        "package.nls.json",
+        "package.nls.ja.json"
     ],
     "categories": [
         "Programming Languages"
     ],
     "license": "MIT",
+    "l10n": "./l10n",
     "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "%configuration.title%",
+            "properties": {
+                "nadesiko3Highlight.maxNumberOfProblems": {
+                    "scope": "resource",
+                    "type": "number",
+                    "default": 100,
+                    "description": "%maxNumberOfProblems.description%"
+                },
+                "nadesiko3Highlight.runtimeMode": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "wnako",
+                    "enum": [
+                        "snako",
+                        "cnako",
+                        "wnako"
+                    ],
+                    "enumDescriptions": [
+                        "%useRuntimeSnako.descriptions%",
+                        "%useRuntimeCnako.descriptions%",
+                        "%useRuntimeWnako.descriptions%"
+                    ]
+                },
+                "nadesiko3Highlight.trace": {
+                    "scope": "window",
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "messages",
+                        "verbose",
+                        "debug",
+                        "all"
+                    ],
+                    "enumItemLabels": [
+                        "%trace.label.off%",
+                        "%trace.label.messages%",
+                        "%trace.label.verbose%",
+                        "%trace.label.debug%",
+                        "%trace.label.all%"
+                    ],
+                    "default": "off",
+                    "description": "%trace.descriptions%"
+                }
+            }
+        },
         "configurationDefaults": {
             "[nadesiko3]": {
                 "editor.wordSegmenterLocales": "ja",

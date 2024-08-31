@@ -3,21 +3,30 @@ import {
     DiagnosticCollection,
     DocumentHighlight,
     DocumentSymbol,
+    Hover,
     Position,
     SemanticTokens,
     SemanticTokensBuilder,
     TextDocument
 } from 'vscode'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
+import { Nako3Command } from './nako3command.mjs'
 
 export class Nako3Documents implements Disposable {
+    runtimeEnv: string
+    problemsLimit: number
     docs: Map<string, Nako3DocumentExt>
     diagnosticsCollection: DiagnosticCollection
+    commands: Nako3Command
 
     constructor () {
         // console.log('nako3documnets constructed')
         this.docs = new Map()
         this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
+        this.runtimeEnv = "wnako"
+        this.problemsLimit = 100
+        this.commands = new Nako3Command()
+        this.commands.initialize()
     }
 
     [Symbol.dispose](): void {
@@ -26,9 +35,27 @@ export class Nako3Documents implements Disposable {
         }
     }
 
+    setRuntimeEnv (runtime: string) {
+        this.runtimeEnv = runtime
+        for (const [ , doc] of this.docs) {
+            doc.setRuntimeEnv(runtime)
+        }
+    }
+
+    setProblemsLimit (limit: number) {
+        this.problemsLimit = limit
+        for (const [ , doc] of this.docs) {
+            doc.setProblemsLimit(limit)
+        }
+    }
+
     open (document: TextDocument):void {
         // console.log('document open:enter')
-        this.docs.set(document.fileName, new Nako3DocumentExt(document.fileName, document.uri))
+        const doc = new Nako3DocumentExt(document.fileName, document.uri)
+        this.docs.set(document.fileName, doc)
+        doc.setRuntimeEnv(this.runtimeEnv)
+        doc.nako3doc.lex.commands = this.commands
+        doc.setProblemsLimit(this.problemsLimit)
         // console.log('document open:leave')
     }
 
@@ -78,6 +105,15 @@ export class Nako3Documents implements Disposable {
             return []
         }
         return doc.getDocumentSymbols()
+    }
+
+    getHover (document: TextDocument, position: Position): Hover|null {
+        const doc = this.get(document)
+        if (doc == null) {
+            console.log(`getHover: document not opend`)
+            return null
+        }
+        return doc.getHover(position)
     }
 
     getDiagnostics (document?: TextDocument): DiagnosticCollection {

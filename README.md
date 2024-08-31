@@ -7,6 +7,7 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 - Semantic syntax highlight
 - Document highlight(word highlight)
 - Document symbols(outline)
+- Hover(built-in function hint)
 
 ## Install
 

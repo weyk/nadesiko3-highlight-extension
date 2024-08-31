@@ -1,5 +1,6 @@
 import { Nako3Tokenizer, Nako3Token, Indent, COL_START } from './nako3lexer.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { logger } from './logger.mjs'
 
 export interface SymbolInfo {
     name: string|null
@@ -21,6 +22,7 @@ export class Nako3Document {
     isDefaultPrivate: boolean
     declareSymbols: SymbolInfo[]
     validDeclareSymbols: boolean
+    runtimeEnv: string
 
     constructor (filename: string) {
         this.lex = new Nako3Tokenizer(filename)
@@ -31,10 +33,15 @@ export class Nako3Document {
         this.isDefaultPrivate = false
         this.declareSymbols = []
         this.validDeclareSymbols = false
+        this.runtimeEnv = 'wnako'
     }
 
     invalidate ():void {
         this.validDeclareSymbols = false
+    }
+
+    setProblemsLimit (limit: number) {
+        this.errorInfos.problemsLimit = limit
     }
 
     tokenize (text: string):void {
@@ -42,6 +49,7 @@ export class Nako3Document {
         this.lex.fixTokens()
         this.lex.applyFunction()
         this.isErrorClear = false
+        this.invalidate()
     }
 
     clearError ():void {
@@ -100,8 +108,9 @@ export class Nako3Document {
     getDeclareSymbols(): SymbolInfo[] {
         if (!this.validDeclareSymbols) {
             this.computeDeclareSymbols()
+            logger.info('process computeDeclareSymbols')
         } else {
-            console.log('skip computeDeclareSymbols')
+            logger.info('skip computeDeclareSymbols')
         }
         return this.declareSymbols
     }
@@ -133,7 +142,7 @@ export class Nako3Document {
             if (currentLine !== token.startLine ) {
                 canChigaeba = false
                 if (sameLineMode === 'もし') {
-                    this.errorInfos.addFromToken('ERROR', 'moshi must follow naraba same line', token)
+                    this.errorInfos.addFromToken('ERROR', 'mustThenFollowIf', {}, token)
                 }
                 if (sameLineMode === 'ならば' && hasBody) {
                     const statementPrev = semanticNestStack[semanticNestStack.length-1]
@@ -198,7 +207,7 @@ export class Nako3Document {
                 if (token.type === 'ここまで') {
                     if (!wasKokomadeError) {
                         if (this.isIndentSemantic) {
-                            this.errorInfos.addFromToken('ERROR', 'cannot use kokomade in indent semantic mode', token)
+                            this.errorInfos.addFromToken('ERROR', 'kokomadeUseInIndentMode', {}, token)
                             wasKokomadeError = true
                         }
                     }
@@ -239,7 +248,7 @@ export class Nako3Document {
                     } else if (currentNestStatement === '違えば') {
                     } else {
                         // console.log(`      kokomade cause invalid pair:${semanticNestLevel}:${currentNestStatement}`)
-                        this.errorInfos.addFromToken('ERROR', 'invalid token kokomade', token)
+                        this.errorInfos.addFromToken('ERROR', 'invalidTokenKokomade', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
                     const nestStatement = semanticNestStack.pop()
                     if (nestStatement) {
@@ -290,7 +299,7 @@ export class Nako3Document {
                         hasBody = false
                         // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                     } else {
-                        this.errorInfos.addFromToken('ERROR', `invalid token naraba:${semanticNestLevel}:${currentNestStatement}`, token)
+                        this.errorInfos.addFromToken('ERROR', 'invalidTokenNaraba', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
                 } else if (token.type === '違えば') {
                     if (currentNestStatement === 'ならば' || canChigaeba) {
@@ -310,13 +319,13 @@ export class Nako3Document {
                         hasBody = false
                         // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                     } else {
-                        this.errorInfos.addFromToken('ERROR', `invalid token chigaeba:${semanticNestLevel}:${currentNestStatement}`, token)
+                        this.errorInfos.addFromToken('ERROR', 'invalidTokenChigaeba', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
                 } else if (index+1 < tokenCount && token.type === 'エラー' && tokens[index+1].type === 'ならば') {
                     if (currentNestStatement === 'エラー監視') {
                         currentNestStatement = 'エラーならば'
                     } else {
-                        this.errorInfos.addFromToken('ERROR', `invalid token error-naraba:${semanticNestLevel}:${currentNestStatement}`, token)
+                        this.errorInfos.addFromToken('ERROR', 'invalidTokenErrorNaraba', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
                 } else if (token.type === 'エラー監視') {
                     semanticNestStack.push({type:currentNestStatement, tokenIndex:currentNestTokenIndex})
@@ -328,7 +337,7 @@ export class Nako3Document {
             }
             if (index+1 < tokenCount && token.type === 'NOT' && (token.value === '!' || token.value === '！') && tokens[index+1].type === 'インデント構文') {
                 // !インデント構文
-                console.log('indent semantic on')
+                logger.info('indent semantic on')
                 this.isIndentSemantic = true
                 skipToken = 1
             } else if (index+3 < tokenCount
@@ -337,23 +346,24 @@ export class Nako3Document {
                     && tokens[index+2].type === 'EQ'
                     && (tokens[index+3].type === 'STRING' || tokens[index+3].type === 'STRING_EX')) {
                 // !モジュール公開既定値は「非公開」/「公開」
-                console.log(`change default publishing:${tokens[index+3].value}`)
+                logger.info(`change default publishing:${tokens[index+3].value}`)
                 this.isDefaultPrivate = tokens[index+3].value === '非公開'
                 skipToken = 3
             } else if (token.type === 'def_func' && !(index>0 && tokens[index-1].type==='{' && index+1<tokenCount && tokens[index+1].type==='}')) {
-                if (token.indent.level > 0) {
-                    this.errorInfos.addFromToken('ERROR', 'declare function must global scopse', token)
+                if (scopeNestLevel > 0) {
+                    this.errorInfos.addFromToken('ERROR', 'declareFuncMustGlobal', {}, token)
                 }
                 if (this.isIndentSemantic) {
                     indentLevelStack.push({currentIndentLevel})
                     currentIndentLevel = token.indent.level
                     scopeNestLevel++
+                    logger.debug(`  decl funtion:(${token.startLine},${token.startCol})${currentIndentLevel}:${currentNestStatement}`)
                 } else {
                     semanticNestStack.push({type:currentNestStatement, tokenIndex:index})
                     currentNestStatement = '関数'
                     semanticNestLevel++
                     scopeNestLevel++
-                    // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
+                    logger.debug(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                 }
             } else if (token.type === 'には') {
                 const symbolInfo: SymbolInfo = {
@@ -409,7 +419,7 @@ export class Nako3Document {
                         } else if (tokens[index+i].type === ']') {
                             break
                         } else {
-                            this.errorInfos.addFromToken('ERROR', 'suntax error', token)
+                            this.errorInfos.addFromToken('ERROR', 'syntaxError', {}, token)
                             break
                         }
                         if (index+i < tokenCount) {
@@ -435,6 +445,16 @@ export class Nako3Document {
             if (currentLine !== token.endLine) {
                 startCol = -1
                 currentLine = token.endLine
+            }
+        }
+        if (semanticNestStack.length > 0) {
+            for (const statement of semanticNestStack) {
+                const token = tokens[statement.tokenIndex]
+                let type = token.type
+                if (type === 'def_func') {
+                    type = '関数'
+                }
+                this.errorInfos.addFromToken('ERROR', 'noCloseStatement', { type }, token)
             }
         }
         this.declareSymbols = symbols

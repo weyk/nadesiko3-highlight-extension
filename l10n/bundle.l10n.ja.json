@@ -1,0 +1,18 @@
+{
+    "noFuncParamParentisR": "ユーザ関数の宣言のパラメータの閉じカッコがありません({type})",
+    "unknownTokenInFuncParam": "ユーザ関数のパラメータの部分に不明な何かがあります({type})",
+    "invalidChar": "無効な文字があります(文字コード:{code})",
+    "unclosedBlockComment": "ブロックコメントが閉じられていません",
+    "stringInStringStartChar": "文字列の中に文字列を開始するための文字が含まれています({startTag})",
+    "unclosedPlaceHolder": "展開のある文字列に閉じられてない波カッコがあります",
+    "unclosedString": "閉じられてない文字列があります",
+    "mustThenFollowIf": "「もし」と同じ行に「ならば」「でなければ」が必要です",
+    "kokomadeUseInIndentMode": "インデント構文が有効の場合には「ここまで」は使用できません",
+    "invalidTokenKokomade": "無効な位置に「ここまで」があります。命令が対応していません:{nestLevel}:{statement}",
+    "invalidTokenNaraba": "無効な位置に「ならば」「でなければ」があります。命令が対応していません:{nestLevel}:{statement}",
+    "invalidTokenChigaeba": "無効な位置に「違えば」があります。命令が対応していません:{nestLevel}:{statement}",
+    "invalidTokenErrorNaraba": "無効な位置に「エラーならば」があります。命令が対応していません:{nestLevel}:{statement}",
+    "declareFuncMustGlobal": "ユーザ関数の宣言は他のユーザ関数や構文の内側に書くことは出来ません",
+    "syntaxError": "文法上の誤りです",
+    "noCloseStatement": "閉じられていない命令があります({type})"
+}
