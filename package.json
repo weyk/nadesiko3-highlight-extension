@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -42,6 +42,27 @@
     "license": "MIT",
     "l10n": "./l10n",
     "contributes": {
+        "commands": [
+            {
+                "command": "nadesiko3highlight.nadesiko3.exec",
+                "title": "%nadesiko3.exec%"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "nadesiko3highlight.nadesiko3.exec",
+                "key": "F8"
+             }
+        ],
+        "menus": {
+            "explorer/context": [
+                {
+                    "when": "resourceLangId == nadesiko3",
+                    "command": "nadesiko3highlight.nadesiko3.exec",
+                    "group": "Nadesiko3Group@1"
+                }
+            ]
+        },
         "configuration": {
             "type": "object",
             "title": "%configuration.title%",
@@ -55,17 +76,35 @@
                 "nadesiko3Highlight.runtimeMode": {
                     "scope": "resource",
                     "type": "string",
-                    "default": "wnako",
+                    "default": "wnako3",
                     "enum": [
                         "snako",
-                        "cnako",
-                        "wnako"
+                        "cnako3",
+                        "wnako3"
                     ],
                     "enumDescriptions": [
                         "%useRuntimeSnako.descriptions%",
                         "%useRuntimeCnako.descriptions%",
                         "%useRuntimeWnako.descriptions%"
                     ]
+                },
+                "nadesiko3Highlight.runtimeUseShebang": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%runtimeUseShebang.description%"
+                },
+                "nadesiko3Highlight.nadesiko3.folder": {
+                    "scope": "machine",
+                    "type":  "string",
+                    "default": "",
+                    "description": "%nadesiko3.folder.description%"
+                },
+                "nadesiko3Highlight.node.nodeBin": {
+                    "scope": "machine",
+                    "type": "string",
+                    "default": "",
+                    "description": "%node.nodeBin.description%"
                 },
                 "nadesiko3Highlight.trace": {
                     "scope": "window",

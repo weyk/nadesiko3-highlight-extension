@@ -1,5 +1,9 @@
 import commandjson from './nako3/command.json'
+import { ModuleLink } from './nako3documentext.mjs'
 import { logger } from './logger.mjs'
+import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import path from 'node:path'
+import fs from 'node:fs/promises'
 
 type CmdSectionEntry = [string, string, string, string, string]
 type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
@@ -17,8 +21,8 @@ export type CommandEntry = Map<string, CommandInfo>
 
 const runtimePlugins:{[runtime:string]: string[]} = {
     snako: ['plugin_system', 'plugin_math', 'plugin_promise', 'plugin_test', 'plugin_csv', 'plugin_snako'],
-    cnako: ['plugin_system', 'plugin_math', 'plugin_promise', 'plugin_test', 'plugin_csv', 'plugin_node'],
-    wnako: ['plugin_system', 'plugin_math', 'plugin_promise', 'plugin_test', 'plugin_csv', 'plugin_browser']
+    cnako3: ['plugin_system', 'plugin_math', 'plugin_promise', 'plugin_test', 'plugin_csv', 'plugin_node'],
+    wnako3: ['plugin_system', 'plugin_math', 'plugin_promise', 'plugin_test', 'plugin_csv', 'plugin_browser']
 }
 
 const commandSnakoJson = {
@@ -51,7 +55,7 @@ export class Nako3Command {
         logger.debug(`convert built-in plugin`)
         this.importCommandJson(commandjson as unknown as CmdJsonEntry)
         this.importCommandJson(commandSnakoJson as unknown as CmdJsonEntry)
-        for (const runtime of ['snako','cnako','wnako']) {
+        for (const runtime of ['snako','cnako3','wnako3']) {
             const plugins = runtimePlugins[runtime]
             const entry = new Map()
             for (const pluginName of plugins) {
@@ -104,7 +108,31 @@ export class Nako3Command {
         }
     }
 
-    get (plugin: string):CommandEntry|undefined {
+    async importFromFile (pluginName: string, link: ModuleLink, errorInfos: ErrorInfoManager) {
+        let fpath:string
+        if (pluginName.startsWith('http://') || pluginName.startsWith('https://')) {
+            // absolute uri
+            errorInfos.add('WARN','unsupportImportFromRemote', { plugin: pluginName }, 0,0,0,0)
+            return
+        } else if (path.isAbsolute(pluginName)) {
+            // absolute path
+            fpath = pluginName
+        } else {
+            fpath = path.resolve(link.filePath, pluginName)
+        }
+        try {
+            const text = await fs.readFile(fpath, 'utf-8')
+
+        } catch (ex) {
+            console.log('commands:cause exception by read file')
+        }
+    }
+
+    has (plugin: string): boolean {
+        return this.commands.has(plugin)
+    }
+
+    get (plugin: string): CommandEntry|undefined {
         return this.commands.get(plugin)
     }
 }

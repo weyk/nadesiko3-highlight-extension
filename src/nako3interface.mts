@@ -1,5 +1,6 @@
 import {
     languages,
+    workspace,
     DiagnosticCollection,
     DocumentHighlight,
     DocumentSymbol,
@@ -7,23 +8,30 @@ import {
     Position,
     SemanticTokens,
     SemanticTokensBuilder,
-    TextDocument
+    TextDocument,
+    Uri
 } from 'vscode'
+import { EventEmitter } from 'node:events'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { Nako3Command } from './nako3command.mjs'
+import { logger } from './logger.mjs'
+import type { RuntimeEnv } from './nako3type.mjs'
 
-export class Nako3Documents implements Disposable {
-    runtimeEnv: string
+export class Nako3Documents extends EventEmitter implements Disposable {
+    runtimeEnv: RuntimeEnv
+    useShebang: boolean
     problemsLimit: number
     docs: Map<string, Nako3DocumentExt>
     diagnosticsCollection: DiagnosticCollection
     commands: Nako3Command
 
     constructor () {
+        super()
         // console.log('nako3documnets constructed')
         this.docs = new Map()
         this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
-        this.runtimeEnv = "wnako"
+        this.runtimeEnv = 'wnako3'
+        this.useShebang = true
         this.problemsLimit = 100
         this.commands = new Nako3Command()
         this.commands.initialize()
@@ -35,10 +43,17 @@ export class Nako3Documents implements Disposable {
         }
     }
 
-    setRuntimeEnv (runtime: string) {
+    setRuntimeEnv (runtime: RuntimeEnv) {
         this.runtimeEnv = runtime
         for (const [ , doc] of this.docs) {
-            doc.setRuntimeEnv(runtime)
+            doc.setRuntimeEnvDefault(runtime)
+        }
+    }
+
+    setUseShebang (useShebang: boolean) {
+        this.useShebang = useShebang
+        for (const [ , doc] of this.docs) {
+            doc.setUseShebang(useShebang)
         }
     }
 
@@ -49,31 +64,72 @@ export class Nako3Documents implements Disposable {
         }
     }
 
-    open (document: TextDocument):void {
+    openFromDocument (document: TextDocument|Uri):void {
         // console.log('document open:enter')
-        const doc = new Nako3DocumentExt(document.fileName, document.uri)
-        this.docs.set(document.fileName, doc)
-        doc.setRuntimeEnv(this.runtimeEnv)
+        const fileName = this.getFileName(document)
+        const uri = this.getUri(document)
+        const doc = new Nako3DocumentExt(document)
+        this.docs.set(fileName, doc)
+        doc.setRuntimeEnvDefault(this.runtimeEnv)
+        doc.setUseShebang(this.useShebang)
         doc.nako3doc.lex.commands = this.commands
         doc.setProblemsLimit(this.problemsLimit)
+        doc.nako3doc.addListener('changeRuntimeEnv', e => {
+            logger.debug(`docs:onChangeRuntimeEnv`)
+            this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
+        })
         // console.log('document open:leave')
     }
 
-    close (document: TextDocument):void {
-        if (!this.docs.has(document.fileName)) {
-            console.log(`document close: no open(${document.fileName})`)
+    fireChangeRuntimeEnv (fileName: string, uri: Uri, runtimeEnv: RuntimeEnv) {
+        logger.debug(`docs:fireChangeRuntimeEnv(${fileName}:${runtimeEnv})`)
+        this.emit('changeRuntimeEnv', { fileName, uri, runtimeEnv: runtimeEnv })
+
+    }
+
+    closeAtDocument (document: TextDocument):void {
+        const fileName = this.getFileName(document)
+        if (!this.docs.has(fileName)) {
+            console.log(`document close: no open(${fileName})`)
         }
-        this.docs.delete(document.fileName)
+        this.docs.delete(fileName)
+        // console.log('document close:leave')
     }
 
-    get (document: TextDocument): Nako3DocumentExt|undefined {
-        return this.docs.get(document.fileName)
+    closeAtFile (uri: Uri):void {
+        const fileName = uri.fsPath
+        if (!this.docs.has(fileName)) {
+            console.log(`document close: no open(${fileName})`)
+        }
+        this.docs.delete(fileName)
     }
 
-    setFullText (document: TextDocument):void {
+    get (document: TextDocument|Uri): Nako3DocumentExt|undefined {
+        return this.docs.get(this.getFileName(document))
+    }
+
+    getFileName (doc: TextDocument|Uri): string {
+        return doc instanceof Uri ? doc.fsPath : doc.fileName
+    }
+
+    getUri (doc: TextDocument|Uri): Uri {
+        return doc instanceof Uri ? doc : doc.uri
+    }
+
+    async setFullText (document: TextDocument|Uri):Promise<void> {
         const doc = this.get(document)
         if (doc) {
-            doc.updateText(document.getText(), document.version)
+            if (document instanceof Uri) {
+                if (workspace) {
+                    workspace.fs.stat(document).then(l => {
+                        workspace.fs.readFile(document).then(value => {
+                            doc.updateText(value.toString(), l.mtime)
+                        })
+                    })
+                }
+            } else {
+                doc.updateText(document.getText(), document.version)
+            }
         } else {
             console.log(`setFullText: document not opend`)
         }
@@ -116,7 +172,7 @@ export class Nako3Documents implements Disposable {
         return doc.getHover(position)
     }
 
-    getDiagnostics (document?: TextDocument): DiagnosticCollection {
+    getDiagnostics (document?: TextDocument|Uri): DiagnosticCollection {
         this.diagnosticsCollection.clear()
         if (document) {
             const doc = this.get(document)

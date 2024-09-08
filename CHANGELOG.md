@@ -1,3 +1,7 @@
+## 0.0.8
+- Add auto detect runtimeEnv from shebang line.
+- Add launch cnako3/snako command. require shebang.
+
 ## 0.0.7
 - Add hover hint for built-in plugin instruction.
 - Add localize for ja.

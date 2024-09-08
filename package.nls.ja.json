@@ -1,9 +1,13 @@
 {
+    "nadesiko3.exec": "Node上でcnako3またはsnakoを用いて実行する",
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
+    "nadesiko3.folder.description": "なでしこ３をインストールしたフォルダー。ワークスペースのnode_modules/nadesiko3に無い場合に使用する",
     "useRuntimeSnako.descriptions": "snakoの標準プラグインを用いる",
     "useRuntimeCnako.descriptions": "cnakoの標準プラグインを用いる",
     "useRuntimeWnako.descriptions": "wnakoの標準プラグインを用いる",
+    "runtimeUseShebang.description": "Shebangがある場合は実行環境の判別に使用する",
+    "node.nodeBin.description": "cnako3/snakoを実行する際に用いるnodeの実行ファイル名",
     "trace.label.off": "無し",
     "trace.label.messages": "通常",
     "trace.label.verbose": "詳細",

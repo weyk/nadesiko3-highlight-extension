@@ -12,15 +12,35 @@ import {
     SemanticTokensBuilder,
     SemanticTokensLegend,
     SymbolKind,
+    TextDocument,
     Uri
 } from 'vscode'
+import { EventEmitter } from 'node:events'
 import { Nako3Token, COL_START } from './nako3lexer.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
-import { ErrorInfoManager, messages } from './nako3errorinfo.mjs'
+import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { getMessageWithArgs } from './nako3message.mjs'
 import { logger } from './logger.mjs'
+import type { RuntimeEnv } from './nako3type.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
 export const tokenModifiers = ['declaration', 'documentation', 'defaultLibrary', 'deprecated', 'readonly']
+
+export class ModuleLink {
+    uri: Uri
+    filePath: string
+    mainFilepath: string
+    imports: string[]
+    importBy: string[]
+
+    constructor (uri: Uri, mainUri: Uri) {
+        this.uri = uri
+        this.filePath = uri.fsPath
+        this.mainFilepath = mainUri?.fsPath || uri.fsPath
+        this.imports = []
+        this.importBy = []
+    }
+}
 
 type HighlightMap = {[k:string]: string | [string, string |string[]]}
 const hilightMapping: HighlightMap = {
@@ -45,7 +65,7 @@ const hilightMapping: HighlightMap = {
     ここから: 'keyword',
     ここまで: 'keyword',
     もし: 'keyword',
-    ならば: 'keyword',
+    ならば: 'keyword',                                                                                                                                                                                          
     違えば: 'keyword',
     とは: 'keyword',
     には: 'keyword',
@@ -105,7 +125,7 @@ const hilightMapping: HighlightMap = {
 
 export const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
-export class Nako3DocumentExt {
+export class Nako3DocumentExt extends EventEmitter {
     nako3doc: Nako3Document
     validTokens: boolean
     semanticTokens?: SemanticTokens
@@ -120,11 +140,23 @@ export class Nako3DocumentExt {
     isErrorClear: boolean
     errorInfos: ErrorInfoManager
     problemsLimit: number
-    runtimeEnv: string
+    runtimeEnvDefault: RuntimeEnv
+    useShebang: boolean
+    link: ModuleLink
+    isTextDocument: boolean
 
-    constructor (filename: string, uri: Uri) {
-        this.nako3doc = new Nako3Document(filename)
-        this.uri = uri
+    constructor (target: TextDocument|Uri) {
+        super()
+        if (target instanceof Uri) {
+            this.uri = target
+            this.isTextDocument = false
+            
+        } else {
+            this.uri = target.uri
+            this.isTextDocument = true            
+        }
+        this.link = new ModuleLink(this.uri, this.uri)
+        this.nako3doc = new Nako3Document(this.uri.fsPath, this.link)
         this.text = ''
         this.textVersion = null
         this.validTokens = false
@@ -137,7 +169,12 @@ export class Nako3DocumentExt {
         this.errorInfos = new ErrorInfoManager()
         this.isErrorClear = true
         this.problemsLimit = 100
-        this.runtimeEnv = 'wnako'
+        this.runtimeEnvDefault = 'wnako3'
+        this.useShebang = true
+    }
+
+    rename (newFilename: string):void {
+        this.nako3doc.filename = newFilename
     }
 
     invalidate ():void {
@@ -146,205 +183,36 @@ export class Nako3DocumentExt {
         this.validDiagnostics = false
     }
 
-    setRuntimeEnv (runtime: string) {
-        this.runtimeEnv = runtime
-        this.nako3doc.runtimeEnv = runtime
-        this.nako3doc.lex.runtimeEnv = runtime
+    clearError ():void {
+        if (!this.isErrorClear) {
+            this.errorInfos.clear()
+            this.isErrorClear = true
+        }
+    }
+
+    updateText (text: string, textVersion: number|null):void {
+        if (textVersion === null || textVersion !== this.textVersion) {
+            this.text = text
+            this.textVersion = textVersion
+            this.validTokens = false
+            this.invalidate()
+        }
+    }
+
+    setProblemsLimit (limit: number) {
+        this.problemsLimit = limit
+    }
+
+    setRuntimeEnvDefault (runtime: RuntimeEnv) {
+        this.runtimeEnvDefault = runtime
+        this.nako3doc.runtimeEnvDefault = runtime
+        this.nako3doc.lex.runtimeEnvDefault = runtime
     }
     
-    addDiagnosticsFromErrorInfos (errorInfos: ErrorInfoManager) {
-        for (const errorInfo of errorInfos.getAll()) {
-            const messageId = errorInfo.messageId
-            const startPos = new Position(errorInfo.startLine, errorInfo.startCol)
-            const endPos = new Position(errorInfo.endLine, errorInfo.endCol)
-            const range = new Range(startPos, endPos)
-            let message = l10n.t(messageId)
-            if (message === messageId) {
-                message = l10n.t(messages.get(messageId)!, errorInfo.args)
-            } else {
-                message = l10n.t(messageId, errorInfo.args)
-            }
-            let kind:DiagnosticSeverity
-            switch (errorInfo.type) {
-            case 'ERROR':
-                kind = DiagnosticSeverity.Error
-                break
-            case 'WARN':
-                kind = DiagnosticSeverity.Warning
-                break
-            case 'INFO':
-                kind = DiagnosticSeverity.Information
-                break
-            case 'HINT':
-                kind = DiagnosticSeverity.Hint
-                break
-            default:
-                kind = DiagnosticSeverity.Information
-            }
-            this.diagnostics.push(new Diagnostic(range, message, kind))
-        }
-    }
-
-    computeDiagnostics () {
-        this.tokenize()
-        this.diagnostics = []
-        let problemsRemain = this.problemsLimit
-
-        this.nako3doc.lex.setProblemsLimit(problemsRemain)
-        this.addDiagnosticsFromErrorInfos(this.nako3doc.lex.errorInfos)
-        problemsRemain -= this.nako3doc.lex.errorInfos.count
-
-        this.nako3doc.setProblemsLimit(problemsRemain)
-        this.addDiagnosticsFromErrorInfos(this.nako3doc.errorInfos)
-        problemsRemain -= this.nako3doc.errorInfos.count
-
-        this.setProblemsLimit(problemsRemain)
-        this.addDiagnosticsFromErrorInfos(this.errorInfos)
-
-        this.validDiagnostics = true
-    }
-
-    createDocumentSymbolFromToken (name: string|null, type: string, token:Nako3Token): DocumentSymbol {
-        let kind:SymbolKind
-        switch (type) {
-        case 'function':
-            kind = SymbolKind.Function
-            break
-        case 'variable':
-            kind = SymbolKind.Variable
-            break
-        case 'constant':
-            kind = SymbolKind.Constant
-            break
-        default:
-            console.log(`createDocumentSymbolFromToken: UnknownType${type}`)
-            kind = SymbolKind.Null
-        }
-        if (!name) {
-            name = '<anonymous function>'
-        }
-        const start = new Position(token.startLine, token.startCol)
-        const end = new Position(token.endLine, token.resEndCol)
-        const range = new Range(start, end)
-        const symbol = new DocumentSymbol(name, '', kind, range, range)
-        return symbol
-    }
-
-    computeDocumentSymbols():void {
-        this.tokenize()
-        this.documentSymbols = []
-        
-        const symbols: SymbolInfo[] = this.nako3doc.getDeclareSymbols()
-        let isToplevel = false
-        let nestLevel = 0
-        let containerSymbol: DocumentSymbol|null = null
-        const symbolStack: {level:number,symbol:DocumentSymbol|null}[] = []
-        let symbolLast:DocumentSymbol|null = null 
-        for (const symbolinfo of symbols) {
-            const nameTrimed = symbolinfo.name?.trim()
-            const nameNormalized = nameTrimed ? this.nako3doc.lex.trimOkurigana(nameTrimed) : null
-            let type:string
-            switch (symbolinfo.type) {
-            case '定数':
-                type = 'constant'
-                break
-            case '変数':
-                type = 'variable'
-                break
-            case '関数':
-                type = 'function'
-                break
-            default:
-                type = ''
-            }
-            const symbol = this.createDocumentSymbolFromToken(nameNormalized, type, symbolinfo.token)
-            if (symbolinfo.level > nestLevel) {
-                symbolStack.push({level:nestLevel, symbol:containerSymbol})
-                containerSymbol = symbolLast
-                nestLevel = symbolinfo.level
-            }
-            if (symbolinfo.level < nestLevel) {
-                while (symbolStack.length > 0 && symbolinfo.level < nestLevel) {
-                    const symbolPrev = symbolStack.pop()
-                    if (symbolPrev) {
-                        nestLevel = symbolPrev.level
-                        containerSymbol = symbolPrev.symbol
-                    }
-                }
-            }
-            if (containerSymbol) {
-                containerSymbol.children.push(symbol)
-            } else {
-                this.documentSymbols.push(symbol)
-            }
-            symbolLast = symbol
-        }
-        this.validDocumentSymbols = true
-    }
-
-    computeSemanticToken():void {
-        this.tokenize()
-        const tokensBuilder = new SemanticTokensBuilder()
-        for (const token of this.nako3doc.lex.tokens) {
-            const highlightClass = hilightMapping[token.type]
-            if (highlightClass) {
-                let tokenType:string
-                let tokenModifier:string[]
-                if (typeof highlightClass === 'string') {
-                    tokenType = highlightClass
-                    tokenModifier = []
-                } else {
-                    tokenType = highlightClass[0]
-                    if (typeof highlightClass[1] === 'string') {
-                        tokenModifier = [highlightClass[1]]
-                    } else {
-                        tokenModifier = highlightClass[1]
-                    }
-                }
-                // console.log(`${tokenType} range(${token.startLine}:${token.startCol}-${token.endLine}:${token.endCol})`)
-                let endCol = token.endCol
-                let len = token.len
-                if (token.type === 'WORD' || tokenType === 'string' || tokenType === 'number' || tokenType === 'function' || tokenType === 'variable') {
-                    endCol = token.resEndCol
-                }
-                // console.log(`${tokenType}[${tokenModifier}] range(${token.startLine}:${token.startCol}-${token.endLine}:${endCol})`)
-                const tokenTypeIndex = tokenTypes.indexOf(tokenType)
-                let ng = false
-                if (tokenTypeIndex === -1) {
-                    console.log(`type:${tokenType} no include lengend`)
-                    ng = true
-                }
-                let tokenModifierBits = 0
-                for (const modifier of tokenModifier) {
-                    const tokenModifierIndex = tokenModifiers.indexOf(modifier)
-                    if (tokenTypeIndex === -1) {
-                        console.log(`modifier:${modifier} no include lengend`)
-                        ng = true
-                        continue
-                    }
-                    tokenModifierBits |= 1 << tokenModifierIndex
-                }
-                if (!ng) {
-                    let col = token.startCol
-                    for (let i = token.startLine;i <= token.endLine;i++) {
-                        if (i === token.endLine) {
-                            len = endCol - col
-                        } else {
-                            len = this.nako3doc.lex.lengthLines[i] - col
-                        }
-                        // console.log(`push ${i}:${col}-${len} ${tokenTypeIndex}[${tokenModifierBits}]`)
-                        tokensBuilder.push(i, col, len, tokenTypeIndex, tokenModifierBits)
-                        col = COL_START
-                    }
-                }
-            }
-        }
-        this.semanticTokens = tokensBuilder.build()
-        this.validSemanticTokens = true
-    }
-
-    rename (newFilename: string):void {
-        this.nako3doc.filename = newFilename
+    setUseShebang (useShebang: boolean) {
+        this.useShebang = useShebang
+        this.nako3doc.useShebang = useShebang
+        this.nako3doc.lex.useShebang = useShebang
     }
 
     tokenize (): void {
@@ -357,25 +225,6 @@ export class Nako3DocumentExt {
             logger.info('process tokenize')
         } else {
             logger.info('skip tokenize')
-        }
-    }
-
-    setProblemsLimit (limit: number) {
-        this.problemsLimit = limit
-    }
-
-    clearError ():void {
-        if (!this.isErrorClear) {
-            this.errorInfos.clear()
-            this.isErrorClear = true
-        }
-    }
-    updateText (text: string, textVersion: number|null):void {
-        if (textVersion === null || textVersion !== this.textVersion) {
-            this.text = text
-            this.textVersion = textVersion
-            this.validTokens = false
-            this.invalidate()
         }
     }
 
@@ -473,5 +322,205 @@ export class Nako3DocumentExt {
             logger.log('skip computeDiagnostics')
         }
         return this.diagnostics
+    }
+
+    private addDiagnosticsFromErrorInfos (errorInfos: ErrorInfoManager) {
+        for (const errorInfo of errorInfos.getAll()) {
+            const messageId = errorInfo.messageId
+            const startPos = new Position(errorInfo.startLine, errorInfo.startCol)
+            const endPos = new Position(errorInfo.endLine, errorInfo.endCol)
+            const range = new Range(startPos, endPos)
+            const message = getMessageWithArgs(messageId, errorInfo.args)
+            let kind:DiagnosticSeverity
+            switch (errorInfo.type) {
+            case 'ERROR':
+                kind = DiagnosticSeverity.Error
+                break
+            case 'WARN':
+                kind = DiagnosticSeverity.Warning
+                break
+            case 'INFO':
+                kind = DiagnosticSeverity.Information
+                break
+            case 'HINT':
+                kind = DiagnosticSeverity.Hint
+                break
+            default:
+                kind = DiagnosticSeverity.Information
+            }
+            this.diagnostics.push(new Diagnostic(range, message, kind))
+        }
+    }
+
+    private computeDiagnostics () {
+        this.tokenize()
+        this.diagnostics = []
+        let problemsRemain = this.problemsLimit
+
+        this.nako3doc.lex.setProblemsLimit(problemsRemain)
+        this.addDiagnosticsFromErrorInfos(this.nako3doc.lex.errorInfos)
+        problemsRemain -= this.nako3doc.lex.errorInfos.count
+
+        this.nako3doc.setProblemsLimit(problemsRemain)
+        this.addDiagnosticsFromErrorInfos(this.nako3doc.errorInfos)
+        problemsRemain -= this.nako3doc.errorInfos.count
+
+        this.setProblemsLimit(problemsRemain)
+        this.addDiagnosticsFromErrorInfos(this.errorInfos)
+
+        this.validDiagnostics = true
+    }
+
+    private createDocumentSymbolFromToken (name: string|null, type: string, token:Nako3Token): DocumentSymbol {
+        let kind:SymbolKind
+        switch (type) {
+        case 'function':
+            kind = SymbolKind.Function
+            break
+        case 'variable':
+            kind = SymbolKind.Variable
+            break
+        case 'constant':
+            kind = SymbolKind.Constant
+            break
+        default:
+            console.log(`createDocumentSymbolFromToken: UnknownType${type}`)
+            kind = SymbolKind.Null
+        }
+        if (!name) {
+            name = '<anonymous function>'
+        }
+        const start = new Position(token.startLine, token.startCol)
+        const end = new Position(token.endLine, token.resEndCol)
+        const range = new Range(start, end)
+        const symbol = new DocumentSymbol(name, '', kind, range, range)
+        return symbol
+    }
+
+    private computeDocumentSymbols():void {
+        this.tokenize()
+        this.documentSymbols = []
+        
+        const symbols: SymbolInfo[] = this.nako3doc.getDeclareSymbols()
+        let isToplevel = false
+        let nestLevel = 0
+        let containerSymbol: DocumentSymbol|null = null
+        const symbolStack: {level:number,symbol:DocumentSymbol|null}[] = []
+        let symbolLast:DocumentSymbol|null = null 
+        for (const symbolinfo of symbols) {
+            const nameTrimed = symbolinfo.name?.trim()
+            const nameNormalized = nameTrimed ? this.nako3doc.lex.trimOkurigana(nameTrimed) : null
+            let type:string
+            switch (symbolinfo.type) {
+            case '定数':
+                type = 'constant'
+                break
+            case '変数':
+                type = 'variable'
+                break
+            case '関数':
+                type = 'function'
+                break
+            default:
+                type = ''
+            }
+            const symbol = this.createDocumentSymbolFromToken(nameNormalized, type, symbolinfo.token)
+            if (symbolinfo.level > nestLevel) {
+                symbolStack.push({level:nestLevel, symbol:containerSymbol})
+                containerSymbol = symbolLast
+                nestLevel = symbolinfo.level
+            }
+            if (symbolinfo.level < nestLevel) {
+                while (symbolStack.length > 0 && symbolinfo.level < nestLevel) {
+                    const symbolPrev = symbolStack.pop()
+                    if (symbolPrev) {
+                        nestLevel = symbolPrev.level
+                        containerSymbol = symbolPrev.symbol
+                    }
+                }
+            }
+            if (containerSymbol) {
+                containerSymbol.children.push(symbol)
+            } else {
+                this.documentSymbols.push(symbol)
+            }
+            symbolLast = symbol
+        }
+        this.validDocumentSymbols = true
+    }
+
+    private computeSemanticToken():void {
+        this.tokenize()
+        const logicTokens = this.nako3doc.lex.tokens
+        const commentTokens = this.nako3doc.lex.commentTokens
+        const tokensBuilder = new SemanticTokensBuilder()
+        let logicIndex = 0
+        let commentIndex = 0
+        while (logicIndex < logicTokens.length || commentIndex < commentTokens.length) {
+            let token: Nako3Token
+            if (commentIndex === commentTokens.length ||
+                (logicTokens[logicIndex].startLine < commentTokens[commentIndex].startLine) ||
+                (logicTokens[logicIndex].startLine === commentTokens[commentIndex].startLine && logicTokens[logicIndex].startCol < commentTokens[commentIndex].startCol)) {
+                token = logicTokens[logicIndex]
+                logicIndex++
+            } else {
+                token = commentTokens[commentIndex]
+                commentIndex++
+            }
+            const highlightClass = hilightMapping[token.type]
+            if (highlightClass) {
+                let tokenType:string
+                let tokenModifier:string[]
+                if (typeof highlightClass === 'string') {
+                    tokenType = highlightClass
+                    tokenModifier = []
+                } else {
+                    tokenType = highlightClass[0]
+                    if (typeof highlightClass[1] === 'string') {
+                        tokenModifier = [highlightClass[1]]
+                    } else {
+                        tokenModifier = highlightClass[1]
+                    }
+                }
+                // console.log(`${tokenType} range(${token.startLine}:${token.startCol}-${token.endLine}:${token.endCol})`)
+                let endCol = token.endCol
+                let len = token.len
+                if (token.type === 'WORD' || tokenType === 'string' || tokenType === 'number' || tokenType === 'function' || tokenType === 'variable') {
+                    endCol = token.resEndCol
+                }
+                // console.log(`${tokenType}[${tokenModifier}] range(${token.startLine}:${token.startCol}-${token.endLine}:${endCol})`)
+                const tokenTypeIndex = tokenTypes.indexOf(tokenType)
+                let ng = false
+                if (tokenTypeIndex === -1) {
+                    console.log(`type:${tokenType} no include lengend`)
+                    ng = true
+                }
+                let tokenModifierBits = 0
+                for (const modifier of tokenModifier) {
+                    const tokenModifierIndex = tokenModifiers.indexOf(modifier)
+                    if (tokenTypeIndex === -1) {
+                        console.log(`modifier:${modifier} no include lengend`)
+                        ng = true
+                        continue
+                    }
+                    tokenModifierBits |= 1 << tokenModifierIndex
+                }
+                if (!ng) {
+                    let col = token.startCol
+                    for (let i = token.startLine;i <= token.endLine;i++) {
+                        if (i === token.endLine) {
+                            len = endCol - col
+                        } else {
+                            len = this.nako3doc.lex.lengthLines[i] - col
+                        }
+                        // console.log(`push ${i}:${col}-${len} ${tokenTypeIndex}[${tokenModifierBits}]`)
+                        tokensBuilder.push(i, col, len, tokenTypeIndex, tokenModifierBits)
+                        col = COL_START
+                    }
+                }
+            }
+        }
+        this.semanticTokens = tokensBuilder.build()
+        this.validSemanticTokens = true
     }
 }

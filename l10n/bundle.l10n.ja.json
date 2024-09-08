@@ -14,5 +14,17 @@
     "invalidTokenErrorNaraba": "無効な位置に「エラーならば」があります。命令が対応していません:{nestLevel}:{statement}",
     "declareFuncMustGlobal": "ユーザ関数の宣言は他のユーザ関数や構文の内側に書くことは出来ません",
     "syntaxError": "文法上の誤りです",
-    "noCloseStatement": "閉じられていない命令があります({type})"
+    "noCloseStatement": "閉じられていない命令があります({type})",
+    "invalidTokenInPreprocess": "！命令の行に不明な何かがあります({type}:{value})",
+    "invalidTokenInPreprocessExpected": "！命令の行に不明な何かがあります(想定:{expected} 実際:{type}:{value})",
+    "cannotUseTemplateString": "ここではテンプレート文字列を使用することは出来ません。通常の文字列を使用してください",
+    "noPluginInfo": "プラグインに含まれる命令に関する情報がありません(プラグイン:{plugin})",
+    "noImportNako3": "Nako3ファイルの取り込みを含む解析には対応していません(ファイル:{file})",
+    "unknownImport": "扱いの不明なファイル({file})の取り込みがあります。Nadesiko3 highlightはこの取り込みを無視します",
+    "noSupprot3rdPlugin": "サードパーティ製プラグインの命令に情報は現時点では未サポートです(プラグイン:{plugin})",
+    "documentIsDirty": "未保存の変更があります。保存後に再び試してみてください",
+    "unknownRuntime": "実行環境(snako/cnako3/wnako3)が判別できません。先頭行にShebangを追記してください",
+    "unsupportRuntimeOnLaunch": "wnako3の実行は現在未サポートです",
+    "unknwonNadesiko3home": "なでしこ３のインストールディレクトリが不明です。設定からnadesiko3 folderの設定を行ってください",
+    "unknwonCWD": "作業ディレクトリが決定できません。先にファイルを保存してディレクトリを決定してください"
 }
