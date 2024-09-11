@@ -49,7 +49,7 @@ export class Nako3Document extends EventEmitter {
         this.declareSymbols = []
         this.validDeclareSymbols = false
         this.runtimeEnv = ''
-        this.runtimeEnvDefault = 'wnako3'
+        this.runtimeEnvDefault = 'wnako'
         this.useShebang = true
     }
 
@@ -76,6 +76,15 @@ export class Nako3Document extends EventEmitter {
     tokenize (text: string):void {
         this.lex.tokenize(text)
         this.lex.fixTokens()
+        if (this.lex.runtimeEnv === '') {
+            const runtimes = this.getRuntimezEnvFromPlugin()
+            if (runtimes.length > 0) {
+                this.lex.runtimeEnv = runtimes[0] as RuntimeEnv
+            }
+        }
+        if (this.lex.runtimeEnv === '') {
+            this.lex.runtimeEnv = this.runtimeEnvDefault
+        }
         this.setRuntimeEnv(this.lex.runtimeEnv)
         this.updateImportedPlugin()
         this.lex.applyFunction()
@@ -90,7 +99,76 @@ export class Nako3Document extends EventEmitter {
         }
     }
 
-    updateImportedPlugin():void {
+    getRuntimezEnvFromPlugin (): RuntimeEnv[] {
+        let runtimesEnv: RuntimeEnv[] = []
+        if (!this.lex.commands) {
+            return []
+        }
+        let runtimeWork: string = ''
+        for (const importInfo of this.lex.imports) {
+            const imp = importInfo.value
+            if (/\.nako3?$/.test(imp)) {
+                continue
+            }
+            const r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
+            if (r && r.length > 1) {
+                const plugin = r[1]
+                if (this.lex.commands.has(plugin)) {
+                    const runtimes = this.lex.commands.getRuntimesFromPlugin(plugin)
+                    if (runtimes) {
+                        if (runtimeWork === '') {
+                            runtimeWork = runtimes
+                        } else if (runtimeWork === runtimes) {
+                            // nop
+                        } else if (runtimeWork.indexOf(',') >= 0) {
+                            if (runtimes.indexOf(',') >= 0) {
+                                const r0 = runtimeWork.split(',')
+                                const r1 = runtimes.split(',')
+                                const r2:string[] = []
+                                for (const r of r1) {
+                                    if (r0.includes(r)) {
+                                        r2.push(r)
+                                    }
+                                }
+                                if (r2.length > 0) {
+                                    runtimeWork = r2.join(',')
+                                } else {
+                                    runtimeWork = 'invalid'
+                                }
+                            } else {
+                                if (runtimeWork.split(',').includes(runtimes)) {
+                                    runtimeWork = runtimes
+                                } else {
+                                    runtimeWork = 'invalid'
+                                }
+                            }
+                        } else {
+                            if (runtimes.indexOf(',') >= 0) {
+                                if (runtimes.split(',').includes(runtimeWork)) {
+                                    // nop
+                                } else {
+                                    runtimeWork = 'invalid'
+                                }
+                            } else {
+                                runtimeWork = 'invalid'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (runtimeWork === '') {
+            runtimesEnv = []
+        } else if (runtimeWork === 'invalid') {
+            this.errorInfos.add('WARN', 'conflictRuntimeEnv', { }, 0, 0, 0, 0)
+            runtimesEnv = []
+        } else {
+            runtimesEnv = runtimeWork.split(',') as RuntimeEnv[]
+        }
+        return runtimesEnv
+    }
+
+    updateImportedPlugin ():void {
         this.lex.pluginNames.length = 0
         this.link.imports = []
         for (const importInfo of this.lex.imports) {
@@ -108,12 +186,10 @@ export class Nako3Document extends EventEmitter {
                 this.lex.pluginNames.push(plugin)
                 if (this.lex.commands) {
                     if (!this.lex.commands.has(plugin)) {
-                        this.errorInfos.add('WARN', 'noSupprot3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                        if (this.lex.commands.has(plugin)) {
-                            this.lex.commands.importFromFile(imp, this.link, this.errorInfos)
-                            if (!this.lex.commands.has(plugin)) {
-                                this.errorInfos.add('WARN', 'noPluginInfo', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                            }
+                        this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                        this.lex.commands.importFromFile(imp, this.link, this.errorInfos)
+                        if (!this.lex.commands.has(plugin)) {
+                            this.errorInfos.add('WARN', 'noPluginInfo', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
                         }
                     }
                 }

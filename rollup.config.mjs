@@ -10,6 +10,7 @@ export default {
     'node:events',
     'node:fs/promises',
     'node:path',
+    'node:process',
     'vscode',
     './nako3/command.json'
   ]

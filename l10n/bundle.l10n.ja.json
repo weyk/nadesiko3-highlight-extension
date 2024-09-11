@@ -21,10 +21,12 @@
     "noPluginInfo": "プラグインに含まれる命令に関する情報がありません(プラグイン:{plugin})",
     "noImportNako3": "Nako3ファイルの取り込みを含む解析には対応していません(ファイル:{file})",
     "unknownImport": "扱いの不明なファイル({file})の取り込みがあります。Nadesiko3 highlightはこの取り込みを無視します",
-    "noSupprot3rdPlugin": "サードパーティ製プラグインの命令に情報は現時点では未サポートです(プラグイン:{plugin})",
+    "noSupport3rdPlugin": "サードパーティ製プラグインの命令に情報は現時点では未サポートです(プラグイン:{plugin})",
     "documentIsDirty": "未保存の変更があります。保存後に再び試してみてください",
     "unknownRuntime": "実行環境(snako/cnako3/wnako3)が判別できません。先頭行にShebangを追記してください",
     "unsupportRuntimeOnLaunch": "wnako3の実行は現在未サポートです",
     "unknwonNadesiko3home": "なでしこ３のインストールディレクトリが不明です。設定からnadesiko3 folderの設定を行ってください",
-    "unknwonCWD": "作業ディレクトリが決定できません。先にファイルを保存してディレクトリを決定してください"
+    "unknwonCWD": "作業ディレクトリが決定できません。先にファイルを保存してディレクトリを決定してください",
+    "cannnotDeleteFile": "一時ファイルの削除に失敗しました({error}:{file})",
+    "conflictRuntimeEnv": "取り込んでいるpluginどうしの実行環境に矛盾があります"
 }

@@ -144,6 +144,7 @@ export class Nako3DocumentExt extends EventEmitter {
     useShebang: boolean
     link: ModuleLink
     isTextDocument: boolean
+    isDirty: boolean
 
     constructor (target: TextDocument|Uri) {
         super()
@@ -169,8 +170,9 @@ export class Nako3DocumentExt extends EventEmitter {
         this.errorInfos = new ErrorInfoManager()
         this.isErrorClear = true
         this.problemsLimit = 100
-        this.runtimeEnvDefault = 'wnako3'
+        this.runtimeEnvDefault = 'wnako'
         this.useShebang = true
+        this.isDirty = false
     }
 
     rename (newFilename: string):void {

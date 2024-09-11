@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -76,11 +76,11 @@
                 "nadesiko3Highlight.runtimeMode": {
                     "scope": "resource",
                     "type": "string",
-                    "default": "wnako3",
+                    "default": "wnako",
                     "enum": [
                         "snako",
-                        "cnako3",
-                        "wnako3"
+                        "cnako",
+                        "wnako"
                     ],
                     "enumDescriptions": [
                         "%useRuntimeSnako.descriptions%",

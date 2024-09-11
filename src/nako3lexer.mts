@@ -232,7 +232,7 @@ export class Nako3Tokenizer {
         this.commands = null
         this.pluginNames = []
         this.runtimeEnv = ''
-        this.runtimeEnvDefault = 'wnako3'
+        this.runtimeEnvDefault = 'wnako'
         this.useShebang = true
         this.isIndentSemantic = false
         this.isDefaultPrivate = false
@@ -841,7 +841,7 @@ export class Nako3Tokenizer {
         this.commentTokens = []
         this.isIndentSemantic = false
         this.isDefaultPrivate = false
-        this.runtimeEnv = this.runtimeEnvDefault
+        this.runtimeEnv = ''
         this.imports = []
         let token:Nako3Token
         let rawToken:Nako3Token|null = null
@@ -1004,7 +1004,7 @@ export class Nako3Tokenizer {
                             if (token.text.includes('snako')) {
                                 this.runtimeEnv = 'snako'
                             } else if (token.text.includes('cnako')) {
-                                this.runtimeEnv = 'cnako3'
+                                this.runtimeEnv = 'cnako'
                             }
                         }
                     }

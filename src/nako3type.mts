@@ -1,1 +1,1 @@
-export type RuntimeEnv = 'wnako3'|'cnako3'|'snako'|''
+export type RuntimeEnv = 'wnako'|'cnako'|'snako'|''

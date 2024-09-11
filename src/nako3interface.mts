@@ -30,7 +30,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         // console.log('nako3documnets constructed')
         this.docs = new Map()
         this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
-        this.runtimeEnv = 'wnako3'
+        this.runtimeEnv = 'wnako'
         this.useShebang = true
         this.problemsLimit = 100
         this.commands = new Nako3Command()
@@ -65,20 +65,41 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     openFromDocument (document: TextDocument|Uri):void {
-        // console.log('document open:enter')
         const fileName = this.getFileName(document)
         const uri = this.getUri(document)
-        const doc = new Nako3DocumentExt(document)
-        this.docs.set(fileName, doc)
-        doc.setRuntimeEnvDefault(this.runtimeEnv)
-        doc.setUseShebang(this.useShebang)
-        doc.nako3doc.lex.commands = this.commands
-        doc.setProblemsLimit(this.problemsLimit)
-        doc.nako3doc.addListener('changeRuntimeEnv', e => {
-            logger.debug(`docs:onChangeRuntimeEnv`)
-            this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
-        })
-        // console.log('document open:leave')
+        if (!this.has(document)) {
+            const doc = new Nako3DocumentExt(document)
+            this.docs.set(fileName, doc)
+            doc.setRuntimeEnvDefault(this.runtimeEnv)
+            doc.setUseShebang(this.useShebang)
+            doc.nako3doc.lex.commands = this.commands
+            doc.setProblemsLimit(this.problemsLimit)
+            doc.nako3doc.addListener('changeRuntimeEnv', e => {
+                logger.debug(`docs:onChangeRuntimeEnv`)
+                this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
+            })
+        } else {
+            const doc = this.get(document)!
+            if (!doc.isTextDocument) {
+                doc.isTextDocument = true
+            }
+        }
+    }
+
+    openFromFile (uri: Uri):void {
+        const fileName = this.getFileName(uri)
+        if (!this.has(uri)) {
+            const doc = new Nako3DocumentExt(uri)
+            this.docs.set(fileName, doc)
+            doc.setRuntimeEnvDefault(this.runtimeEnv)
+            doc.setUseShebang(this.useShebang)
+            doc.nako3doc.lex.commands = this.commands
+            doc.setProblemsLimit(this.problemsLimit)
+            doc.nako3doc.addListener('changeRuntimeEnv', e => {
+                logger.debug(`docs:onChangeRuntimeEnv`)
+                this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
+            })
+        }
     }
 
     fireChangeRuntimeEnv (fileName: string, uri: Uri, runtimeEnv: RuntimeEnv) {
@@ -88,11 +109,15 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     closeAtDocument (document: TextDocument):void {
-        const fileName = this.getFileName(document)
+        const fileName = document.fileName
         if (!this.docs.has(fileName)) {
             console.log(`document close: no open(${fileName})`)
         }
-        this.docs.delete(fileName)
+        const doc = this.get(document)
+        if (doc && doc.isTextDocument) {
+            doc.isTextDocument = false
+        }
+        // this.docs.delete(fileName)
         // console.log('document close:leave')
     }
 
@@ -101,7 +126,11 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         if (!this.docs.has(fileName)) {
             console.log(`document close: no open(${fileName})`)
         }
-        this.docs.delete(fileName)
+        // this.docs.delete(fileName)
+    }
+
+    has (document: TextDocument|Uri): boolean {
+        return this.docs.has(this.getFileName(document))
     }
 
     get (document: TextDocument|Uri): Nako3DocumentExt|undefined {

@@ -1,11 +1,11 @@
 import * as vscode from 'vscode'
-import path from 'node:path'
-import fs from 'node:fs/promises'
 
 import { legend, Nako3DocumentExt } from './nako3documentext.mjs'
 import { Nako3Documents } from './nako3interface.mjs'
 import { logger } from './logger.mjs'
+import { nadesiko3, TerminalExt } from './nako3nadesiko3.mjs'
 import { showMessage } from './nako3message.mjs'
+
 import type { RuntimeEnv } from './nako3type.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
@@ -64,7 +64,7 @@ async function getRimtimeEnvFromFile (uri: vscode.Uri): Promise<RuntimeEnv> {
             const topLine = r[0]
             if (topLine.startsWith('#!')) {
                 if (topLine.indexOf('cnako3') >= 0) {
-                    runtime = 'cnako3'
+                    runtime = 'cnako'
                 } else if (topLine.indexOf('snako') >= 0) {
                     runtime = 'snako'
                 }
@@ -77,100 +77,60 @@ async function getRimtimeEnvFromFile (uri: vscode.Uri): Promise<RuntimeEnv> {
     return runtime
 }
 
-async function isNadesiko3folder (folderpath: string|null): Promise<boolean> {
-    if (folderpath === null || folderpath === undefined || folderpath === '') {
-        return false
-    }
-    const cnako = path.join(folderpath, 'bin', 'cnako3')
-    try {
-        let f = await fs.lstat(cnako)
-        if (!f.isFile) {
-            return false
-        }
-    } catch (ex) {
-        return false
-    }
-    const cnakomjs = path.join(folderpath, 'src', 'cnako3.mjs')
-    try {
-        let f = await fs.lstat(cnako)
-        if (!f.isFile) {
-            return false
-        }
-    } catch (ex) {
-        return false
-    }
-    return true
-}
 
 async function nako3commandExec (uri:vscode.Uri) {
     logger.debug(`command:nadesiko3.exec`)
-    const startTime = new Date()
     let doc:Nako3DocumentExt|undefined
-    let runtimeEnv: RuntimeEnv = ''
-    let editor = vscode.window.activeTextEditor
-    if (!editor || (uri && uri.fsPath !== editor.document.uri.fsPath)) {
-        runtimeEnv = await getRimtimeEnvFromFile(uri)
+    const editor = vscode.window.activeTextEditor
+    if (uri === undefined && editor) {
+        uri = editor.document.uri
+    }
+    let document = vscode.workspace.textDocuments.find(f => f.fileName === uri.fsPath)
+    if (document && nako3docs.has(document)) {
+        logger.log(`command:nadesiko3.exec:has document`)
+        // execute from editor's text
+        doc = nako3docs.get(document)
+        if (doc) {
+            const runtimeEnv = doc.nako3doc.runtimeEnv
+            if (runtimeEnv === '') {
+                showMessage('WARN', 'unknownRuntime', {})
+                return
+            }
+            if (runtimeEnv === 'wnako') {
+                showMessage('WARN', 'unsupportRuntimeOnLaunch', {})
+                return
+            }
+            if (doc.isDirty) {
+                logger.log(`command:nadesiko3.exec:is dirty`)
+                const text = document.getText()
+                await nadesiko3.execForText(text, document.uri, runtimeEnv)
+                // showMessage('WARN', 'documnetIsDirty', {})
+                // return
+            } else {
+                await nadesiko3.execForFile(uri, runtimeEnv)
+           }
+        }
     } else {
-        if (editor.document.isDirty) {
-            showMessage('WARN', 'documnetIsDirty', {})
+        // execute from explorer file    
+        logger.log(`command:nadesiko3.exec:hasn't document`)
+        const runtimeEnv = await getRimtimeEnvFromFile(uri)
+        if (runtimeEnv === '') {
+            showMessage('WARN', 'unknownRuntime', {})
             return
         }
-        doc = nako3docs.get(editor.document)
-    }
-    if (doc && doc.nako3doc.runtimeEnv !== '') {
-        runtimeEnv = doc.nako3doc.runtimeEnv
-    }
-    if (runtimeEnv === '') {
-        showMessage('WARN', 'unknwonRuntime', {})
-        return
-    }
-    if (runtimeEnv === 'wnako3') {
-        showMessage('WARN', 'unsupportRuntimeOnLaunch', {})
-        return
-    }
-    const configNode = vscode.workspace.getConfiguration('nadesiko3Highlight.node')
-    const configNako3 = vscode.workspace.getConfiguration('nadesiko3Highlight.nadesiko3')
-    let nako3folder:string = ''
-    const wsfolder = vscode.workspace.getWorkspaceFolder(uri)
-    if (wsfolder) {
-        nako3folder = path.resolve(wsfolder.uri.fsPath, path.join('node_modules', 'nadesiko3'))
-        if (!await isNadesiko3folder(nako3folder)) {
-            nako3folder = ''
+        if (runtimeEnv === 'wnako') {
+            showMessage('WARN', 'unsupportRuntimeOnLaunch', {})
+            return
         }
+        await nadesiko3.execForFile(uri, runtimeEnv)
     }
-    if (nako3folder === '') {
-        nako3folder = configNako3.folder
-        if (!await isNadesiko3folder(nako3folder)) {
-            nako3folder = ''
-        }
-    }
-    if (nako3folder === '') {
-        showMessage('WARN', 'unknwonNadesiko3home', {})
-        return
-    }
-    logger.debug(`command:nadesiko3.exec:nako3folder=${nako3folder}`)
-    const fileName = uri.fsPath
-    const dirName = path.dirname(fileName)
-    let nodeBin = configNode.nodeBin
-    if (nodeBin === null || nodeBin === undefined || nodeBin === '') {
-        nodeBin = 'node'
-    } 
-    logger.debug(`command:nadesiko3.exec:nodeBin=${nodeBin}`)
-    const cnako3 = path.resolve(nako3folder, path.join('src', 'cnako3.mjs'))
-    const snako = path.resolve(nako3folder, path.join('core', 'command', 'snako.mjs'))
-    const nako3exec = runtimeEnv === 'snako' ? snako : cnako3
-    if (!dirName || dirName === '' || dirName === '.') {
-        showMessage('WARN', 'unknwonCWD', {})
-      return
-    }
-    const terminal = vscode.window.createTerminal(`nadesiko3 (${startTime.toLocaleTimeString()})`)
-    terminal.show()
-    terminal.sendText(`cd "${dirName}"`)
-    terminal.sendText(`${nodeBin} "${nako3exec}" "${path.basename(fileName)}"`)
 }
 
-const disposableSubscriptions : vscode.Disposable[] = []
-export function activate(context: vscode.ExtensionContext):void {
+async function nako3TerminalClose(e: vscode.Terminal) {
+    await nadesiko3.terminalClose(e)
+}
+
+function configurationInitialize() {
     const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
     const traceLevel = conf.get('trace')
     logger.info(`activate :workspace.trace:${traceLevel}`)
@@ -189,26 +149,24 @@ export function activate(context: vscode.ExtensionContext):void {
         }
         logger.setLevel(level)
     }
-    logger.info(`workspace is ${vscode.workspace.name}`)
-
     const limit = conf.get('maxNumberOfProblems')
     if (typeof limit === 'number') {
         nako3docs.setProblemsLimit(limit)
     }
     let runtime = conf.get('runtimeMode')
     if (typeof runtime === 'string') {
-        if (runtime === 'wnako') {
-            runtime = 'wnako3'
-        } else if (runtime === 'cnako') {
-            runtime = 'cnako3'
+        if (runtime === 'wnako3') {
+            runtime = 'wnako'
+        } else if (runtime === 'cnako3') {
+            runtime = 'cnako'
         }
-        if (runtime === 'wnako3' || runtime === 'cnako3' || runtime === 'snako' || runtime === '') {
+        if (runtime === 'wnako' || runtime === 'cnako' || runtime === 'snako' || runtime === '') {
             nako3docs.setRuntimeEnv(runtime)
         } else {
-            nako3docs.setRuntimeEnv('wnako3')
+            nako3docs.setRuntimeEnv('wnako')
         }
     } else {
-        nako3docs.setRuntimeEnv('wnako3')
+        nako3docs.setRuntimeEnv('wnako')
     }
     const useShebang = conf.get('runtimeUseShebang')
     if (typeof useShebang === 'boolean') {
@@ -216,9 +174,23 @@ export function activate(context: vscode.ExtensionContext):void {
     } else {
         nako3docs.setUseShebang(true)
     }
+    const nadesiko3folder = conf.get('nadesiko3.folder')
+    if (typeof nadesiko3folder === 'string') {
+        nadesiko3.setNadesiko3Folder(nadesiko3folder)
+    } else {
+        nadesiko3.setNadesiko3Folder('')
+    }
+}
+
+export function activate(context: vscode.ExtensionContext):void {
+    configurationInitialize()
+    logger.info(`workspace is ${vscode.workspace.name}`)
+
+    nadesiko3.setWorkspaceFolders(vscode.workspace.workspaceFolders)
+
 	// create a new status bar item that we can now manage
 	nako3RuntimeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 40)
-	disposableSubscriptions.push(nako3RuntimeStatusBarItem)
+	context.subscriptions.push(nako3RuntimeStatusBarItem)
 
     nako3docs.addListener('changeRuntimeEnv', e => {
         logger.debug(`docs:onChangeRuntimeEnv`)
@@ -242,32 +214,54 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(NAKO3_MODE, new Nako3DocumentSymbolProvider()))
     context.subscriptions.push(vscode.languages.registerHoverProvider(NAKO3_MODE, new Nako3HoverProvider()))
 
-    disposableSubscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpen  :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
             nako3docs.openFromDocument(e)
         }
     }))
-    disposableSubscriptions.push(vscode.workspace.onDidCloseTextDocument(e => {
+    context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(e => {
         // console.log(`onDidClose :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
             nako3docs.closeAtDocument(e)
         }
     }))
-    disposableSubscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
         logger.log(`onDidChange:${e.document.languageId}:${e.document.fileName}`)
         if (e.document.languageId === 'nadesiko3') {
+            const doc = nako3docs.get(e.document)
+            if (doc) {
+                doc.isDirty = true
+            }
         }
     }))
-    disposableSubscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(e => {
+        logger.log(`onDidChange:${e.languageId}:${e.fileName}`)
+        if (e.languageId === 'nadesiko3') {
+            const doc = nako3docs.get(e)
+            if (doc) {
+                doc.isDirty = false
+            }
+        }
+    }))
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders( e => {
+        if (e.removed.length > 0) {
+            nadesiko3.removeWorkspaceFolders(e.removed)
+        }
+        if (e.added.length > 0) {
+            nadesiko3.addWorkspaceFolders(e.added)
+        }
+    }))
+    context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
         logger.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
         logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
         //console.log(e)
 
     }))
     context.subscriptions.push(vscode.commands.registerCommand('nadesiko3highlight.nadesiko3.exec', nako3commandExec))
+    context.subscriptions.push(vscode.window.onDidCloseTerminal(nako3TerminalClose))
 
-    disposableSubscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('nadesiko3Highlight.maxNumberOfProblems')) {
             const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
             const limit = conf.get('maxNumberOfProblems')
@@ -278,12 +272,12 @@ export function activate(context: vscode.ExtensionContext):void {
             const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
             let runtime = conf.get('runtimeMode')
             if (typeof runtime === 'string') {
-                if (runtime === 'wnako') {
-                    runtime = 'wnako3'
-                } else if (runtime === 'cnako') {
-                    runtime = 'cnako3'
+                if (runtime === 'wnako3') {
+                    runtime = 'wnako'
+                } else if (runtime === 'cnako3') {
+                    runtime = 'cnako'
                 }
-                if (runtime === 'wnako3' || runtime === 'cnako3' || runtime === 'snako' || runtime === '') {
+                if (runtime === 'wnako' || runtime === 'cnako' || runtime === 'snako' || runtime === '') {
                     nako3docs.setRuntimeEnv(runtime)
                 }
             }
@@ -292,6 +286,12 @@ export function activate(context: vscode.ExtensionContext):void {
             const useShebang = conf.get('runtimeUseShebang')
             if (typeof useShebang === 'boolean') {
                 nako3docs.setUseShebang(useShebang)
+            }
+        } else if (e.affectsConfiguration('nadesiko3Highlight.nadesiko3.folder')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight.nadesiko3')
+            const nadesiko3folder = conf.get('folder')
+            if (typeof nadesiko3folder === 'string') {
+                nadesiko3.setNadesiko3Folder(nadesiko3folder)
             }
         } else if (e.affectsConfiguration('nadesiko3Highlight.trace')) {
             const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
@@ -317,8 +317,8 @@ export function activate(context: vscode.ExtensionContext):void {
     }))
 	// register some listener that make sure the status bar 
 	// item always up-to-date
-	disposableSubscriptions.push(vscode.window.onDidChangeActiveTextEditor(updateNako3RunimeStatusBarItem))
-	disposableSubscriptions.push(vscode.window.onDidChangeTextEditorSelection(updateNako3RunimeStatusBarItem))
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(updateNako3RunimeStatusBarItem))
+	context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(updateNako3RunimeStatusBarItem))
     // disposableSubscriptions.push(vscode.window.tabGroups.onDidChangeTabGroups(e => {
     //     console.log(`onTabGroupChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
     //     console.log(`  ${e.opened[0].activeTab}/${e.closed[0].activeTab}/${e.changed[0].activeTab}`)
@@ -342,9 +342,6 @@ export function activate(context: vscode.ExtensionContext):void {
 }
 
 export function deactivate() {
-    for (const obj of disposableSubscriptions) {
-        obj.dispose()
-    }
     if (nako3docs) {
         nako3docs[Symbol.dispose]()
     }

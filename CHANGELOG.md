@@ -1,3 +1,8 @@
+## 0.0.9
+- Add auto detect runtimeEnv from using plugin.
+- Can launch dirty file.
+- Update bundled command.json 
+
 ## 0.0.8
 - Add auto detect runtimeEnv from shebang line.
 - Add launch cnako3/snako command. require shebang.

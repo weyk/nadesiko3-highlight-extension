@@ -24,13 +24,15 @@ export const messages = new Map<string,string>([
     ['noPluginInfo', 'No Plugin information for {plugin}'],
     ['noImportNako3', 'No support analizing import nako3 file {file}'],
     ['unknownImport', 'Unknwon type impoted "{file}". ignored'],
-    ['noSupprot3rdPlugin', 'No support plugin information for 3rd party plugin {plugin}'],
+    ['noSupport3rdPlugin', 'No support plugin information for 3rd party plugin {plugin}'],
     //
     ['documentIsDirty', 'document is dirty, Retry after save.'],
     ['unknownRuntime','Unknown nadesiko3 runtime. Retry write shebang line.'],
     ['unsupportRuntimeOnLaunch', 'Unsupport launch wnako3 program.'],
     ['unknwonNadesiko3home','Unknown nadesiko3 installed directory. Set nadesiko3 folder setting.'],
-    ['unknwonCWD', 'Unknown working directory! Try to save the file before running.']
+    ['unknwonCWD', 'Unknown working directory! Try to save the file before running.'],
+    ['cannnotDeleteFile', 'Processfile cannot be deleted ({error}:{file})'],
+    ['conflictRuntimeEnv', 'Conflict runtime depend imported plugin']
 ])
 
 export type MessageArgs = Record<string, string|number>
