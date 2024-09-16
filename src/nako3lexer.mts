@@ -1,36 +1,12 @@
 import reservedWords from './nako3/nako_reserved_words.mjs'
 // 助詞の一覧
 import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
-
+import { Nako3Token, Nako3Indent, Nako3TokenType, Nako3TokenGroup } from './nako3token.mjs'
+import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs, reservedGroup} from './nako3lexer_rule.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3Command, CommandInfo } from './nako3command.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3type.mjs'
-
-export interface Indent {
-    text: string
-    level: number
-    len: number
-}
-
-export interface Nako3Token {
-    type: string
-    group: string
-    len: number
-    startLine: number
-    startCol: number
-    endLine: number
-    endCol: number
-    lineCount: number
-    text: string
-    value: string
-    resEndCol: number
-    unit: ''|string
-    unitStartCol?: number
-    josi: ''|string
-    josiStartCol?: number
-    indent: Indent
-}
+import type { RuntimeEnv, DeclareThings, DeclareThing } from './nako3type.mjs'
 
 interface ImportInfo {
     value: string
@@ -41,151 +17,9 @@ interface ImportInfo {
     endCol: number
 }
 
-type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'
-type SubProcOptArgs = string[]
-type SubProc = (text: string, indent: Indent, opts: SubProcOptArgs) => number
-interface LexRule {
-    name: string
-    group: string
-    pattern: string|RegExp
-    proc?: ProcMapKey
-    procArgs?: SubProcOptArgs
-    isFirstCol?: boolean
-    withJosi?: boolean
-    withUnit?: boolean
-    withToten?: boolean
-} 
-const kanakanji = /^[\u3005\u4E00-\u9FCF_a-zA-Z0-9ァ-ヶーａ-ｚＡ-Ｚ０-９\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]+/
-const hira = /^[ぁ-ん]/
-const allHiragana = /^[ぁ-ん]+$/
-const wordHasIjoIka = /^.+(以上|以下|超|未満)$/
-const wordSpecial = /^(かつ|または)/
-const unitRE = /^(円|ドル|元|歩|㎡|坪|度|℃|°|個|つ|本|冊|才|歳|匹|枚|皿|セット|羽|人|件|行|列|機|品|m|ｍ|mm|cm|ｃｍ|km|ｋｍ|g|ｇ|kg|ｋｇ|t|ｔ|px|ｐｘ|dot|ｄｏｔ|pt|ｐｔ|em|ｅｍ|b|ｂ|mb|ｍｂ|kb|ｋｂ|gb|ｇｂ)/
-
-const spaceRE = /^( |　|\t|・|⎿|└|｜)+/
-
-const lexRules: LexRule[] = [
-    { name: 'ここまで', group: '制御', pattern: ';;;' },
-    { name: 'EOL', group: '区切', pattern: '\r\n' },
-    { name: 'EOL', group: '区切', pattern: '\r' },
-    { name: 'EOL', group: '区切', pattern: '\n' },
-    { name: 'SPACE', group: '空白', pattern: spaceRE },
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^\d+(_\d+)*?n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*?[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*[.．]([０-９]+([_＿][０-９]+)*)?([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[.．][０-９]+([_＿][０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+(_[０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'COMMENT_LINE', group: 'コメント', pattern: /^(#|＃|\/\/|／／)/, proc: 'cbCommentLine' },
-    { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '/*', proc: 'cbCommentBlock', procArgs: ['/*', '*/']  },
-    { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
-    { name: 'def_func', group: '記号', pattern: '●' },
-    { name: 'def_func', group: '記号', pattern: '*', isFirstCol: true },
-    { name: 'STRING', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'STRING'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '“', proc: 'cbStringEx', procArgs: ['“', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '🌴', proc: 'cbStringEx', procArgs: ['🌴', '🌴', 'STRING_EX'] },
-    { name: 'ここから', group: '制御', pattern: 'ここから' },
-    { name: 'ここまで', group: '制御', pattern: 'ここまで' },
-    { name: 'ここまで', group: '制御', pattern: '💧' },
-    { name: 'もし', group: '制御', pattern: /^もしも?/, withToten: true },
-    { name: '違えば', group: '制御', pattern: /^違(えば)?/, withToten: true },
-    { name: 'SHIFT_R0', group: '演算子', pattern: /^(>>>|＞＞＞)/ },
-    { name: 'SHIFT_R', group: '演算子', pattern: /^(>>|＞＞)/ },
-    { name: 'SHIFT_L', group: '演算子', pattern: /^(<<|＜＜)/ },
-    { name: 'GE', group: '演算子', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
-    { name: 'LE', group: '演算子', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
-    { name: 'NE', group: '演算子', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
-    { name: 'EQ', group: '演算子', pattern: /^(==?|＝＝?)/ },
-    { name: 'NOT', group: '演算子', pattern: /^(!|💡|！)/ },
-    { name: 'GT', group: '演算子', pattern: /^(>|＞)/ },
-    { name: 'LT', group: '演算子', pattern: /^(<|＜)/ },
-    { name: 'AND', group: '演算子', pattern: /^(かつ|&&|and\s)/ },
-    { name: 'OR', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\|)/ },
-    { name: '@', group: '記号', pattern: /^(@|＠)/ },
-    { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
-    { name: '-', group: '演算子', pattern: /^(-|−|－)/ },
-    { name: '**', group: '演算子', pattern: /^(××|\*\*|＊＊)/ },
-    { name: '*', group: '演算子', pattern: /^(×|\*|＊)/ },
-    { name: '÷÷', group: '演算子', pattern: '÷÷' },
-    { name: '÷', group: '演算子', pattern: /^(÷|\/|／)/ },
-    { name: '%', group: '演算子', pattern: /^(%|％)/ },
-    { name: '^', group: '演算子', pattern: '^' },
-    { name: '&', group: '演算子', pattern: /^(&|＆)/ },
-    { name: '[', group: '記号', pattern: /^(\[|［)/ },
-    { name: ']', group: '記号', pattern: /^(]|］)/, withJosi: true },
-    { name: '(', group: '演算子', pattern: /^(\(|（)/ },
-    { name: ')', group: '演算子', pattern: /^(\)|）)/, withJosi: true },
-    { name: '|', group: '演算子', pattern: /^(\||｜)/ },
-    { name: '」', group: '記号', pattern: '」', withJosi: true },
-    { name: '』', group: '記号', pattern: '』', withJosi: true },
-    { name: '{', group: '記号', pattern: /^(\{|｛)/ },
-    { name: '}', group: '記号', pattern: /^(\}|｝)/, withJosi: true },
-    { name: ':', group: '記号', pattern: /^(:|：)/ },
-    { name: ',', group: '記号', pattern: /^(,|，|、)/ },
-    { name: '。', group: '記号', pattern: /^(。)/ },
-    { name: 'WORD', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^《.+?》/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
-]
-
-const reservedGroup: Map<string, string> = new Map([
-    ['回', '制御'],
-    ['間', '制御'],
-    ['繰返', '制御'],
-    ['増繰返', '制御'],
-    ['減繰返', '制御'],
-    ['後判定', '制御'],
-    ['反復', '制御'],
-    ['抜ける', '制御'],
-    ['続ける', '制御'],
-    ['戻る', '制御'],
-    ['先に', '制御'],
-    ['次に', '制御'],
-    ['代入', '命令'],
-    ['実行速度優先', '疑似命令'],
-    ['パフォーマンスモニタ適用', '疑似命令'],
-    ['定める', '宣言'],
-    ['逐次実行', '制御'],
-    ['条件分岐', '制御'],
-    ['増', '命令'],
-    ['減', '命令'],
-    ['変数', '宣言'],
-    ['定数', '宣言'],
-    ['エラー監視', '制御'],
-    ['エラー', '命令'],
-    ['def_func', '宣言'],
-    ['インデント構文', '！命令'],
-    ['非同期モード', '！命令'],
-    ['DNCLモード', '！命令'],
-    ['モード設定', '！命令'],
-    ['取込', '！命令'],
-    ['モジュール公開既定値', '！命令']
-])
-
 export const COL_START = 0
 export const LINE_START = 0
-type ProcMap = { [K in ProcMapKey]: SubProc }
+
 
 interface UserFunctionInfo {
     name: string
@@ -216,6 +50,7 @@ export class Nako3Tokenizer {
     isDefaultPrivate: boolean
     imports: ImportInfo[]
     externalFunction: Map<string, UserFunctionInfo>
+    declareThings: DeclareThings
 
     constructor (filename: string) {
         this.filename = filename
@@ -226,6 +61,7 @@ export class Nako3Tokenizer {
         this.userFunction = new Map<string, UserFunctionInfo>()
         this.userVariable = {}
         this.externalFunction = new Map<string, UserFunctionInfo>()
+        this.declareThings = new Map()
         this.lengthLines = []
         this.line = 0
         this.col = 0
@@ -268,7 +104,7 @@ export class Nako3Tokenizer {
      * @param text 分析する対象の文字列を渡す            ,;.
      */
     private tokenizeProc (text: string):void {
-        let indent: Indent = {
+        let indent: Nako3Indent = {
             len: 0,
             text: '',
             level: 0
@@ -289,8 +125,8 @@ export class Nako3Tokenizer {
                 }
             }
             let token: Nako3Token = {
-                type: 'UNKNOWN',
-                group: '不明',
+                type: '?',
+                group: '?',
                 startLine: this.line,
                 startCol: this.col,
                 endLine: this.line,
@@ -325,7 +161,7 @@ export class Nako3Tokenizer {
                         break
                     }
                     if (rule.proc) {
-                        const proc:SubProc = this.procMap[rule.proc]
+                        const proc = this.procMap[rule.proc]
                         const args = rule.procArgs || []
                         const len = proc.apply(this, [text, indent, args])
                         text = text.substring(len)
@@ -341,7 +177,7 @@ export class Nako3Tokenizer {
                         token.value = text.substring(0, token.len)
                         text = text.substring(token.len)
                         if (rule.withUnit) {
-                            const r = unitRE.exec(text)
+                            const r = lexRulesRE.unit.exec(text)
                             if (r !== null) {
                                 token.unitStartCol = this.col + token.len
                                 token.unit = r[0]
@@ -414,7 +250,7 @@ export class Nako3Tokenizer {
      * @param text インデントを判定するテキスト。いずれかの行の行頭のはず。
      * @returns インデントの情報。処理した文字数とインデントの深さ
      */
-    private parseIndent (text: string): Indent {
+    private parseIndent (text: string): Nako3Indent {
         let len = 0
         let level = 0
         for (let i = 0;i < text.length; i++) {
@@ -440,7 +276,7 @@ export class Nako3Tokenizer {
      * @param indent 行コメントの開始行の持つインデントの情報
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseLineComment (text: string, indent: Indent): number {
+    private parseLineComment (text: string, indent: Nako3Indent): number {
         const startCol = this.col
         const startTagLen = /^(#|＃|※)/.test(text) ? 1 : 2
         const r = /^[^\r\n]*/.exec(text)
@@ -478,11 +314,11 @@ export class Nako3Tokenizer {
      * @param opts 開始タグ、終了タグの配列。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseBlockComment (text: string, indent: Indent, opts: SubProcOptArgs): number {
+    private parseBlockComment (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
         const startLine = this.line
         const startCol = this.col
-        const startTag = opts[0]
-        const endTag = opts[1]
+        const startTag = opts[0]!
+        const endTag = opts[1]!
         const index = text.indexOf(endTag, startTag.length)
         const len = index >= 0 ? index + endTag.length : startTag.length
         let comment = text.substring(0, len)
@@ -523,13 +359,13 @@ export class Nako3Tokenizer {
      * @param opts 開始タグ、終了タグ、文字列の種類の配列。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseString (text: string, indent: Indent, opts: SubProcOptArgs): number {
+    private parseString (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
         // console.log(`stringex: enter(col=${this.col})`)
         let startLine = this.line
         let startCol = this.col
-        const startTag = opts[0]
-        const endTag = opts[1]
-        const type = opts[2]
+        const startTag = opts[0]!
+        const endTag = opts[1]!
+        const type = opts[2]!
         const index = text.indexOf(endTag, startTag.length)
         let lastPartIndex = 0
         let len = index >= 0 ? index + endTag.length : startTag.length
@@ -719,7 +555,7 @@ export class Nako3Tokenizer {
      * @param opts 無し。他の関数との互換性の為に存在。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseWord (text: string, indent: Indent, opts: SubProcOptArgs): number {
+    private parseWord (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
         const startCol = this.col
         const r = /^[^\r\n]*/.exec(text)
         let line = r ? r[0] : ''
@@ -729,7 +565,7 @@ export class Nako3Tokenizer {
         let josiStartCol = undefined
         while (line !== '') {
             if (resLen > 0) {
-                if (wordSpecial.test(line)) {
+                if (lexRulesRE.andOr.test(line)) {
                     break
                 }
                 const r = josiRE.exec(line)
@@ -746,13 +582,13 @@ export class Nako3Tokenizer {
                     break
                 }
             }
-            const k = kanakanji.exec(line)
+            const k = lexRulesRE.kanakanji.exec(line)
             if (k) {
                 resLen += k[0].length
                 line = line.substring(k[0].length)
                 continue
             }
-            const h = hira.test(line)
+            const h = lexRulesRE.hira.test(line)
             if (h) {
                 resLen += 1
                 line = line.substring(1)
@@ -781,7 +617,7 @@ export class Nako3Tokenizer {
             }
         }
         // 「以上」「以下」「超」「未満」 #918
-        const ii = wordHasIjoIka.exec(res)
+        const ii = lexRulesRE.ijoIka.exec(res)
         if (ii) {
             resLen -= ii[1].length
             len = resLen
@@ -827,11 +663,11 @@ export class Nako3Tokenizer {
 
     trimOkurigana (str: string): string {
         // ひらがなから始まらない場合、送り仮名を削除。(例)置換する
-        if (!hira.test(str)) {
+        if (!lexRulesRE.hira.test(str)) {
             return str.replace(/[ぁ-ん]+/g, '')
         }
         // 全てひらがな？ (例) どうぞ
-        if (allHiragana.test(str)) { return str }
+        if (lexRulesRE.allHiragana.test(str)) { return str }
         // 末尾のひらがなのみ (例)お願いします →お願
         return str.replace(/[ぁ-ん]+$/g, '')
     }
@@ -843,6 +679,8 @@ export class Nako3Tokenizer {
         this.isDefaultPrivate = false
         this.runtimeEnv = ''
         this.imports = []
+        this.userFunction = new Map<string, UserFunctionInfo>()
+        this.declareThings = new Map()
         let token:Nako3Token
         let rawToken:Nako3Token|null = null
         let reenterToken:Nako3Token[] = []
@@ -1185,6 +1023,12 @@ export class Nako3Tokenizer {
             isPrivate,
             tokenIndex: index
         })
+        this.declareThings.set(nameNormalized, {
+            name: nameTrimed,
+            type: '関数',
+            isExport: !this.isDefaultPrivate,
+            isPrivate: this.isDefaultPrivate
+        })
     }
 
     applyFunction() {
@@ -1193,9 +1037,22 @@ export class Nako3Tokenizer {
             const tv = this.trimOkurigana(v)
             let type = token.type
             if (type === 'WORD') {
-                const rtype = this.userFunction.get(tv)
-                if (rtype) {
-                    type = 'ユーザー関数'
+                const thing = this.declareThings.get(tv)
+                if (thing) {
+                    switch (thing.type) {
+                    case '関数':
+                        type = 'ユーザー関数'
+                        break
+                    case '変数':
+                        type = 'ユーザー変数'
+                        break
+                    case '定数':
+                        type = 'ユーザー定数'
+                        break
+                    default:
+                        type = '?'
+                        break
+                    }
                     token.type = type
                 }
             }

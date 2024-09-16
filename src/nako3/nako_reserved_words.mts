@@ -1,5 +1,6 @@
+import { Nako3TokenTypeReserve } from '../nako3token.mjs'
 /** 予約語 */
-const reserved: Map<string, string> = new Map([
+const reserved: Map<string, Nako3TokenTypeReserve> = new Map([
   ['回', '回'],
   ['回繰返', '回'], // (#924)
   ['間', '間'],
@@ -26,8 +27,8 @@ const reserved: Map<string, string> = new Map([
   ['定数', '定数'],
   ['エラー監視', 'エラー監視'], // 例外処理:エラーならばと対
   ['エラー', 'エラー'],
-  ['それ', 'word'],
-  ['そう', 'word'], // 「それ」のエイリアス
+  ['それ', 'WORD'],
+  ['そう', 'WORD'], // 「それ」のエイリアス
   ['関数', 'def_func'], // 無名関数の定義用
   ['インデント構文', 'インデント構文'], // https://nadesi.com/v3/doc/go.php?949
   ['非同期モード', '非同期モード'], // (#637)

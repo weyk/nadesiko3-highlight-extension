@@ -1,4 +1,4 @@
-import { Nako3Token } from './nako3lexer.mjs'
+import { Nako3Token } from './nako3token.mjs'
 import { MessageArgs } from './nako3message.mjs'
 
 export type MessageLevel = 'ERROR'|'WARN'|'INFO'|'HINT'

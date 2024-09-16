@@ -16,7 +16,8 @@ import {
     Uri
 } from 'vscode'
 import { EventEmitter } from 'node:events'
-import { Nako3Token, COL_START } from './nako3lexer.mjs'
+import { Nako3Token } from './nako3token.mjs'
+import { COL_START } from './nako3lexer.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { getMessageWithArgs } from './nako3message.mjs'
@@ -62,6 +63,8 @@ const hilightMapping: HighlightMap = {
     システム関数: ['function', ['defaultLibrary']],
     システム変数: ['variable', ['defaultLibrary']],
     ユーザー関数: 'function',
+    ユーザー定数: ['variable', ['readonly']],
+    ユーザー変数: 'variable',
     ここから: 'keyword',
     ここまで: 'keyword',
     もし: 'keyword',

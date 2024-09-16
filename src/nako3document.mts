@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
-import { Nako3Tokenizer, Nako3Token, Indent, COL_START } from './nako3lexer.mjs'
+import { Nako3Tokenizer, COL_START } from './nako3lexer.mjs'
+import { Nako3Token, Nako3Indent } from './nako3token.mjs'
 import { ModuleLink } from './nako3documentext.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { logger } from './logger.mjs'
@@ -269,7 +270,7 @@ export class Nako3Document extends EventEmitter {
         this.isDefaultPrivate = false
         const tokens = this.lex.tokens
         const tokenCount = tokens.length
-        let indent: Indent
+        let indent: Nako3Indent
         let skipToken = 0
         let currentLine = -1
         let startCol = -1
@@ -606,7 +607,7 @@ export class Nako3Document extends EventEmitter {
             for (const statement of semanticNestStack) {
                 if (statement.statement !== 'グローバル') {
                     const token = tokens[statement.tokenIndex]
-                    let type = token.type
+                    let type:string = token.type
                     if (type === 'def_func') {
                         type = '関数'
                     }

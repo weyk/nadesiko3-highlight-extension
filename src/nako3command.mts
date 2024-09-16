@@ -6,6 +6,7 @@ import fs from 'node:fs/promises'
 import { ModuleLink } from './nako3documentext.mjs'
 import { logger } from './logger.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { Nako3TokenTypePlugin } from './nako3token.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 
 import commandjson from './nako3/command.json'
@@ -21,7 +22,7 @@ export interface CommandInfo {
     command: string
     args: string
     hint: string
-    type: string
+    type: Nako3TokenTypePlugin
 }
 
 export type CommandEntry = Map<string, CommandInfo>    
@@ -123,16 +124,19 @@ export class Nako3Command {
             for (const sectioname of Object.keys(plugin)) {
                 const section = plugin[sectioname]
                 for (const entry of section) {
-                    let type = entry[0] 
+                    const rawType = entry[0] 
                     const command = entry[1]
                     const args = entry[2]
                     const hint = entry[3]
-                    if (type === '定数') {
+                    let type:Nako3TokenTypePlugin
+                    if (rawType === '定数') {
                         type = 'システム定数'
-                    } else if (type === '関数') {
+                    } else if (rawType === '関数') {
                         type = 'システム関数'
-                    } else if (type === '変数') {
+                    } else if (rawType === '変数') {
                         type = 'システム変数'
+                    } else {
+                        type = '?'
                     }
                     const commandInfo: CommandInfo = {
                         pluginName,
