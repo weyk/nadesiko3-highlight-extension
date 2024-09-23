@@ -1,33 +1,40 @@
+import { DeclareFunction } from './nako3types.mjs'
+
 export type Nako3TokenRawType = '?'
 | 'ここまで'
-| 'EOL'
-| 'SPACE'
-| 'NUMBER_EX'
-| 'NUMBER'
+| 'eof'
+| 'eol'
+| 'eos'
+| 'space'
+| 'number'
+| 'bigint'
 | 'COMMENT_LINE'
 | 'COMMENT_BLOCK'
 | 'def_func'
 | 'CHARACTER'
-| 'STRING'
+| 'string'
+| 'fstring'
 | 'STRING_EX'
 | 'STRING_INJECT_START'
 | 'STRING_INJECT_END'
 | 'ここから'
 | 'もし'
 | '違えば'
-| 'SHIFT_R0'
-| 'SHIFT_R'
-| 'SHIFT_L'
-| 'GE'
-| 'LE'
-| 'EQ'
-| 'NE'
-| 'GT'
-| 'LT'
-| 'NOT'
-| 'AND'
-| 'OR'
+| 'shift_r0'
+| 'shift_r'
+| 'shift_l'
+| 'gteq'
+| 'lteq'
+| 'eq'
+| 'noteq'
+| 'gt'
+| 'lt'
+| 'not'
+| 'and'
+| 'or'
 | '@'
+| '==='
+| '!=='
 | '+'
 | '-'
 | '**'
@@ -48,8 +55,7 @@ export type Nako3TokenRawType = '?'
 | '}'
 | ':'
 | ','
-| '。'
-| 'WORD'
+| 'word'
 
 export type Nako3TokenTypeReserve = '回'
   | '間'
@@ -82,34 +88,41 @@ export type Nako3TokenTypeReserve = '回'
   | '取込'
   | 'モジュール公開既定値'
   | 'def_func'
-  | 'WORD'
+  | 'word'
 
 export type Nako3TokenTypeFix = 'には'
   | 'とは'
   | 'ならば'
   | 'FUNCTION_NAME'
   | 'FUNCTION_ATTRIBUTE'
+  | 'FUNCTION_ATTR_PARENTIS_START'
+  | 'FUNCTION_ATTR_PARENTIS_END'
+  | 'FUNCTION_ATTR_SEPARATOR'
   | 'FUNCTION_ARG_SEPARATOR'
-  | 'FUNCTION_ARG_PARENTIS'
+  | 'FUNCTION_ARG_PARENTIS_START'
+  | 'FUNCTION_ARG_PARENTIS_END'
+  | 'FUNCTION_ARG_ATTR_START'
+  | 'FUNCTION_ARG_ATTR_END'
+  | 'FUNCTION_ARG_ATTRIBUTE'
   | 'FUNCTION_ARG_PARAMETER'
 
 export type Nako3TokenTypeApply = '?'
-  |'ユーザー関数'
-  |'ユーザー変数'
-  |'ユーザー定数'
+  |'user_func'
+  |'user_var'
+  |'user_const'
 
 export type Nako3TokenTypePlugin = '?'
-  | 'システム関数'
-  | 'システム変数'
-  | 'システム定数'
+  | 'sys_func'
+  | 'sys_var'
+  | 'sys_const'
 
-export type Nako3TokenType = Nako3TokenRawType
+export type TokenType = Nako3TokenRawType
   | Nako3TokenTypeReserve
   | Nako3TokenTypeFix
   | Nako3TokenTypeApply
   | Nako3TokenTypePlugin
 
-export type Nako3TokenGroup = '?'
+export type TokenGroup = '?'
   | '空白'
   | '区切'
   | '制御'
@@ -124,15 +137,15 @@ export type Nako3TokenGroup = '?'
   | '！命令'
   | '宣言'
 
-export interface Nako3Indent {
+export interface Indent {
     text: string
     level: number
     len: number
 }
 
-export interface Nako3Token {
-    type: Nako3TokenType
-    group: Nako3TokenGroup
+export interface Token {
+    type: TokenType
+    group: TokenGroup
     len: number
     startLine: number
     startCol: number
@@ -146,5 +159,38 @@ export interface Nako3Token {
     unitStartCol?: number
     josi: ''|string
     josiStartCol?: number
-    indent: Nako3Indent
+    indent: Indent
+    file: string
+}
+
+export interface TokenDefFunc extends Token {
+  meta: DeclareFunction
+}
+
+export interface TokenCallFunc extends Token {
+  meta: DeclareFunction
+}
+
+export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent = -1, startLine = 0, file = 'main.nako3'): Token {
+  return {
+    type,
+    group,
+    value,
+    indent: {
+      level: 0,
+      len: 0,
+      text: ''
+    },
+    len: 0,
+    lineCount: 0,
+    startLine,
+    startCol: 0,
+    endLine: startLine,
+    endCol: 0,
+    resEndCol: 0,
+    file,
+    josi: '',
+    text: '',
+    unit: ''
+  }
 }

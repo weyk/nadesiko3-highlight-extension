@@ -6,7 +6,7 @@ import { logger } from './logger.mjs'
 import { nadesiko3, TerminalExt } from './nako3nadesiko3.mjs'
 import { showMessage } from './nako3message.mjs'
 
-import type { RuntimeEnv } from './nako3type.mjs'
+import type { RuntimeEnv } from './nako3types.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
@@ -145,6 +145,7 @@ function configurationInitialize() {
         } else if (traceLevel === 'messages') {
             level = 'ERROR'
         } else {
+            console.log(`trace level invalid(${traceLevel})`)
             level = 'NONE'
         }
         logger.setLevel(level)
@@ -256,7 +257,6 @@ export function activate(context: vscode.ExtensionContext):void {
         logger.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
         logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
         //console.log(e)
-
     }))
     context.subscriptions.push(vscode.commands.registerCommand('nadesiko3highlight.nadesiko3.exec', nako3commandExec))
     context.subscriptions.push(vscode.window.onDidCloseTerminal(nako3TerminalClose))
@@ -309,6 +309,7 @@ export function activate(context: vscode.ExtensionContext):void {
                 } else if (traceLevel === 'messages') {
                     level = 'ERROR'
                 } else {
+                    console.log(`trace level invalid(${traceLevel})`)
                     level = 'NONE'
                 }
                 logger.setLevel(level)

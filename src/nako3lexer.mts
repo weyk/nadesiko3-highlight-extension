@@ -1,12 +1,14 @@
 import reservedWords from './nako3/nako_reserved_words.mjs'
 // 助詞の一覧
 import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
-import { Nako3Token, Nako3Indent, Nako3TokenType, Nako3TokenGroup } from './nako3token.mjs'
+import { Token, Indent, TokenDefFunc, TokenCallFunc, TokenType, TokenGroup } from './nako3token.mjs'
 import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs, reservedGroup} from './nako3lexer_rule.mjs'
+import { trimOkurigana, filenameToModName } from './nako3util.mjs'
+import { ModuleLink  } from './nako3module.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3Command, CommandInfo } from './nako3command.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv, DeclareThings, DeclareThing } from './nako3type.mjs'
+import type { RuntimeEnv,  DeclareThings, ModuleOption, DeclareThing, DeclareFunction, FunctionArg } from './nako3types.mjs'
 
 interface ImportInfo {
     value: string
@@ -20,7 +22,6 @@ interface ImportInfo {
 export const COL_START = 0
 export const LINE_START = 0
 
-
 interface UserFunctionInfo {
     name: string
     nameNormalized: string
@@ -31,12 +32,13 @@ interface UserFunctionInfo {
 
 export class Nako3Tokenizer {
     filename: string
-    rawTokens: Nako3Token[]
-    tokens: Nako3Token[]
-    commentTokens: Nako3Token[]
+    modName: string
+    // textから生成したtoken列。全てのトークンを含む。書き換えなし。
+    rawTokens: Token[]
+    // rawTokensから書き換えのあるトークン列。ただしコメントは除く。
+    tokens: Token[]
+    commentTokens: Token[]
     errorInfos: ErrorInfoManager
-    userFunction: Map<string, UserFunctionInfo>
-    userVariable: {[key:string]: UserFunctionInfo }
     lengthLines: number[]
     procMap: ProcMap
     line: number
@@ -46,33 +48,32 @@ export class Nako3Tokenizer {
     runtimeEnvDefault: RuntimeEnv
     useShebang: boolean
     pluginNames: string[]
-    isIndentSemantic: boolean
-    isDefaultPrivate: boolean
     imports: ImportInfo[]
-    externalFunction: Map<string, UserFunctionInfo>
     declareThings: DeclareThings
+    link: ModuleLink
+    moduleOption: ModuleOption
+    moduleSearchPath: string[]
 
-    constructor (filename: string) {
+    constructor (filename: string, moduleOption: ModuleOption, link: ModuleLink) {
         this.filename = filename
+        this.modName = filenameToModName(filename, link)
         this.rawTokens = []
         this.tokens = []
         this.commentTokens = []
         this.errorInfos = new ErrorInfoManager()
-        this.userFunction = new Map<string, UserFunctionInfo>()
-        this.userVariable = {}
-        this.externalFunction = new Map<string, UserFunctionInfo>()
         this.declareThings = new Map()
         this.lengthLines = []
         this.line = 0
         this.col = 0
         this.commands = null
         this.pluginNames = []
+        this.moduleSearchPath = []
         this.runtimeEnv = ''
         this.runtimeEnvDefault = 'wnako'
         this.useShebang = true
-        this.isIndentSemantic = false
-        this.isDefaultPrivate = false
         this.imports = []
+        this.link = link
+        this.moduleOption = moduleOption
         this.procMap = {
             cbCommentBlock: this.parseBlockComment,
             cbCommentLine: this.parseLineComment,
@@ -104,7 +105,7 @@ export class Nako3Tokenizer {
      * @param text 分析する対象の文字列を渡す            ,;.
      */
     private tokenizeProc (text: string):void {
-        let indent: Nako3Indent = {
+        let indent: Indent = {
             len: 0,
             text: '',
             level: 0
@@ -124,9 +125,10 @@ export class Nako3Tokenizer {
                     }
                 }
             }
-            let token: Nako3Token = {
+            let token: Token = {
                 type: '?',
                 group: '?',
+                file: this.filename,
                 startLine: this.line,
                 startCol: this.col,
                 endLine: this.line,
@@ -154,7 +156,7 @@ export class Nako3Tokenizer {
                     hit = r !== null
                 }
                 if (hit) {
-                    if (rule.name === 'SPACE' && r !== null) {
+                    if (rule.name === 'space' && r !== null) {
                         const len = r[0].length
                         this.col += len
                         text = text.substring(len)
@@ -237,7 +239,7 @@ export class Nako3Tokenizer {
                 text = text.substring(len)
             }
 
-            if (token.type === 'EOL') {
+            if (token.type === 'eol') {
                 this.lengthLines.push(this.col)
                 this.line++
                 this.col = COL_START
@@ -250,7 +252,7 @@ export class Nako3Tokenizer {
      * @param text インデントを判定するテキスト。いずれかの行の行頭のはず。
      * @returns インデントの情報。処理した文字数とインデントの深さ
      */
-    private parseIndent (text: string): Nako3Indent {
+    private parseIndent (text: string): Indent {
         let len = 0
         let level = 0
         for (let i = 0;i < text.length; i++) {
@@ -276,7 +278,7 @@ export class Nako3Tokenizer {
      * @param indent 行コメントの開始行の持つインデントの情報
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseLineComment (text: string, indent: Nako3Indent): number {
+    private parseLineComment (text: string, indent: Indent): number {
         const startCol = this.col
         const startTagLen = /^(#|＃|※)/.test(text) ? 1 : 2
         const r = /^[^\r\n]*/.exec(text)
@@ -287,9 +289,10 @@ export class Nako3Tokenizer {
             len = text.length
         }
         this.col += len
-        const token: Nako3Token = {
+        const token: Token = {
             type: 'COMMENT_LINE',
             group: 'コメント',
+            file: this.filename,
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -314,7 +317,7 @@ export class Nako3Tokenizer {
      * @param opts 開始タグ、終了タグの配列。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseBlockComment (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
+    private parseBlockComment (text: string, indent: Indent, opts: SubProcOptArgs): number {
         const startLine = this.line
         const startCol = this.col
         const startTag = opts[0]!
@@ -332,9 +335,10 @@ export class Nako3Tokenizer {
             endCol = endCol + startTag.length
         }
         this.col = endCol
-        const token: Nako3Token = {
+        const token: Token = {
             type: 'COMMENT_BLOCK',
             group: 'コメント',
+            file: this.filename,
             startLine,
             startCol,
             endLine: this.line,
@@ -359,7 +363,7 @@ export class Nako3Tokenizer {
      * @param opts 開始タグ、終了タグ、文字列の種類の配列。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseString (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
+    private parseString (text: string, indent: Indent, opts: SubProcOptArgs): number {
         // console.log(`stringex: enter(col=${this.col})`)
         let startLine = this.line
         let startCol = this.col
@@ -385,9 +389,10 @@ export class Nako3Tokenizer {
                     hasInject = true
                     let stringpart = str.substring(0, parenIndex)
                     lineCount = this.skipWithoutCrlf(stringpart)
-                    const token: Nako3Token = {
+                    const token: Token = {
                         type: type,
                         group :'文字列',
+                        file: this.filename,
                         startLine,
                         startCol,
                         endLine: this.line,
@@ -408,11 +413,12 @@ export class Nako3Tokenizer {
                     const parenEndTag = parenStartTag === '{' ? '}' : '｝'
                     let parenIndexEnd = str.indexOf(parenEndTag)
                     if (parenIndexEnd !== -1) {
-                        let token: Nako3Token
+                        let token: Token
                         // "{" mark
                         token = {
                             type: 'STRING_INJECT_START',
                             group: '記号',
+                            file: this.filename,
                             startLine: this.line,
                             startCol: this.col,
                             endLine: this.line,
@@ -434,6 +440,7 @@ export class Nako3Tokenizer {
                         token = {
                             type: 'STRING_INJECT_END',
                             group: '記号',
+                            file: this.filename,
                             startLine: this.line,
                             startCol: this.col,
                             endLine: this.line,
@@ -495,9 +502,10 @@ export class Nako3Tokenizer {
             josiStartCol = undefined
         }
         this.col = endCol
-        const token: Nako3Token = {
-            type: hasInject ? type: 'STRING',
+        const token: Token = {
+            type: hasInject ? type: 'string',
             group: '文字列',
+            file: this.filename,
             startLine,
             startCol,
             endLine: this.line,
@@ -555,7 +563,7 @@ export class Nako3Tokenizer {
      * @param opts 無し。他の関数との互換性の為に存在。
      * @returns トークンの切り出しによって処理済みとなった文字数
      */
-    private parseWord (text: string, indent: Nako3Indent, opts: SubProcOptArgs): number {
+    private parseWord (text: string, indent: Indent, opts: SubProcOptArgs): number {
         const startCol = this.col
         const r = /^[^\r\n]*/.exec(text)
         let line = r ? r[0] : ''
@@ -640,9 +648,10 @@ export class Nako3Tokenizer {
             josi = ''
         }
         this.col += len
-        const token: Nako3Token = {
-            type: 'WORD',
+        const token: Token = {
+            type: 'word',
             group: '単語',
+            file: this.filename,
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -661,29 +670,18 @@ export class Nako3Tokenizer {
         return len
     }
 
-    trimOkurigana (str: string): string {
-        // ひらがなから始まらない場合、送り仮名を削除。(例)置換する
-        if (!lexRulesRE.hira.test(str)) {
-            return str.replace(/[ぁ-ん]+/g, '')
-        }
-        // 全てひらがな？ (例) どうぞ
-        if (lexRulesRE.allHiragana.test(str)) { return str }
-        // 末尾のひらがなのみ (例)お願いします →お願
-        return str.replace(/[ぁ-ん]+$/g, '')
-    }
-
     fixTokens ():void {
         this.tokens = []
         this.commentTokens = []
-        this.isIndentSemantic = false
-        this.isDefaultPrivate = false
+        this.moduleOption.isIndentSemantic = false
+        this.moduleOption.isPrivateDefault = false
+        this.moduleOption.isExportDefault = false
         this.runtimeEnv = ''
         this.imports = []
-        this.userFunction = new Map<string, UserFunctionInfo>()
         this.declareThings = new Map()
-        let token:Nako3Token
-        let rawToken:Nako3Token|null = null
-        let reenterToken:Nako3Token[] = []
+        let token:Token
+        let rawToken:Token|null = null
+        let reenterToken:Token[] = []
         const functionIndex:number[] = []
         const preprocessIndex: number[] = []
         let topOfLine = true
@@ -699,7 +697,7 @@ export class Nako3Tokenizer {
             let requirePush = true
             let type = rawToken.type
             // 「回」で終わるWORDから「回」を分離する。
-            if (type === 'WORD' && rawToken.josi === '' && rawToken.value.length >= 2) {
+            if (type === 'word' && rawToken.josi === '' && rawToken.value.length >= 2) {
                 if (rawToken.value.match(/回$/)) {
                     token = Object.assign({}, rawToken, {
                         type,
@@ -763,7 +761,7 @@ export class Nako3Tokenizer {
                 })
                 reenterToken.push(token)
                 token = Object.assign({}, rawToken, {
-                    type: 'EQ',
+                    type: 'eq',
                     group: '演算子',
                     len: 1,
                     text: '=',
@@ -830,7 +828,7 @@ export class Nako3Tokenizer {
                 if ((type === 'def_func' || type === '*') && rawToken.startCol === 0 && rawToken.josi === '') {
                     functionIndex.push(this.tokens.length)
                     if (type === '*') {
-                        console.log(`tokenize: function start with token-type '*'. not 'def_fund'`)
+                        logger.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
                     }
                 } else if (type === 'には') {
                     functionIndex.push(this.tokens.length)
@@ -848,10 +846,10 @@ export class Nako3Tokenizer {
                     }
                     this.commentTokens.push(token)
                 } else {
-                    if (token.type === 'EOL') {
+                    if (token.type === 'eol') {
                         topOfLine = true
                     } else {
-                        if (topOfLine && token.type === 'NOT') {
+                        if (topOfLine && token.type === 'not') {
                             preprocessIndex.push(this.tokens.length)
                         }
                         topOfLine = false
@@ -866,14 +864,15 @@ export class Nako3Tokenizer {
     }
 
     preprocess (preprocessIndex: number[]):void {
-        let token: Nako3Token
+        let token: Token
         const tokens = this.tokens
         const tokenCount = tokens.length
         for (const index of preprocessIndex) {
+            let hit = false
             let causeError = false
             let i = index
             token = tokens[i]
-            if (!(token.type === 'NOT' && (token.value === '!' || token.value === '！'))) {
+            if (!(token.type === 'not' && (token.value === '!' || token.value === '！'))) {
                 logger.log(`internal error: invalid token, expected 'NOT' token`)                
             }
             i++
@@ -881,17 +880,20 @@ export class Nako3Tokenizer {
             if (token.type === 'STRING_EX') {
                 this.errorInfos.addFromToken('ERROR', `cannotUseTemplateString`, {}, token)
                 causeError = true
-            } else if (token.type === 'インデント構文' || (token.type === 'WORD' && token.value === 'インデント構文')) {
-                this.isIndentSemantic = true
+                hit = true
+            } else if (token.type === 'インデント構文' || (token.type === 'word' && token.value === 'インデント構文')) {
+                this.moduleOption.isIndentSemantic = true
                 logger.info('indent semantic on')
-            } else if (token.type === 'モジュール公開既定値' || (token.type === 'WORD' && token.value === 'モジュール公開既定値')) {
+                hit = true
+            } else if (token.type === 'モジュール公開既定値' || (token.type === 'word' && token.value === 'モジュール公開既定値')) {
                 i++
                 token = tokens[i]
-                if (token.type === 'EQ') {
+                if (token.type === 'eq') {
                     i++
                     token = tokens[i]
-                    if (token.type === 'STRING') {
-                        this.isDefaultPrivate = token.value === '非公開'
+                    if (token.type === 'string') {
+                        this.moduleOption.isPrivateDefault = token.value === '非公開'
+                        this.moduleOption.isExportDefault = token.value === '公開'
                         logger.info(`change default publishing:${token.value}`)
                     } else if (token.type === 'STRING_EX') {
                         this.errorInfos.addFromToken('ERROR', `cannotUseTemplateString`, {}, token)
@@ -904,7 +906,8 @@ export class Nako3Tokenizer {
                     this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'=', type: token.type, value: token.value }, token)
                     causeError = true
                 }
-            } else if (i+1 < tokenCount && token.type === 'STRING' && token.josi === 'を' && (tokens[i+1].type === '取込' || (tokens[i+1].type === 'WORD' && this.trimOkurigana(tokens[i+1].value) === '取込'))) {
+                hit = true
+            } else if (i+1 < tokenCount && token.type === 'string' && token.josi === 'を' && (tokens[i+1].type === '取込' || (tokens[i+1].type === 'word' && trimOkurigana(tokens[i+1].value) === '取込'))) {
                 const importInfo: ImportInfo = {
                     value: token.value,
                     tokenIndex: i,
@@ -915,11 +918,12 @@ export class Nako3Tokenizer {
                 }
                 this.imports.push(importInfo)
                 i += 1
+                hit = true
             }
-            if (!causeError) {
+            if (hit && !causeError) {
                 i++
                 token = tokens[i]
-                if (!(token.type === 'EOL')) {
+                if (!(token.type === 'eol')) {
                     this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'EOL', type: token.type, value: token.value }, token)
                 }
             }
@@ -927,23 +931,71 @@ export class Nako3Tokenizer {
     }
 
     enumlateFunction (functionIndex: number[]):void {
+        let args = new Map<string, FunctionArg>()
+        let argOrder: string[] = []
         const parseArguments = (i:number):number => {
             // jに先頭位置、iに最短の')'またはEOLの位置を求める。
+            let token: Token
             let j = i
-            for (;i < this.tokens.length && this.tokens[i].type !== ')' && this.tokens[i].type !== 'EOL';i++) {
+            for (;i < this.tokens.length && this.tokens[i].type !== ')' && this.tokens[i].type !== 'eol';i++) {
                 //
             }
-            if (this.tokens[i].type === ')') {
-                for (;j <= i;j++) {
+            if (j < i && this.tokens[i].type === ')') {
+                token = this.tokens[j]
+                if (token.type === '(') {
+                    token.type = 'FUNCTION_ARG_PARENTIS_START'
+                    j++
+                }
+                while (j <= i) {
+                    let attr: string[] = []
+                    let varname: string = ''
+                    let josi: string[] = []
                     token = this.tokens[j]
-                    if (token.type === ',' || token.type === '|') {
-                        token.type = 'FUNCTION_ARG_SEPARATOR'
-                    } else if (token.type === '(' || token.type === ')') {
-                        token.type = 'FUNCTION_ARG_PARENTIS'
-                    } else if (token.type === 'WORD') {
+                    let k = j
+                    if (token.type === '{') {
+                        token.type = 'FUNCTION_ARG_ATTR_START'
+                        j++
+                        token = this.tokens[j]
+                        if (token.type === 'word') {
+                            token.type = 'FUNCTION_ARG_ATTRIBUTE'
+                            attr.push(token.value)
+                            j++
+                            token = this.tokens[j]
+                        }
+                        if (token.type === '}') {
+                            token.type = 'FUNCTION_ARG_ATTR_END'
+                            j++
+                            token = this.tokens[j]
+                        }
+                    }
+                    if (token.type === 'word') {
                         token.type = 'FUNCTION_ARG_PARAMETER'
-                    } else {
+                        varname = token.value
+                        if (args.has(varname)) {
+                            const arg = args.get(varname)
+                            josi = arg!.josi
+                            arg!.attr.push(...attr)
+                            attr = arg!.attr
+                        } else {
+                            const arg = {
+                                varname, attr, josi
+                            }
+                            args.set(varname, arg)
+                            argOrder.push(varname)
+                        }
+                        if (token.josi !== '') {
+                            josi.push(token.josi)
+                        }
+                        j++
+                        token = this.tokens[j]
+                    }
+                    if (token.type === ',' || token.type === '|') {
+                        j++
+                        token = this.tokens[j]
+                    }
+                    if (j === k) {
                         this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
+                        break
                     }
                 }
                 i++
@@ -952,11 +1004,11 @@ export class Nako3Tokenizer {
             }
             return i
         }
-        let token: Nako3Token
+        let token: Token
         for (const index of functionIndex) {
             let i = index
             let isMumei = false
-            let isPrivate = this.isDefaultPrivate
+            let isPrivate = this.moduleOption.isPrivateDefault
             token = this.tokens[i]
             if (token.type === '*') {
                 token.type = 'def_func'
@@ -967,17 +1019,20 @@ export class Nako3Tokenizer {
             i++
             token = this.tokens[i]
             if (!isMumei && token.type === '{') {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 let j = i
-                for (;i < this.tokens.length && this.tokens[i].type !== '}' && this.tokens[i].type !== 'EOL';i++) {
+                let j = i
+                for (;i < this.tokens.length && this.tokens[i].type !== '}' && this.tokens[i].type !== 'eol';i++) {
                     //
                 }
                 if (this.tokens[i].type === '}') {
-                    for (;j <= i;j++) {
+                    this.tokens[j].type = 'FUNCTION_ATTR_PARENTIS_START'
+                    j++
+                    this.tokens[i].type = 'FUNCTION_ATTR_PARENTIS_END'
+                    for (;j < i;j++) {
                         token = this.tokens[j]
                         token.type = 'FUNCTION_ATTRIBUTE'
-                    }
-                    if (this.tokens[i-1].value === '非公開') {
-                        isPrivate = true
+                        if (token.value === '非公開') {
+                            isPrivate = true
+                        }
                     }
                     i++
                 }
@@ -990,17 +1045,20 @@ export class Nako3Tokenizer {
             }
             token = this.tokens[i]
             let hasToha = false
-            if (!isMumei && token.type === 'WORD') {
+            let funcName: string = ''
+            let funcNameIndex: number = -1
+            if (!isMumei && token.type === 'word') {
                 token.type = 'FUNCTION_NAME'
-                this.addUserFunction(token.value, isPrivate, index)
+                funcName = token.value
+                funcNameIndex = index
                 if (token.josi === 'とは') {
                     hasToha = true
                 }
                 i++
             }
             token = this.tokens[i]
-            if (!isMumei && !hasToha && (token.type === 'とは' || (token.type === 'WORD' && token.value === 'とは'))) {
-                if (token.type === 'WORD' && token.value === 'とは') {
+            if (!isMumei && !hasToha && (token.type === 'とは' || (token.type === 'word' && token.value === 'とは'))) {
+                if (token.type === 'word' && token.value === 'とは') {
                     console.warn(`とは type was WORD`)
                 }
                 i++
@@ -1010,44 +1068,54 @@ export class Nako3Tokenizer {
                 i = parseArguments(i)
                 hasParameter = true
             }
+            const orderedArgs: FunctionArg[] = []
+            for (const orderKey of argOrder) {
+                const arg = args.get(orderKey)!
+                orderedArgs.push(arg)
+            }
+            this.addUserFunction(funcName, orderedArgs, isPrivate, funcNameIndex, index)
         }
     }
 
-    addUserFunction (name: string, isPrivate: boolean, index: number):void {
+    addUserFunction (name: string, args: FunctionArg[], isPrivate: boolean, index: number, defTokenIndex: number):void {
         const nameTrimed = name.trim()
-        const nameNormalized = this.trimOkurigana(nameTrimed)
-        this.userFunction.set(nameNormalized, {
+        const nameNormalized = trimOkurigana(nameTrimed)
+        const declFunction: DeclareFunction = {
             name: nameTrimed,
             nameNormalized: nameNormalized,
-            fileName: null,
-            isPrivate,
-            tokenIndex: index
-        })
-        this.declareThings.set(nameNormalized, {
-            name: nameTrimed,
-            type: '関数',
-            isExport: !this.isDefaultPrivate,
-            isPrivate: this.isDefaultPrivate
-        })
+            modName: this.modName,
+            type: 'func',
+            args: args,
+            isPure: true,
+            isAsync: false,
+            isVariableJosi: false,
+            isExport: this.moduleOption.isExportDefault,
+            isPrivate: this.moduleOption.isPrivateDefault
+        }
+        if (nameTrimed.length > 0) {
+            this.declareThings.set(nameNormalized, declFunction)
+        }
+        (this.tokens[defTokenIndex] as TokenDefFunc).meta = declFunction
     }
 
     applyFunction() {
         for (const token of this.tokens) {
             const v = token.value
-            const tv = this.trimOkurigana(v)
+            const tv = trimOkurigana(v)
             let type = token.type
-            if (type === 'WORD') {
+            if (type === 'word') {
                 const thing = this.declareThings.get(tv)
                 if (thing) {
                     switch (thing.type) {
-                    case '関数':
-                        type = 'ユーザー関数'
+                    case 'func':
+                        (token as TokenCallFunc).meta = thing as DeclareFunction
+                        type = 'user_func'
                         break
-                    case '変数':
-                        type = 'ユーザー変数'
+                    case 'var':
+                        type = 'user_var'
                         break
-                    case '定数':
-                        type = 'ユーザー定数'
+                    case 'const':
+                        type = 'user_const'
                         break
                     default:
                         type = '?'
@@ -1056,7 +1124,7 @@ export class Nako3Tokenizer {
                     token.type = type
                 }
             }
-            if (type === 'WORD') {
+            if (type === 'word') {
                 const rtype = reservedWords.get(v) || reservedWords.get(tv)
                 if (rtype) {
                     type = rtype
@@ -1067,7 +1135,7 @@ export class Nako3Tokenizer {
                     token.value = 'それ'
                 }
             }
-            if (type === 'WORD' && this.commands) {
+            if (type === 'word' && this.commands) {
                 const commandInfo = this.getCommandInfo(v)
                 if (commandInfo) {
                     type = commandInfo.type
@@ -1078,7 +1146,7 @@ export class Nako3Tokenizer {
     }
 
     getCommandInfo (command: string): CommandInfo|null {
-        const tv = this.trimOkurigana(command)
+        const tv = trimOkurigana(command)
         for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
             const commandEntry = this.commands!.get(key)
             if (commandEntry) {

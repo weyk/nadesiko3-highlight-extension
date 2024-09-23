@@ -6,11 +6,28 @@ import fs from 'node:fs/promises'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { showMessage } from './nako3message.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3type.mjs'
+import type { RuntimeEnv } from './nako3types.mjs'
 
 export interface TerminalExt extends Terminal {
     filePath?: string
     terminalIndex?: number
+}
+
+/**
+* ファイル名からモジュール名へ変換
+* @param {string} filename
+* @returns {string}
+*/
+export function filenameToModName (filename: string): string {
+    if (!filename) { return 'main' }
+    // パスがあればパスを削除
+    filename = filename.replace(/[\\:]/g, '/') // Windowsのpath記号を/に置換
+    if (filename.indexOf('/') >= 0) {
+        const a = filename.split('/')
+        filename = a[a.length - 1]
+    }
+    filename = filename.replace(/\.nako3?$/, '')
+    return filename
 }
 
 class Nako3Nadesiko3 extends EventEmitter {

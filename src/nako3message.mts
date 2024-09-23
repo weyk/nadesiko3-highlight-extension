@@ -32,7 +32,14 @@ export const messages = new Map<string,string>([
     ['unknwonNadesiko3home','Unknown nadesiko3 installed directory. Set nadesiko3 folder setting.'],
     ['unknwonCWD', 'Unknown working directory! Try to save the file before running.'],
     ['cannnotDeleteFile', 'Processfile cannot be deleted ({error}:{file})'],
-    ['conflictRuntimeEnv', 'Conflict runtime depend imported plugin']
+    ['conflictRuntimeEnv', 'Conflict runtime depend imported plugin'],
+    // parser
+    ['invalidLet', 'Invalid in let statement:{nodestr}'],
+    ['invalidLetWithMessage', 'Invalid in let statement:{nodestr}\n{msg}'],
+    ['noRightOperand', 'No value of operator("{op}") right'],
+    ['notfondOneWordFunc', 'Not found one word function "{funcName}"'],
+    ['noParamForOneWordFunc', 'Not enough parameter for one word function "{funcName}", reuire {paramCount}'],
+    ['ErrorInDeclareFunction', 'Error in declare function by called(meta:{MetaIsNull})']
 ])
 
 export type MessageArgs = Record<string, string|number>

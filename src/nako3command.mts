@@ -3,7 +3,7 @@ import { Uri } from 'vscode'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 
-import { ModuleLink } from './nako3documentext.mjs'
+import { ModuleLink } from './nako3module.mjs'
 import { logger } from './logger.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3TokenTypePlugin } from './nako3token.mjs'
@@ -11,7 +11,7 @@ import { nadesiko3 } from './nako3nadesiko3.mjs'
 
 import commandjson from './nako3/command.json'
 
-import type { RuntimeEnv } from './nako3type.mjs'
+import type { RuntimeEnv } from './nako3types.mjs'
 
 type CmdSectionEntry = [string, string, string, string, string]
 type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
@@ -130,11 +130,11 @@ export class Nako3Command {
                     const hint = entry[3]
                     let type:Nako3TokenTypePlugin
                     if (rawType === '定数') {
-                        type = 'システム定数'
+                        type = 'sys_const'
                     } else if (rawType === '関数') {
-                        type = 'システム関数'
+                        type = 'sys_func'
                     } else if (rawType === '変数') {
-                        type = 'システム変数'
+                        type = 'sys_var'
                     } else {
                         type = '?'
                     }

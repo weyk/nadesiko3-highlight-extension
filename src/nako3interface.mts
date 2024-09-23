@@ -15,7 +15,7 @@ import { EventEmitter } from 'node:events'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { Nako3Command } from './nako3command.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3type.mjs'
+import type { RuntimeEnv } from './nako3types.mjs'
 
 export class Nako3Documents extends EventEmitter implements Disposable {
     runtimeEnv: RuntimeEnv
@@ -73,6 +73,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             doc.setRuntimeEnvDefault(this.runtimeEnv)
             doc.setUseShebang(this.useShebang)
             doc.nako3doc.lex.commands = this.commands
+            doc.nako3doc.parser.commands = this.commands
             doc.setProblemsLimit(this.problemsLimit)
             doc.nako3doc.addListener('changeRuntimeEnv', e => {
                 logger.debug(`docs:onChangeRuntimeEnv`)
@@ -94,6 +95,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             doc.setRuntimeEnvDefault(this.runtimeEnv)
             doc.setUseShebang(this.useShebang)
             doc.nako3doc.lex.commands = this.commands
+            doc.nako3doc.parser.commands = this.commands
             doc.setProblemsLimit(this.problemsLimit)
             doc.nako3doc.addListener('changeRuntimeEnv', e => {
                 logger.debug(`docs:onChangeRuntimeEnv`)

@@ -1,4 +1,4 @@
-import { Nako3TokenType } from '../nako3token.mjs'
+import { TokenType } from '../nako3token.mjs'
 
 export const opPriority: {[key: string]: number} = {
   // and or
@@ -35,5 +35,5 @@ export const RenbunJosi: string[] = [
   'いて', 'えて', 'きて', 'けて', 'して', 'って', 'にて', 'みて', 'めて', 'ねて', 'には', 'んで'
 ]
 
-export const operatorList: Nako3TokenType[] = []
-for (const key in opPriority) { operatorList.push(key as Nako3TokenType) }
+export const operatorList: TokenType[] = []
+for (const key in opPriority) { operatorList.push(key as TokenType) }

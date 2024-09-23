@@ -1,15 +1,16 @@
 import { EventEmitter } from 'node:events'
 import { Nako3Tokenizer, COL_START } from './nako3lexer.mjs'
-import { Nako3Token, Nako3Indent } from './nako3token.mjs'
-import { ModuleLink } from './nako3documentext.mjs'
+import { NakoParser } from './nako3/nako_parser3.mjs'
+import { Token, Indent } from './nako3token.mjs'
+import { ModuleLink } from './nako3module.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3type.mjs' 
+import type { RuntimeEnv, ModuleOption } from './nako3types.mjs' 
 
 export interface SymbolInfo {
     name: string|null
     type: string
-    token: Nako3Token
+    token: Token
     level: number
 }
 
@@ -26,6 +27,7 @@ interface semanticStackInfo {
 }
 export class Nako3Document extends EventEmitter {
     lex: Nako3Tokenizer
+    parser: NakoParser
     filename: string
     isErrorClear: boolean
     errorInfos: ErrorInfoManager
@@ -37,10 +39,17 @@ export class Nako3Document extends EventEmitter {
     runtimeEnvDefault: RuntimeEnv
     useShebang: boolean
     link: ModuleLink
+    moduleOption: ModuleOption
 
     constructor (filename: string, link: ModuleLink) {
         super()
-        this.lex = new Nako3Tokenizer(filename)
+        this.moduleOption = {
+            isIndentSemantic: false,
+            isPrivateDefault: false,
+            isExportDefault: true
+        }
+        this.lex = new Nako3Tokenizer(filename, this.moduleOption, link)
+        this.parser = new NakoParser(filename, this.moduleOption, link)
         this.link = link
         this.filename = filename
         this.errorInfos = new ErrorInfoManager()
@@ -75,6 +84,7 @@ export class Nako3Document extends EventEmitter {
     }
 
     tokenize (text: string):void {
+        console.log(`doc:tokenize start`)
         this.lex.tokenize(text)
         this.lex.fixTokens()
         if (this.lex.runtimeEnv === '') {
@@ -87,10 +97,16 @@ export class Nako3Document extends EventEmitter {
             this.lex.runtimeEnv = this.runtimeEnvDefault
         }
         this.setRuntimeEnv(this.lex.runtimeEnv)
+        this.parser.runtimeEnv = this.lex.runtimeEnv
         this.updateImportedPlugin()
+        this.parser.pluginNames = this.lex.pluginNames
+        this.parser.setGlobalThings(this.lex.declareThings)
+        this.parser.moduleOption = this.lex.moduleOption
         this.lex.applyFunction()
+        this.parser.parse(this.lex.tokens)
         this.isErrorClear = false
         this.invalidate()
+        console.log(`doc:tokenize end`)
     }
 
     clearError ():void {
@@ -200,7 +216,7 @@ export class Nako3Document extends EventEmitter {
         }
     }
 
-    getTokenByPosition(line: number, col: number): Nako3Token|null {
+    getTokenByPosition(line: number, col: number): Token|null {
         const index = this.getTokenIndexByPosition(line, col)
         if (index === null) {
             return null
@@ -208,14 +224,14 @@ export class Nako3Document extends EventEmitter {
         return this.lex.tokens[index]
     }
 
-    debugLogToken (msg:string, token:Nako3Token|null):void {
+    debugLogToken (msg:string, token:Token|null):void {
         if (token === null) {
             return
         }
         console.log(`${msg} token(${token.startLine}:${token.startCol}-${token.endLine}:${token.endCol})`)
     }
 
-    searchTokenByPosition(tokens: Nako3Token[], line: number, col: number): number|null {
+    searchTokenByPosition(tokens: Token[], line: number, col: number): number|null {
         let il = 0
         let ih = tokens.length
         // console.log(`find token:position(${line}:${col})`)
@@ -270,7 +286,7 @@ export class Nako3Document extends EventEmitter {
         this.isDefaultPrivate = false
         const tokens = this.lex.tokens
         const tokenCount = tokens.length
-        let indent: Nako3Indent
+        let indent: Indent
         let skipToken = 0
         let currentLine = -1
         let startCol = -1
@@ -356,7 +372,7 @@ export class Nako3Document extends EventEmitter {
                 skipToken--
                 continue
             }
-            if (false && ((token.type === '定数' || token.type === '変数') || (token.type === 'WORD' && (token.value === '定数' || token.value === '変数')))) {
+            if (false && ((token.type === '定数' || token.type === '変数') || (token.type === 'word' && (token.value === '定数' || token.value === '変数')))) {
                 console.log(`const/var semantic?:${index}`)
                 if (index > 0) {
                     console.log(`  prev token:${tokens[index-1].type}/${tokens[index-1].value}`)
@@ -389,7 +405,7 @@ export class Nako3Document extends EventEmitter {
                     if (sameLineMode === 'もし-違えば' && token.type === 'もし') {
                         logger.log('              :違えば-もし has been appear')
                     } else {
-                        if (token.type !== 'EOL') {
+                        if (token.type !== 'eol') {
                             hasBody = true
                             logger.log(`              :has body:(${token.startLine},${token.startCol}):${token.type}:${token.value}`)
                         }
@@ -495,16 +511,16 @@ export class Nako3Document extends EventEmitter {
                     // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                 }
             }
-            if (index+1 < tokenCount && token.type === 'NOT' && (token.value === '!' || token.value === '！') && tokens[index+1].type === 'インデント構文') {
+            if (index+1 < tokenCount && token.type === 'not' && (token.value === '!' || token.value === '！') && tokens[index+1].type === 'インデント構文') {
                 // !インデント構文
                 // logger.info('indent semantic on')
                 this.isIndentSemantic = true
                 skipToken = 1
             } else if (index+3 < tokenCount
-                    && token.type === 'NOT' && (token.value === '!' || token.value === '！')
+                    && token.type === 'not' && (token.value === '!' || token.value === '！')
                     && tokens[index+1].type === 'モジュール公開既定値'
-                    && tokens[index+2].type === 'EQ'
-                    && (tokens[index+3].type === 'STRING' || tokens[index+3].type === 'STRING_EX')) {
+                    && tokens[index+2].type === 'eq'
+                    && (tokens[index+3].type === 'string' || tokens[index+3].type === 'STRING_EX')) {
                 // !モジュール公開既定値は「非公開」/「公開」
                 // logger.info(`change default publishing:${tokens[index+3].value}`)
                 this.isDefaultPrivate = tokens[index+3].value === '非公開'
@@ -548,7 +564,7 @@ export class Nako3Document extends EventEmitter {
                     token: token
                 }
                 symbols.push(symbolInfo)
-            } else if (index+2 < tokenCount && token.type === 'WORD' && tokens[index+1].type === 'とは' && (tokens[index+2].type === '変数' || tokens[index+2].type === '定数')) {
+            } else if (index+2 < tokenCount && token.type === 'word' && tokens[index+1].type === 'とは' && (tokens[index+2].type === '変数' || tokens[index+2].type === '定数')) {
                 // XXXとは変数/定数
                 const symbolInfo: SymbolInfo = {
                     name: token.value,
@@ -558,12 +574,12 @@ export class Nako3Document extends EventEmitter {
                 }
                 symbols.push(symbolInfo)
                 skipToken = 2
-            } else if (index+1 < tokenCount && (token.type === '変数' || token.type === '定数') && (tokens[index+1].type === '変数' || tokens[index+1].type === 'WORD' || tokens[index+1].type === '[')) {
+            } else if (index+1 < tokenCount && (token.type === '変数' || token.type === '定数') && (tokens[index+1].type === '変数' || tokens[index+1].type === 'word' || tokens[index+1].type === '[')) {
                 if (tokens[index+1].type === '[') {
                     // 変数 [X,Y]/定数 [X,Y]
                     let i = 2
                     while (index + i < tokenCount) {
-                        if (tokens[index+i].type === '変数' || tokens[index+i].type === 'WORD') {
+                        if (tokens[index+i].type === '変数' || tokens[index+i].type === 'word') {
                             const symbolInfo: SymbolInfo = {
                                 name: tokens[index + i].value,
                                 type: token.type,

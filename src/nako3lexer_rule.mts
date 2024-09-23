@@ -1,8 +1,8 @@
-import { Nako3Indent, Nako3TokenType, Nako3TokenTypeReserve, Nako3TokenGroup } from './nako3token.mjs'
+import { Indent, TokenType, Nako3TokenTypeReserve, TokenGroup } from './nako3token.mjs'
 
 export type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'
-export type SubProcOptArgs = [] | [string, string] | [string, string, Nako3TokenType]
-export type SubProc = (text: string, indent: Nako3Indent, opts: SubProcOptArgs) => number
+export type SubProcOptArgs = [] | [string, string] | [string, string, TokenType]
+export type SubProc = (text: string, indent: Indent, opts: SubProcOptArgs) => number
 export type ProcMap = { [K in ProcMapKey]: SubProc }
 
 export const lexRulesRE = {
@@ -16,8 +16,8 @@ export const lexRulesRE = {
 }
 
 interface LexRule {
-    name: Nako3TokenType
-    group: Nako3TokenGroup
+    name: TokenType
+    group: TokenGroup
     pattern: string|RegExp
     proc?: ProcMapKey
     procArgs?: SubProcOptArgs
@@ -28,40 +28,40 @@ interface LexRule {
 } 
 
 export const lexRules: LexRule[] = [
-    { name: 'ここまで', group: '制御', pattern: ';;;' },
-    { name: 'EOL', group: '区切', pattern: '\r\n' },
-    { name: 'EOL', group: '区切', pattern: '\r' },
-    { name: 'EOL', group: '区切', pattern: '\n' },
-    { name: 'SPACE', group: '空白', pattern: lexRulesRE.space },
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^\d+(_\d+)*?n/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER_EX', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*?[nｎ]/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*[.．]([０-９]+([_＿][０-９]+)*)?([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[.．][０-９]+([_＿][０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
-    { name: 'NUMBER', group: '数値', pattern: /^[０-９]+(_[０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'ここまで', group: '制御', pattern: /^(;;;|；；；)/ },
+    { name: 'eol', group: '区切', pattern: '\r\n' },
+    { name: 'eol', group: '区切', pattern: '\r' },
+    { name: 'eol', group: '区切', pattern: '\n' },
+    { name: 'space', group: '空白', pattern: lexRulesRE.space },
+    { name: 'bigint', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*n/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^\d+(_\d+)*?n/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'bigint', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*?[nｎ]/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^[０-９]+([_＿][０-９]+)*[.．]([０-９]+([_＿][０-９]+)*)?([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^[.．][０-９]+([_＿][０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^[０-９]+(_[０-９]+)*([eEｅＥ][+|-|＋|－]?[０-９]+([_＿][０-９]+)*)?/, withJosi: true, withUnit: true},
     { name: 'COMMENT_LINE', group: 'コメント', pattern: /^(#|＃|\/\/|／／)/, proc: 'cbCommentLine' },
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '/*', proc: 'cbCommentBlock', procArgs: ['/*', '*/']  },
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
     { name: 'def_func', group: '記号', pattern: '●' },
     { name: 'def_func', group: '記号', pattern: '*', isFirstCol: true },
-    { name: 'STRING', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'STRING'] },
-    { name: 'STRING', group: '文字列', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'STRING'] },
+    { name: 'string', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'string'] },
+    { name: 'string', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'string'] },
+    { name: 'string', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'string'] },
+    { name: 'string', group: '文字列', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'string'] },
     { name: 'STRING_EX', group: '文字列', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'STRING_EX'] },
     { name: 'STRING_EX', group: '文字列', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'STRING_EX'] },
     { name: 'STRING_EX', group: '文字列', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'STRING_EX'] },
@@ -72,18 +72,20 @@ export const lexRules: LexRule[] = [
     { name: 'ここまで', group: '制御', pattern: '💧' },
     { name: 'もし', group: '制御', pattern: /^もしも?/, withToten: true },
     { name: '違えば', group: '制御', pattern: /^違(えば)?/, withToten: true },
-    { name: 'SHIFT_R0', group: '演算子', pattern: /^(>>>|＞＞＞)/ },
-    { name: 'SHIFT_R', group: '演算子', pattern: /^(>>|＞＞)/ },
-    { name: 'SHIFT_L', group: '演算子', pattern: /^(<<|＜＜)/ },
-    { name: 'GE', group: '演算子', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
-    { name: 'LE', group: '演算子', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
-    { name: 'NE', group: '演算子', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
-    { name: 'EQ', group: '演算子', pattern: /^(==?|＝＝?)/ },
-    { name: 'NOT', group: '演算子', pattern: /^(!|💡|！)/ },
-    { name: 'GT', group: '演算子', pattern: /^(>|＞)/ },
-    { name: 'LT', group: '演算子', pattern: /^(<|＜)/ },
-    { name: 'AND', group: '演算子', pattern: /^(かつ|&&|and\s)/ },
-    { name: 'OR', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\|)/ },
+    { name: 'shift_r0', group: '演算子', pattern: /^(>>>|＞＞＞)/ },
+    { name: 'shift_r', group: '演算子', pattern: /^(>>|＞＞)/ },
+    { name: 'shift_l', group: '演算子', pattern: /^(<<|＜＜)/ },
+    { name: 'gteq', group: '演算子', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
+    { name: 'lteq', group: '演算子', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
+    { name: 'noteq', group: '演算子', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
+    { name: '===', group: '演算子', pattern: /^(===|＝＝＝)/ },
+    { name: '!==', group: '演算子', pattern: /^(!==|！＝＝)/ },
+    { name: 'eq', group: '演算子', pattern: /^(==?|＝＝?)/ },
+    { name: 'not', group: '演算子', pattern: /^(!|💡|！)/ },
+    { name: 'gt', group: '演算子', pattern: /^(>|＞)/ },
+    { name: 'lt', group: '演算子', pattern: /^(<|＜)/ },
+    { name: 'and', group: '演算子', pattern: /^(かつ|&&|＆＆|[Aa][Nn][Dd]\s)/ },
+    { name: 'or', group: '演算子', pattern: /^(または|或いは|あるいは|[Oo][Rr]\s|\|\||｜｜)/ },
     { name: '@', group: '記号', pattern: /^(@|＠)/ },
     { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
     { name: '-', group: '演算子', pattern: /^(-|−|－)/ },
@@ -105,14 +107,14 @@ export const lexRules: LexRule[] = [
     { name: '}', group: '記号', pattern: /^(\}|｝)/, withJosi: true },
     { name: ':', group: '記号', pattern: /^(:|：)/ },
     { name: ',', group: '記号', pattern: /^(,|，|、)/ },
-    { name: '。', group: '記号', pattern: /^(。)/ },
-    { name: 'WORD', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^《.+?》/, withJosi: true },
-    { name: 'WORD', group: '単語', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
+    { name: 'eos', group: '記号', pattern: /^(。|;|；)/ },
+    { name: 'word', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
+    { name: 'word', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
+    { name: 'word', group: '単語', pattern: /^《.+?》/, withJosi: true },
+    { name: 'word', group: '単語', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
 ]
 
-export const reservedGroup: Map<Nako3TokenTypeReserve, Nako3TokenGroup> = new Map([
+export const reservedGroup: Map<Nako3TokenTypeReserve, TokenGroup> = new Map([
     ['回', '制御'],
     ['間', '制御'],
     ['繰返', '制御'],

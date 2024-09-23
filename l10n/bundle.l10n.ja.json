@@ -28,5 +28,11 @@
     "unknwonNadesiko3home": "なでしこ３のインストールディレクトリが不明です。設定からnadesiko3 folderの設定を行ってください",
     "unknwonCWD": "作業ディレクトリが決定できません。先にファイルを保存してディレクトリを決定してください",
     "cannnotDeleteFile": "一時ファイルの削除に失敗しました({error}:{file})",
-    "conflictRuntimeEnv": "取り込んでいるpluginどうしの実行環境に矛盾があります"
+    "conflictRuntimeEnv": "取り込んでいるpluginどうしの実行環境に矛盾があります",
+    "invalidLet": "{nodestr}への代入文で計算式に書き間違いがあります",
+    "invalidLetWithMessage": "{nodestr}への代入文で計算式に以下の書き間違いがあります。\n{msg}",
+    "noRightOperand": "計算式で演算子『{op}』後に値がありません",
+    "notfondOneWordFunc": "一語関数『{funcName}』は存在しません",
+    "noParamForOneWordFunc": "関数『${funcName}』で引数が指定されていません。${paramCount}個の引数を指定してください。",
+    "ErrorInDeclareFunction": "呼び出そうとした関数の定義にエラーがあります(meta is null?:{metaIsNull})"
 }

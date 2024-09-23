@@ -16,55 +16,43 @@ import {
     Uri
 } from 'vscode'
 import { EventEmitter } from 'node:events'
-import { Nako3Token } from './nako3token.mjs'
+import { Token, TokenType } from './nako3token.mjs'
 import { COL_START } from './nako3lexer.mjs'
+import { trimOkurigana } from './nako3util.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { getMessageWithArgs } from './nako3message.mjs'
+import { ModuleLink } from './nako3module.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3type.mjs'
+import type { RuntimeEnv } from './nako3types.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
 export const tokenModifiers = ['declaration', 'documentation', 'defaultLibrary', 'deprecated', 'readonly']
 
-export class ModuleLink {
-    uri: Uri
-    filePath: string
-    mainFilepath: string
-    imports: string[]
-    importBy: string[]
-
-    constructor (uri: Uri, mainUri: Uri) {
-        this.uri = uri
-        this.filePath = uri.fsPath
-        this.mainFilepath = mainUri?.fsPath || uri.fsPath
-        this.imports = []
-        this.importBy = []
-    }
-}
-
 type HighlightMap = {[k:string]: string | [string, string |string[]]}
 const hilightMapping: HighlightMap = {
-    NUMBER_EX: 'number',
-    NUMBER: 'number',
+    bigint: 'number',
+    number: 'number',
     COMMENT_LINE: 'comment',
     COMMENT_BLOCK: 'comment',
     STRING_EX: 'string',
-    STRING: 'string',
+    string: 'string',
     FUNCTION_DECLARE: 'keyword',
     FUNCTION_ATTRIBUTE: 'decorator',
+    FUNCTION_ATTR_SEPARATOR: 'decorator',
+    FUNCTION_ATTR_PARENTIS: 'decorator',
     FUNCTION_ARG_PARAMETER: 'parameter',
     FUNCTION_ARG_SEPARATOR: 'keyword',
     FUNCTION_ARG_PARENTIS: 'keyword',
     FUNCTION_NAME: ['function', 'declaration'],
     STRING_INJECT_START: 'keyword',
     STRING_INJECT_END: 'keyword',
-    システム定数: ['variable', ['defaultLibrary', 'readonly']],
-    システム関数: ['function', ['defaultLibrary']],
-    システム変数: ['variable', ['defaultLibrary']],
-    ユーザー関数: 'function',
-    ユーザー定数: ['variable', ['readonly']],
-    ユーザー変数: 'variable',
+    sys_const: ['variable', ['defaultLibrary', 'readonly']],
+    sys_func: ['function', ['defaultLibrary']],
+    sys_var: ['variable', ['defaultLibrary']],
+    user_func: 'function',
+    user_const: ['variable', ['readonly']],
+    user_var: 'variable',
     ここから: 'keyword',
     ここまで: 'keyword',
     もし: 'keyword',
@@ -100,18 +88,18 @@ const hilightMapping: HighlightMap = {
     取込: 'keyword',
     モジュール公開既定値: 'keyword',
     逐次実行: ['keyword', ['deprecated']],
-    SHIFT_R0: 'operator',
-    SHIFT_R: 'operator',
-    SHIFT_L: 'operator',
-    GE: 'operator',
-    LE: 'operator',
-    NE: 'operator',
-    EQ: 'operator',
-    GT: 'operator',
-    LT: 'operator',
-    NOT: 'operator',
-    AND: 'operator',
-    OR: 'operator',
+    shift_r0: 'operator',
+    shift_r: 'operator',
+    shift_l: 'operator',
+    gteq: 'operator',
+    lteq: 'operator',
+    noteq: 'operator',
+    eq: 'operator',
+    gt: 'operator',
+    lt: 'operator',
+    not: 'operator',
+    and: 'operator',
+    or: 'operator',
     '+': 'operator',
     '-': 'operator',
     '**': 'operator',
@@ -122,6 +110,8 @@ const hilightMapping: HighlightMap = {
     '%': 'operator',
     '^': 'operator',
     '&': 'operator',
+    '===': 'operator',
+    '!==': 'operator',
     ':': 'operator',
     'def_func': 'keyword',
 }
@@ -197,10 +187,13 @@ export class Nako3DocumentExt extends EventEmitter {
 
     updateText (text: string, textVersion: number|null):void {
         if (textVersion === null || textVersion !== this.textVersion) {
-            this.text = text
             this.textVersion = textVersion
-            this.validTokens = false
-            this.invalidate()
+            if (this.text !== text) {
+                console.log(`docext:text update.`)
+                this.text = text
+                this.validTokens = false
+                this.invalidate()
+            }
         }
     }
 
@@ -224,9 +217,9 @@ export class Nako3DocumentExt extends EventEmitter {
         if (!this.validTokens) {
             this.clearError()
             this.nako3doc.clearError()
+            this.isErrorClear = false
             this.nako3doc.tokenize(this.text)
             this.validTokens = true
-            this.isErrorClear = false
             logger.info('process tokenize')
         } else {
             logger.info('skip tokenize')
@@ -363,20 +356,28 @@ export class Nako3DocumentExt extends EventEmitter {
         let problemsRemain = this.problemsLimit
 
         this.nako3doc.lex.setProblemsLimit(problemsRemain)
+        logger.debug(`docext:get problems from lexer ${this.nako3doc.lex.errorInfos.count}/${problemsRemain}`)
         this.addDiagnosticsFromErrorInfos(this.nako3doc.lex.errorInfos)
         problemsRemain -= this.nako3doc.lex.errorInfos.count
 
+        this.nako3doc.parser.setProblemsLimit(problemsRemain)
+        logger.debug(`docext:get problems from parser ${this.nako3doc.parser.errorInfos.count}/${problemsRemain}`)
+        this.addDiagnosticsFromErrorInfos(this.nako3doc.parser.errorInfos)
+        problemsRemain -= this.nako3doc.parser.errorInfos.count
+
         this.nako3doc.setProblemsLimit(problemsRemain)
+        logger.debug(`docext:get problems from doc ${this.nako3doc.errorInfos.count}/${problemsRemain}`)
         this.addDiagnosticsFromErrorInfos(this.nako3doc.errorInfos)
         problemsRemain -= this.nako3doc.errorInfos.count
 
         this.setProblemsLimit(problemsRemain)
+        logger.debug(`docext:get problems from docext ${this.errorInfos.count}/${problemsRemain}`)
         this.addDiagnosticsFromErrorInfos(this.errorInfos)
 
         this.validDiagnostics = true
     }
 
-    private createDocumentSymbolFromToken (name: string|null, type: string, token:Nako3Token): DocumentSymbol {
+    private createDocumentSymbolFromToken (name: string|null, type: string, token:Token): DocumentSymbol {
         let kind:SymbolKind
         switch (type) {
         case 'function':
@@ -414,7 +415,7 @@ export class Nako3DocumentExt extends EventEmitter {
         let symbolLast:DocumentSymbol|null = null 
         for (const symbolinfo of symbols) {
             const nameTrimed = symbolinfo.name?.trim()
-            const nameNormalized = nameTrimed ? this.nako3doc.lex.trimOkurigana(nameTrimed) : null
+            const nameNormalized = nameTrimed ? trimOkurigana(nameTrimed) : null
             let type:string
             switch (symbolinfo.type) {
             case '定数':
@@ -462,7 +463,7 @@ export class Nako3DocumentExt extends EventEmitter {
         let logicIndex = 0
         let commentIndex = 0
         while (logicIndex < logicTokens.length || commentIndex < commentTokens.length) {
-            let token: Nako3Token
+            let token: Token
             if (commentIndex === commentTokens.length ||
                 (logicTokens[logicIndex].startLine < commentTokens[commentIndex].startLine) ||
                 (logicTokens[logicIndex].startLine === commentTokens[commentIndex].startLine && logicTokens[logicIndex].startCol < commentTokens[commentIndex].startCol)) {
@@ -490,7 +491,7 @@ export class Nako3DocumentExt extends EventEmitter {
                 // console.log(`${tokenType} range(${token.startLine}:${token.startCol}-${token.endLine}:${token.endCol})`)
                 let endCol = token.endCol
                 let len = token.len
-                if (token.type === 'WORD' || tokenType === 'string' || tokenType === 'number' || tokenType === 'function' || tokenType === 'variable') {
+                if (token.type === 'word' || tokenType === 'string' || tokenType === 'number' || tokenType === 'function' || tokenType === 'variable') {
                     endCol = token.resEndCol
                 }
                 // console.log(`${tokenType}[${tokenModifier}] range(${token.startLine}:${token.startCol}-${token.endLine}:${endCol})`)

@@ -1,4 +1,6 @@
-import { Nako3Token } from './nako3token.mjs'
+import { Token } from './nako3token.mjs'
+import { SourceMap } from './nako3types.mjs'
+import { Ast } from './nako3/nako_ast.mjs'
 import { MessageArgs } from './nako3message.mjs'
 
 export type MessageLevel = 'ERROR'|'WARN'|'INFO'|'HINT'
@@ -16,6 +18,7 @@ interface ErrorInfo {
 export class ErrorInfoManager {
     problemsLimit: number
     errorInfos: ErrorInfo[]
+
     constructor () {
         this.errorInfos = []
         this.problemsLimit = 100
@@ -43,7 +46,7 @@ export class ErrorInfoManager {
         }
     }
 
-    addFromToken (type: MessageLevel, messageId: string, args: MessageArgs, token: Nako3Token) {
+    addFromToken (type: MessageLevel, messageId: string, args: MessageArgs, token: Token|SourceMap|Ast) {
         this.add (type, messageId, args, token.startLine, token.startCol, token.endLine, token.endCol)
     }
 
