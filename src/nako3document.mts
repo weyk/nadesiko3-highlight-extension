@@ -31,8 +31,6 @@ export class Nako3Document extends EventEmitter {
     filename: string
     isErrorClear: boolean
     errorInfos: ErrorInfoManager
-    isIndentSemantic: boolean
-    isDefaultPrivate: boolean
     declareSymbols: SymbolInfo[]
     validDeclareSymbols: boolean
     runtimeEnv: RuntimeEnv
@@ -46,7 +44,12 @@ export class Nako3Document extends EventEmitter {
         this.moduleOption = {
             isIndentSemantic: false,
             isPrivateDefault: false,
-            isExportDefault: true
+            isExportDefault: true,
+            isDNCL: false,
+            isDNCL2: false,
+            isStrict: false,
+            isAsync: false,
+            genMode: 'sync'
         }
         this.lex = new Nako3Tokenizer(filename, this.moduleOption, link)
         this.parser = new NakoParser(filename, this.moduleOption, link)
@@ -54,8 +57,6 @@ export class Nako3Document extends EventEmitter {
         this.filename = filename
         this.errorInfos = new ErrorInfoManager()
         this.isErrorClear = true
-        this.isIndentSemantic = false
-        this.isDefaultPrivate = false
         this.declareSymbols = []
         this.validDeclareSymbols = false
         this.runtimeEnv = ''
@@ -103,7 +104,11 @@ export class Nako3Document extends EventEmitter {
         this.parser.setGlobalThings(this.lex.declareThings)
         this.parser.moduleOption = this.lex.moduleOption
         this.lex.applyFunction()
-        this.parser.parse(this.lex.tokens)
+        try {
+            this.parser.parse(this.lex.tokens)
+        } catch (err) {
+            console.error(err)
+        }
         this.isErrorClear = false
         this.invalidate()
         console.log(`doc:tokenize end`)
@@ -185,7 +190,7 @@ export class Nako3Document extends EventEmitter {
         return runtimesEnv
     }
 
-    updateImportedPlugin ():void {
+    async updateImportedPlugin ():Promise<void> {
         this.lex.pluginNames.length = 0
         this.link.imports = []
         for (const importInfo of this.lex.imports) {
@@ -204,7 +209,7 @@ export class Nako3Document extends EventEmitter {
                 if (this.lex.commands) {
                     if (!this.lex.commands.has(plugin)) {
                         this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                        this.lex.commands.importFromFile(imp, this.link, this.errorInfos)
+                        await this.lex.commands.importFromFile(imp, this.link, this.errorInfos)
                         if (!this.lex.commands.has(plugin)) {
                             this.errorInfos.add('WARN', 'noPluginInfo', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
                         }
@@ -282,8 +287,6 @@ export class Nako3Document extends EventEmitter {
     
     computeDeclareSymbols():void {
         this.declareSymbols = []
-        this.isIndentSemantic = false
-        this.isDefaultPrivate = false
         const tokens = this.lex.tokens
         const tokenCount = tokens.length
         let indent: Indent
@@ -372,17 +375,7 @@ export class Nako3Document extends EventEmitter {
                 skipToken--
                 continue
             }
-            if (false && ((token.type === '定数' || token.type === '変数') || (token.type === 'word' && (token.value === '定数' || token.value === '変数')))) {
-                console.log(`const/var semantic?:${index}`)
-                if (index > 0) {
-                    console.log(`  prev token:${tokens[index-1].type}/${tokens[index-1].value}`)
-                }
-                console.log(`  curr token:${tokens[index+0].type}/${tokens[index+0].value}`)
-                if (index < tokenCount) {
-                    console.log(`  next token:${tokens[index+1].type}/${tokens[index+1].value}`)
-                }
-            }
-            if (this.isIndentSemantic) {
+            if (this.moduleOption.isIndentSemantic) {
                 if (scopeNestLevel > 0 && currentIndentLevel <= token.indent.level) {
                     scopeNestLevel--
                     const indentInfo = indentLevelStack.pop()
@@ -394,7 +387,7 @@ export class Nako3Document extends EventEmitter {
                 }
                 if (token.type === 'ここまで') {
                     if (!wasKokomadeError) {
-                        if (this.isIndentSemantic) {
+                        if (this.moduleOption.isIndentSemantic) {
                             this.errorInfos.addFromToken('ERROR', 'kokomadeUseInIndentMode', {}, token)
                             wasKokomadeError = true
                         }
@@ -415,7 +408,6 @@ export class Nako3Document extends EventEmitter {
                         reccursive = false
                         if (canChigaeba && token.type !== '違えば') {
                             logger.log('              :can follow 違えば, but not it')
-                            // console.log('      can follow chigaeba, but not it')
                             canChigaeba = false
                             semanticPop(index)
                             if (currentNestStatement === 'もし-ならば' && hasBody) {
@@ -423,7 +415,6 @@ export class Nako3Document extends EventEmitter {
                                 logger.log('              :can follow 違えば next line')
                             }
                             reccursive=true                            
-                            // console.log(`  semantic pop :(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                         }
                     } while (reccursive)
                 }
@@ -432,7 +423,6 @@ export class Nako3Document extends EventEmitter {
                     skipToken = 1
                 } else if (kokomadePeirsStatements.includes(token.type)) {
                     semanticPush(token.type, index)
-                    // console.log(`  semantic nest:${semanticNestLevel}:${currentNestStatement}`)
                 } else if (token.type === 'ここまで') {
                     if (kokomadePeirsStatements.includes(currentNestStatement)) {
                     } else if (currentNestStatement === '関数') {
@@ -443,21 +433,17 @@ export class Nako3Document extends EventEmitter {
                     } else if (currentNestStatement === '条件分岐-ならば') {
                     } else if (currentNestStatement === '条件分岐-違えば') {
                     } else {
-                        // console.log(`      kokomade cause invalid pair:${semanticNestLevel}:${currentNestStatement}`)
                         this.errorInfos.addFromToken('ERROR', 'invalidTokenKokomade', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
                     semanticPop(index)
                     hasBody = false
                     sameLineMode = ''
                     canChigaeba = false
-                    // console.log(`  semantic pop :(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                 } else if (token.type === 'もし') {
                     if (sameLineMode === 'もし-違えば' && !hasBody) {
                         semanticChange(token.type, index)
-                       //  console.log(`  semantic cang:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                     } else {
                         semanticPush(token.type, index)
-                        // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                     }
                     sameLineMode = 'もし'
                     hasBody = false
@@ -500,36 +486,54 @@ export class Nako3Document extends EventEmitter {
                     } else {
                         this.errorInfos.addFromToken('ERROR', 'invalidTokenChigaeba', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
                     }
-                } else if (index+1 < tokenCount && token.type === 'エラー' && tokens[index+1].type === 'ならば') {
+                } else if ((index+1 < tokenCount && token.type === 'エラー' && tokens[index+1].type === 'ならば') || (token.type === 'エラーならば')) {
                     if (currentNestStatement === 'エラー監視') {
                         semanticChange('エラーならば', index)
                     } else {
                         this.errorInfos.addFromToken('ERROR', 'invalidTokenErrorNaraba', { nestLevel: semanticNestLevel, statement: currentNestStatement}, token)
+                    }
+                    if (token.type === 'エラー') {
+                        skipToken = 1
                     }
                 } else if (token.type === 'エラー監視') {
                     semanticPush(token.type, index)
                     // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                 }
             }
-            if (index+1 < tokenCount && token.type === 'not' && (token.value === '!' || token.value === '！') && tokens[index+1].type === 'インデント構文') {
-                // !インデント構文
+            if (index+2 < tokenCount && token.type === '!' && tokens[index+2].type === 'eol') {
+                // 各種モード設定構文
                 // logger.info('indent semantic on')
-                this.isIndentSemantic = true
                 skipToken = 1
             } else if (index+3 < tokenCount
-                    && token.type === 'not' && (token.value === '!' || token.value === '！')
+                    && token.type === '!'
                     && tokens[index+1].type === 'モジュール公開既定値'
                     && tokens[index+2].type === 'eq'
                     && (tokens[index+3].type === 'string' || tokens[index+3].type === 'STRING_EX')) {
                 // !モジュール公開既定値は「非公開」/「公開」
                 // logger.info(`change default publishing:${tokens[index+3].value}`)
-                this.isDefaultPrivate = tokens[index+3].value === '非公開'
                 skipToken = 3
+            } else if (token.type === 'def_func' && token.value === 'には') {
+                const symbolInfo: SymbolInfo = {
+                    name: null,
+                    type: '関数',
+                    level: scopeNestLevel,
+                    token: token
+                }
+                symbols.push(symbolInfo)
+                if (this.moduleOption.isIndentSemantic) {
+                    indentLevelStack.push({currentIndentLevel})
+                    currentIndentLevel = token.indent.level
+                    scopeNestLevel++
+                } else {
+                    semanticPush('関数', index)
+                    scopeNestLevel++
+                    // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
+                }
             } else if (token.type === 'def_func' && !(index>0 && tokens[index-1].type==='{' && index+1<tokenCount && tokens[index+1].type==='}')) {
                 if (scopeNestLevel > 0) {
                     this.errorInfos.addFromToken('ERROR', 'declareFuncMustGlobal', {}, token)
                 }
-                if (this.isIndentSemantic) {
+                if (this.moduleOption.isIndentSemantic) {
                     indentLevelStack.push({currentIndentLevel})
                     currentIndentLevel = token.indent.level
                     scopeNestLevel++
@@ -538,23 +542,6 @@ export class Nako3Document extends EventEmitter {
                     semanticPush('関数', index)
                     scopeNestLevel++
                     logger.debug(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
-                }
-            } else if (token.type === 'には') {
-                const symbolInfo: SymbolInfo = {
-                    name: null,
-                    type: '関数',
-                    level: scopeNestLevel,
-                    token: token
-                }
-                symbols.push(symbolInfo)
-                if (this.isIndentSemantic) {
-                    indentLevelStack.push({currentIndentLevel})
-                    currentIndentLevel = token.indent.level
-                    scopeNestLevel++
-                } else {
-                    semanticPush('関数', index)
-                    scopeNestLevel++
-                    // console.log(`  semantic nest:(${token.startLine},${token.startCol})${semanticNestLevel}:${currentNestStatement}`)
                 }
             } else if (token.type === 'FUNCTION_NAME') {
                 const symbolInfo: SymbolInfo = {

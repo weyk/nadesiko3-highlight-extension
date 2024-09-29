@@ -7,11 +7,12 @@ import { ModuleLink } from './nako3module.mjs'
 import { logger } from './logger.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3TokenTypePlugin } from './nako3token.mjs'
+import { argsFromString } from './nako3util.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 
-import commandjson from './nako3/command.json'
+import type { DeclareFunction, DeclareVariable,  DeclareThings } from './nako3types.mjs'
 
-import type { RuntimeEnv } from './nako3types.mjs'
+import commandjson from './nako3/command.json'
 
 type CmdSectionEntry = [string, string, string, string, string]
 type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
@@ -92,7 +93,7 @@ interface FileContent {
     text: string
 }
 export class Nako3Command {
-    commands: Map<string, CommandEntry>
+    commands: Map<string, DeclareThings>
 
     constructor () {
         this.commands = new Map()
@@ -104,7 +105,7 @@ export class Nako3Command {
         this.importCommandJson(commandSnakoJson as unknown as CmdJsonEntry)
         for (const runtime of ['snako','cnako','wnako']) {
             const plugins = runtimePlugins[runtime]
-            const entry = new Map()
+            const entry: DeclareThings  = new Map()
             for (const pluginName of plugins) {
                 const commandEntry = this.commands.get(pluginName)
                 if (commandEntry) {
@@ -128,31 +129,45 @@ export class Nako3Command {
                     const command = entry[1]
                     const args = entry[2]
                     const hint = entry[3]
-                    let type:Nako3TokenTypePlugin
-                    if (rawType === '定数') {
-                        type = 'sys_const'
-                    } else if (rawType === '関数') {
-                        type = 'sys_func'
-                    } else if (rawType === '変数') {
-                        type = 'sys_var'
-                    } else {
-                        type = '?'
-                    }
-                    const commandInfo: CommandInfo = {
-                        pluginName,
-                        command,
-                        args,
-                        hint,
-                        type
-                    }
-                    let commandEntry: CommandEntry
+                    let type:'func'|'var'|'const'
+                    let commandEntry: DeclareThings
                     if (this.commands.has(pluginName)) {
                         commandEntry = this.commands.get(pluginName)!
                     } else {
                         commandEntry = new Map()
                         this.commands.set(pluginName, commandEntry)
                     }
-                    commandEntry.set(command, commandInfo)
+                    if (rawType === '関数') {
+                        const func: DeclareFunction = {
+                            name: command,
+                            nameNormalized: command,
+                            modName: '',
+                            type: 'func',
+                            isPure: true,
+                            isMumei: false,
+                            isAsync: false,
+                            isExport: true,
+                            isPrivate: false,
+                            isVariableJosi: false,
+                            hint,
+                            args: argsFromString(args)
+                        }
+                        commandEntry.set(command, func)
+                    } else if (rawType === '定数' || rawType === '変数') {
+                        type = rawType === '定数' ? 'const' : 'var'
+                        const varConst: DeclareVariable = {
+                            name: command,
+                            nameNormalized: command,
+                            modName: '',
+                            type,
+                            isExport: true,
+                            isPrivate: false,
+                            hint
+                        }
+                        commandEntry.set(command, varConst)
+                    } else {
+                        logger.error(`nako3command: unknwon type(${rawType}) in ${plugin}`)
+                    }
                 }
             }
         }
@@ -363,7 +378,7 @@ export class Nako3Command {
         return this.commands.has(plugin)
     }
 
-    get (plugin: string): CommandEntry|undefined {
+    get (plugin: string): DeclareThings|undefined {
         return this.commands.get(plugin)
     }
 }

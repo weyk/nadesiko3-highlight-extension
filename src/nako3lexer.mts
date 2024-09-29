@@ -1,14 +1,14 @@
 import reservedWords from './nako3/nako_reserved_words.mjs'
 // 助詞の一覧
 import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
-import { Token, Indent, TokenDefFunc, TokenCallFunc, TokenType, TokenGroup } from './nako3token.mjs'
+import { Token, Indent, TokenDefFunc, TokenCallFunc, TokenRefVar, TokenType, Nako3TokenTypePlugin } from './nako3token.mjs'
 import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs, reservedGroup} from './nako3lexer_rule.mjs'
-import { trimOkurigana, filenameToModName } from './nako3util.mjs'
+import { trimOkurigana, filenameToModName, convert } from './nako3util.mjs'
 import { ModuleLink  } from './nako3module.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3Command, CommandInfo } from './nako3command.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv,  DeclareThings, ModuleOption, DeclareThing, DeclareFunction, FunctionArg } from './nako3types.mjs'
+import type { RuntimeEnv,  DeclareThings, ModuleOption, DeclareThing, DeclareFunction, FunctionArg, DeclareVariable } from './nako3types.mjs'
 
 interface ImportInfo {
     value: string
@@ -176,7 +176,11 @@ export class Nako3Tokenizer {
                             token.len = r[0].length
                         }
                         token.resEndCol = this.col + token.len
-                        token.value = text.substring(0, token.len)
+                        if (rule.value) {
+                            token.value = rule.value
+                        } else {
+                            token.value = text.substring(0, token.len)
+                        }
                         text = text.substring(token.len)
                         if (rule.withUnit) {
                             const r = lexRulesRE.unit.exec(text)
@@ -239,7 +243,7 @@ export class Nako3Tokenizer {
                 text = text.substring(len)
             }
 
-            if (token.type === 'eol') {
+            if (token.type === 'eol' && token.value === '\n') {
                 this.lengthLines.push(this.col)
                 this.line++
                 this.col = COL_START
@@ -611,7 +615,7 @@ export class Nako3Tokenizer {
                 line = line.substring(1)
             }
         }
-        let res = text.substring(0, resLen)
+        let res = convert(text.substring(0, resLen))
         // --- 単語分割における特殊ルール ---
         // 「間」の特殊ルール (#831)
         // 「等しい間」や「一致する間」なら「間」をsrcに戻す。ただし「システム時間」はそのままにする。
@@ -678,7 +682,7 @@ export class Nako3Tokenizer {
         this.moduleOption.isExportDefault = false
         this.runtimeEnv = ''
         this.imports = []
-        this.declareThings = new Map()
+        this.declareThings.clear()
         let token:Token
         let rawToken:Token|null = null
         let reenterToken:Token[] = []
@@ -686,6 +690,40 @@ export class Nako3Tokenizer {
         const preprocessIndex: number[] = []
         let topOfLine = true
         let isLine0Col0 = true
+        let delayedToken: Token|null = null
+        const pushToken = (token: Token) => {
+            let type = token.type
+            if ((type === 'def_func' || type === '*') && token.startCol === 0 && token.josi === '') {
+                functionIndex.push(this.tokens.length)
+                if (type === '*') {
+                    logger.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
+                }
+            } else if (type === 'には') {
+                functionIndex.push(this.tokens.length)
+            }
+            if (type === 'COMMENT_LINE' || type === 'COMMENT_BLOCK' || type === '_eol') {
+                if (isLine0Col0 && type === 'COMMENT_LINE') {
+                    if (this.useShebang && token.text.startsWith('#!')) {
+                        if (token.text.includes('snako')) {
+                            this.runtimeEnv = 'snako'
+                        } else if (token.text.includes('cnako')) {
+                            this.runtimeEnv = 'cnako'
+                        }
+                    }
+                }
+                this.commentTokens.push(token)
+            } else {
+                if (type === 'eol') {
+                    topOfLine = true
+                } else {
+                    if (topOfLine && type === 'not') {
+                        preprocessIndex.push(this.tokens.length)
+                    }
+                    topOfLine = false
+                }
+                this.tokens.push(token)
+            }
+        }
         for (let i = 0; i < this.rawTokens.length;) {
             if (reenterToken.length > 0) {
                 rawToken = reenterToken.shift()!
@@ -825,40 +863,74 @@ export class Nako3Tokenizer {
                 requirePush = false
             }
             if (requirePush) { 
-                if ((type === 'def_func' || type === '*') && rawToken.startCol === 0 && rawToken.josi === '') {
-                    functionIndex.push(this.tokens.length)
-                    if (type === '*') {
-                        logger.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
-                    }
-                } else if (type === 'には') {
-                    functionIndex.push(this.tokens.length)
-                }
                 token.type = type
-                if (type === 'COMMENT_LINE' || type === 'COMMENT_BLOCK') {
-                    if (isLine0Col0 && type === 'COMMENT_LINE') {
-                        if (this.useShebang && token.text.startsWith('#!')) {
-                            if (token.text.includes('snako')) {
-                                this.runtimeEnv = 'snako'
-                            } else if (token.text.includes('cnako')) {
-                                this.runtimeEnv = 'cnako'
-                            }
-                        }
-                    }
-                    this.commentTokens.push(token)
+                if (delayedToken === null) {
+                    delayedToken = token
                 } else {
-                    if (token.type === 'eol') {
-                        topOfLine = true
-                    } else {
-                        if (topOfLine && token.type === 'not') {
-                            preprocessIndex.push(this.tokens.length)
-                        }
-                        topOfLine = false
+                    if (delayedToken.type === 'word' && delayedToken.value === '_' && delayedToken.josi === '' && token.type === 'eol') {
+                        token.startLine = delayedToken.startLine
+                        token.startCol = delayedToken.startCol
+                        token.len = token.endCol - delayedToken.startCol
+                        token.text = '_\n'
+                        token.value = '_\n'
+                        token.type = '_eol'
+                        delayedToken = null
+                    } else if (delayedToken.type === 'エラー' && token.type === 'ならば' && delayedToken.josi === '' && delayedToken.endCol === token.startCol) {
+                        token.startLine = delayedToken.startLine
+                        token.startCol = delayedToken.startCol
+                        token.len = token.endCol - delayedToken.startCol
+                        token.text = 'エラーならば'
+                        token.value = 'エラーならば'
+                        token.type = 'エラーならば'
+                        delayedToken = null
                     }
-                    this.tokens.push(token)
+                    if (delayedToken) {
+                        pushToken(delayedToken)
+                    }
+                    delayedToken = token
                 }
                 isLine0Col0 = false
             }
         }
+        if (delayedToken) {
+            pushToken(delayedToken)
+        }
+
+        const lastToken = this.tokens[this.tokens.length - 1]
+        this.tokens.push({
+            type: 'eol',
+            group: '区切',
+            len: 0,
+            lineCount: 0,
+            startLine: lastToken.endLine,
+            startCol: lastToken.endCol,
+            endLine: lastToken.endLine,
+            endCol: lastToken.endCol,
+            resEndCol: lastToken.endCol,
+            text: '---',
+            value: ';',
+            unit: '',
+            josi: '',
+            indent: { len: 0, level: 0, text: '' },
+            file: lastToken.file
+        })
+        this.tokens.push({
+            type: 'eof',
+            group: '区切',
+            len: 0,
+            lineCount: 0,
+            startLine: lastToken.endLine,
+            startCol: lastToken.endCol,
+            endLine: lastToken.endLine,
+            endCol: lastToken.endCol,
+            resEndCol: lastToken.endCol,
+            text: '',
+            value: '',
+            unit: '',
+            josi: '',
+            indent: { len: 0, level: 0, text: '' },
+            file: lastToken.file
+        })
         this.preprocess(preprocessIndex)
         this.enumlateFunction(functionIndex)
     }
@@ -871,21 +943,49 @@ export class Nako3Tokenizer {
             let hit = false
             let causeError = false
             let i = index
+            let targetToken: Token|null = null
+            let targetType: TokenType = '?'
             token = tokens[i]
             if (!(token.type === 'not' && (token.value === '!' || token.value === '！'))) {
                 logger.log(`internal error: invalid token, expected 'NOT' token`)                
             }
             i++
             token = tokens[i]
-            if (token.type === 'STRING_EX') {
-                this.errorInfos.addFromToken('ERROR', `cannotUseTemplateString`, {}, token)
-                causeError = true
+            if (token.type === 'word' && trimOkurigana(token.value) === '厳チェック') {
+                this.moduleOption.isStrict = true
+                targetToken = token
+                targetType = '厳チェック'
+                logger.info('strict on')
                 hit = true
-            } else if (token.type === 'インデント構文' || (token.type === 'word' && token.value === 'インデント構文')) {
+            } else if (token.type === 'word' && token.value === '非同期モード') {
+                this.moduleOption.isAsync = true
+                targetToken = token
+                targetType = '非同期モード'
+                logger.info('async mode on')
+                logger.log('『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)。', token)
+                this.errorInfos.addFromToken('WARN', 'deprecatedAsync', {}, token)
+                hit = true
+            } else if (token.type === 'word' && token.value === 'DNCLモード') {
+                this.moduleOption.isDNCL = true
+                targetToken = token
+                targetType = 'DNCLモード'
+                logger.info('DNCL1 mode on')
+                hit = true
+            } else if (token.type === 'word' && token.value === 'DNCL2モード') {
+                this.moduleOption.isDNCL2 = true
+                targetToken = token
+                targetType = 'DNCL2モード'
+                logger.info('DNCL2 mode on')
+                hit = true
+            } else if (token.type === 'word' && token.value === 'インデント構文') {
                 this.moduleOption.isIndentSemantic = true
+                targetToken = token
+                targetType = 'インデント構文'
                 logger.info('indent semantic on')
                 hit = true
-            } else if (token.type === 'モジュール公開既定値' || (token.type === 'word' && token.value === 'モジュール公開既定値')) {
+            } else if (token.type === 'word' && token.value === 'モジュール公開既定値') {
+                targetToken = token
+                targetType = 'モジュール公開既定値'
                 i++
                 token = tokens[i]
                 if (token.type === 'eq') {
@@ -907,7 +1007,10 @@ export class Nako3Tokenizer {
                     causeError = true
                 }
                 hit = true
-            } else if (i+1 < tokenCount && token.type === 'string' && token.josi === 'を' && (tokens[i+1].type === '取込' || (tokens[i+1].type === 'word' && trimOkurigana(tokens[i+1].value) === '取込'))) {
+            } else if (i+1 < tokenCount && token.type === 'string' && token.josi === 'を' && tokens[i+1].type === 'word' && trimOkurigana(tokens[i+1].value) === '取込') {
+                targetToken = token
+                targetType = '取込'
+                logger.info('import file')
                 const importInfo: ImportInfo = {
                     value: token.value,
                     tokenIndex: i,
@@ -920,11 +1023,17 @@ export class Nako3Tokenizer {
                 i += 1
                 hit = true
             }
-            if (hit && !causeError) {
-                i++
-                token = tokens[i]
-                if (!(token.type === 'eol')) {
-                    this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'EOL', type: token.type, value: token.value }, token)
+            if (hit) {
+                tokens[index].type = '!'
+                if (targetToken) {
+                    targetToken.type = targetType
+                }
+                if (!causeError) {
+                    i++
+                    token = tokens[i]
+                    if (!(token.type === 'eol')) {
+                        this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'EOL', type: token.type, value: token.value }, token)
+                    }
                 }
             }
         }
@@ -990,6 +1099,12 @@ export class Nako3Tokenizer {
                         token = this.tokens[j]
                     }
                     if (token.type === ',' || token.type === '|') {
+                        token.type = 'FUNCTION_ARG_SEPARATOR'
+                        j++
+                        token = this.tokens[j]
+                    }
+                    if (token.type === ')') {
+                        token.type = 'FUNCTION_ARG_PARENTIS_END'
                         j++
                         token = this.tokens[j]
                     }
@@ -997,6 +1112,10 @@ export class Nako3Tokenizer {
                         this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
                         break
                     }
+                }
+                if (j !== i + 1) {
+                    token = this.tokens[j]
+                    this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
                 }
                 i++
             } else {
@@ -1009,12 +1128,16 @@ export class Nako3Tokenizer {
             let i = index
             let isMumei = false
             let isPrivate = this.moduleOption.isPrivateDefault
+            let isExport = this.moduleOption.isExportDefault
+            args = new Map<string, FunctionArg>()
+            argOrder = []
             token = this.tokens[i]
             if (token.type === '*') {
                 token.type = 'def_func'
             }
             if (token.type === 'には') {
                 isMumei = true
+                token.type = 'def_func'
             }
             i++
             token = this.tokens[i]
@@ -1032,6 +1155,10 @@ export class Nako3Tokenizer {
                         token.type = 'FUNCTION_ATTRIBUTE'
                         if (token.value === '非公開') {
                             isPrivate = true
+                            isExport = false
+                        } else if (token.value === '公開') {
+                            isExport = true
+                            isPrivate = false
                         }
                     }
                     i++
@@ -1073,11 +1200,11 @@ export class Nako3Tokenizer {
                 const arg = args.get(orderKey)!
                 orderedArgs.push(arg)
             }
-            this.addUserFunction(funcName, orderedArgs, isPrivate, funcNameIndex, index)
+            this.addUserFunction(funcName, orderedArgs, isExport, isPrivate, isMumei, funcNameIndex, index)
         }
     }
 
-    addUserFunction (name: string, args: FunctionArg[], isPrivate: boolean, index: number, defTokenIndex: number):void {
+    addUserFunction (name: string, args: FunctionArg[], isExport: boolean, isPrivate: boolean, isMumei: boolean, index: number, defTokenIndex: number):void {
         const nameTrimed = name.trim()
         const nameNormalized = trimOkurigana(nameTrimed)
         const declFunction: DeclareFunction = {
@@ -1085,12 +1212,13 @@ export class Nako3Tokenizer {
             nameNormalized: nameNormalized,
             modName: this.modName,
             type: 'func',
+            isMumei,
             args: args,
             isPure: true,
             isAsync: false,
             isVariableJosi: false,
-            isExport: this.moduleOption.isExportDefault,
-            isPrivate: this.moduleOption.isPrivateDefault
+            isExport,
+            isPrivate
         }
         if (nameTrimed.length > 0) {
             this.declareThings.set(nameNormalized, declFunction)
@@ -1138,14 +1266,23 @@ export class Nako3Tokenizer {
             if (type === 'word' && this.commands) {
                 const commandInfo = this.getCommandInfo(v)
                 if (commandInfo) {
-                    type = commandInfo.type
+                    if (commandInfo.type === 'func') {
+                        (token as TokenCallFunc).meta = commandInfo as DeclareFunction
+                        type = 'sys_func'
+                    } else if (commandInfo.type === 'var') {
+                        (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                        type = 'sys_var'
+                    } else {
+                        (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                        type = 'sys_const'
+                    }
                     token.type = type
                 }
             }
         }
     }
 
-    getCommandInfo (command: string): CommandInfo|null {
+    getCommandInfo (command: string): DeclareThing|null {
         const tv = trimOkurigana(command)
         for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
             const commandEntry = this.commands!.get(key)

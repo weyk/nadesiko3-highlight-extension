@@ -20,11 +20,12 @@ import { Token, TokenType } from './nako3token.mjs'
 import { COL_START } from './nako3lexer.mjs'
 import { trimOkurigana } from './nako3util.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
-import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { ErrorInfoManager, ErrorInfoID, ErrorInfoRaw } from './nako3errorinfo.mjs'
 import { getMessageWithArgs } from './nako3message.mjs'
 import { ModuleLink } from './nako3module.mjs'
+import { argsToString } from './nako3util.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3types.mjs'
+import type { RuntimeEnv, DeclareFunction } from './nako3types.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
 export const tokenModifiers = ['declaration', 'documentation', 'defaultLibrary', 'deprecated', 'readonly']
@@ -82,12 +83,15 @@ const hilightMapping: HighlightMap = {
     定数: 'type',
     エラー監視: 'keyword',
     エラー: 'keyword',
+    エラーならば: 'keyword',
     インデント構文: 'keyword',
     DNCLモード: 'keyword',
+    DNCL2モード: 'keyword',
     モード設定: 'keyword',
     取込: 'keyword',
     モジュール公開既定値: 'keyword',
     逐次実行: ['keyword', ['deprecated']],
+    厳チェック: 'keyword',
     shift_r0: 'operator',
     shift_r: 'operator',
     shift_l: 'operator',
@@ -114,6 +118,8 @@ const hilightMapping: HighlightMap = {
     '!==': 'operator',
     ':': 'operator',
     'def_func': 'keyword',
+    '_eol': 'keyword',
+    '!': 'keyword'
 }
 
 export const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
@@ -268,7 +274,7 @@ export class Nako3DocumentExt extends EventEmitter {
         const line = position.line
         const col = position.character
         const token = this.nako3doc.getTokenByPosition(line, col)
-        if (token !== null && ['システム関数','システム変数','システム定数'].includes(token.type)) {
+        if (token !== null && ['sys_func','sys_var','sys_const'].includes(token.type)) {
             const commandInfo = this.nako3doc.lex.getCommandInfo(token.value)
             if (!commandInfo) {
                 return null
@@ -288,16 +294,19 @@ export class Nako3DocumentExt extends EventEmitter {
                 range = new Range(startPos, endPos)
             }
             let cmd:string
-            if (['システム変数','システム定数'].includes(token.type)) {
-                cmd = `${token.type.slice(-2)} ${commandInfo.command}`
+            if (token.type === 'sys_var') {
+                cmd = `変数 ${commandInfo.name}`
+            } else if (token.type === 'sys_const') {
+                cmd = `定数 ${commandInfo.name}`
             } else {
-                if (commandInfo.args.length > 0) {
-                    cmd = `命令 (${commandInfo.args})${commandInfo.command}`
+                const declfunc = commandInfo as DeclareFunction
+                if (declfunc.args && declfunc.args.length > 0) {
+                    cmd = `命令 (${argsToString(declfunc.args)})${commandInfo.name}`
                 } else {
-                    cmd = `命令 ${commandInfo.command}`
+                    cmd = `命令 ${commandInfo.name}`
                 }
             }
-            return new Hover([cmd, commandInfo.hint], range)
+            return new Hover([cmd, commandInfo.hint || ''], range)
         }
         return null
     }
@@ -323,12 +332,21 @@ export class Nako3DocumentExt extends EventEmitter {
     }
 
     private addDiagnosticsFromErrorInfos (errorInfos: ErrorInfoManager) {
+        logger.log(`docext:addDiagnostics:start`)
         for (const errorInfo of errorInfos.getAll()) {
-            const messageId = errorInfo.messageId
+            logger.log(`docext:addDiagnostics:error message`)
             const startPos = new Position(errorInfo.startLine, errorInfo.startCol)
             const endPos = new Position(errorInfo.endLine, errorInfo.endCol)
             const range = new Range(startPos, endPos)
-            const message = getMessageWithArgs(messageId, errorInfo.args)
+            let message:string
+            console.log(errorInfo)
+            if (errorInfo.hasOwnProperty('messageId')) {
+                logger.log(`docext:addDiagnostics:get message by ID`)
+                message = getMessageWithArgs((errorInfo as ErrorInfoID).messageId, (errorInfo as ErrorInfoID).args)
+            } else {
+                logger.log(`docext:addDiagnostics:get message by argumenttID`)
+                message = (errorInfo as ErrorInfoRaw).message
+            }
             let kind:DiagnosticSeverity
             switch (errorInfo.type) {
             case 'ERROR':
@@ -346,6 +364,8 @@ export class Nako3DocumentExt extends EventEmitter {
             default:
                 kind = DiagnosticSeverity.Information
             }
+            logger.log(`docext:addDiagnostics:push array`)
+            logger.log(`docext:addDiagnostics:${kind.toString()}:${range.start.line}:${range.start.character}-${range.end.line}:${range.end.character}:${message}`)
             this.diagnostics.push(new Diagnostic(range, message, kind))
         }
     }

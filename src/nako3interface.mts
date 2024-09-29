@@ -204,6 +204,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     getDiagnostics (document?: TextDocument|Uri): DiagnosticCollection {
+        logger.log(`interface:getDiagnostics:start`)
         this.diagnosticsCollection.clear()
         if (document) {
             const doc = this.get(document)
@@ -214,6 +215,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         for (const [ , doc] of this.docs) {
             this.diagnosticsCollection.set(doc.uri, doc.getDiagnostics())
         }
+        logger.log(`interface:getDiagnostics:create diagnostic collection`)
         return this.diagnosticsCollection
     }
 }

@@ -53,6 +53,19 @@ export class Nako3HoverProvider implements vscode.HoverProvider {
     }
 }
 
+export class Nako3CodeActionProvider implements vscode.CodeActionProvider {
+	public static readonly providedCodeActionKinds = [
+		vscode.CodeActionKind.QuickFix
+	]
+
+    provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection, context: vscode.CodeActionContext, token: vscode.CancellationToken): Promise<(vscode.CodeAction | vscode.Command)[]> {
+        throw new Error('Method not implemented.')
+    }
+    resolveCodeAction?(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
+        throw new Error('Method not implemented.')
+    }
+
+}
 async function getRimtimeEnvFromFile (uri: vscode.Uri): Promise<RuntimeEnv> {
     let runtime: RuntimeEnv = ''
     try {
@@ -140,7 +153,7 @@ function configurationInitialize() {
             level = 'LOG'
         } else if (traceLevel === 'debug') {
             level = 'DEBUG'
-        } else if (traceLevel === 'vervose') {
+        } else if (traceLevel === 'verbose') {
             level = 'INFO'
         } else if (traceLevel === 'messages') {
             level = 'ERROR'
@@ -304,7 +317,7 @@ export function activate(context: vscode.ExtensionContext):void {
                     level = 'LOG'
                 } else if (traceLevel === 'debug') {
                     level = 'DEBUG'
-                } else if (traceLevel === 'vervose') {
+                } else if (traceLevel === 'verbose') {
                     level = 'INFO'
                 } else if (traceLevel === 'messages') {
                     level = 'ERROR'

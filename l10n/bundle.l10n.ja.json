@@ -6,6 +6,7 @@
     "stringInStringStartChar": "文字列の中に文字列を開始するための文字が含まれています({startTag})",
     "unclosedPlaceHolder": "展開のある文字列に閉じられてない波カッコがあります",
     "unclosedString": "閉じられてない文字列があります",
+    "deprecatedAsync": "『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)",
     "mustThenFollowIf": "「もし」と同じ行に「ならば」「でなければ」が必要です",
     "kokomadeUseInIndentMode": "インデント構文が有効の場合には「ここまで」は使用できません",
     "invalidTokenKokomade": "無効な位置に「ここまで」があります。命令が対応していません:{nestLevel}:{statement}",
@@ -29,10 +30,23 @@
     "unknwonCWD": "作業ディレクトリが決定できません。先にファイルを保存してディレクトリを決定してください",
     "cannnotDeleteFile": "一時ファイルの削除に失敗しました({error}:{file})",
     "conflictRuntimeEnv": "取り込んでいるpluginどうしの実行環境に矛盾があります",
+    "errorParse": "構文解析でエラー。{nodestr}の使い方が間違っています。",
+    "failParse": "構文解析に失敗:{nodestr}",
     "invalidLet": "{nodestr}への代入文で計算式に書き間違いがあります",
     "invalidLetWithMessage": "{nodestr}への代入文で計算式に以下の書き間違いがあります。\n{msg}",
     "noRightOperand": "計算式で演算子『{op}』後に値がありません",
     "notfondOneWordFunc": "一語関数『{funcName}』は存在しません",
     "noParamForOneWordFunc": "関数『${funcName}』で引数が指定されていません。${paramCount}個の引数を指定してください。",
-    "ErrorInDeclareFunction": "呼び出そうとした関数の定義にエラーがあります(meta is null?:{metaIsNull})"
+    "ErrorInDeclareFunction": "呼び出そうとした関数{name}の定義にエラーがあります(meta is null?:{metaIsNull})",
+    "noKokomadeAtTry": "『ここまで』がありません。『エラー監視』...『エラーならば』...『ここまで』を対応させてください。",
+    "noKokomadeAtForLoop": "『ここまで』がありません。『回』...『ここまで』を対応させてください。",
+    "noKokomadeAtForOf": "『ここまで』がありません。『反復』...『ここまで』を対応させてください。",
+    "noKokomadeAtLoop": "『ここまで』がありません。『繰り返す』...『ここまで』を対応させてください。",
+    "noKokomadeAtWhile": "『ここまで』がありません。『間』...『ここまで』を対応させてください。",
+    "unusedWordInLineWithSuggest": "未解決の単語があります: [{desc}]\n次の命令の可能性があります:\n{descFunc}",
+    "remainStack": "不完全な文です。{nodestrs}が解決していません。",
+    "usedBy": "{d0}は{d1}として使われています。",
+    "errorInFuncdef": "{nodestr}の宣言でエラー。",
+    "exceptionInFuncDef": "{nodestr}の定義で以下のエラーがありました。\n{msg}"
+
 }

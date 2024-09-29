@@ -1,4 +1,4 @@
-import { DeclareFunction } from './nako3types.mjs'
+import { DeclareFunction, DeclareVariable } from './nako3types.mjs'
 
 export type Nako3TokenRawType = '?'
 | 'ここまで'
@@ -57,7 +57,8 @@ export type Nako3TokenRawType = '?'
 | ','
 | 'word'
 
-export type Nako3TokenTypeReserve = '回'
+export type Nako3TokenTypeReserve = 'もし'
+  | '回'
   | '間'
   | '繰返'
   | '増繰返'
@@ -84,15 +85,20 @@ export type Nako3TokenTypeReserve = '回'
   | 'インデント構文'
   | '非同期モード'
   | 'DNCLモード'
+  | 'DNCL2モード'
   | 'モード設定'
   | '取込'
   | 'モジュール公開既定値'
   | 'def_func'
+  | '厳チェック'
   | 'word'
 
-export type Nako3TokenTypeFix = 'には'
+export type Nako3TokenTypeFix = '!'
+  | 'には'
   | 'とは'
   | 'ならば'
+  | 'エラーならば'
+  | '_eol'
   | 'FUNCTION_NAME'
   | 'FUNCTION_ATTRIBUTE'
   | 'FUNCTION_ATTR_PARENTIS_START'
@@ -169,6 +175,10 @@ export interface TokenDefFunc extends Token {
 
 export interface TokenCallFunc extends Token {
   meta: DeclareFunction
+}
+
+export interface TokenRefVar extends Token {
+  meta: DeclareVariable
 }
 
 export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent = -1, startLine = 0, file = 'main.nako3'): Token {

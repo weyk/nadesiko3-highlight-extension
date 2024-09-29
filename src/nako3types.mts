@@ -10,22 +10,25 @@ export interface DeclareFunction {
   name: string
   nameNormalized: string
   modName: string
-  type: string
+  type: 'func'
   args?: FunctionArg[]
+  isMumei: boolean
   isPure: boolean
   isAsync: boolean
   isVariableJosi: boolean
   isExport: boolean
   isPrivate: boolean
+  hint?: string
 }
 
 export interface DeclareVariable {
   name: string
   nameNormalized: string
   modName: string
-  type: string
+  type: 'var'|'const'
   isExport: boolean
   isPrivate: boolean
+  hint?: string
 }
 
 export interface LocalVariable {
@@ -45,6 +48,11 @@ export interface ModuleOption {
   isIndentSemantic: boolean
   isPrivateDefault: boolean
   isExportDefault: boolean
+  isDNCL: boolean
+  isDNCL2: boolean
+  isAsync: boolean // deprecated
+  genMode: string
+  isStrict: boolean
 }
 
 export interface SourceMap {

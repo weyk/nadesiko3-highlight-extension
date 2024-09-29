@@ -8,6 +8,7 @@ export const messages = new Map<string,string>([
     ['stringInStringStartChar', 'string start character in same string({startTag})'],
     ['unclosedPlaceHolder', 'unclose wave parentis in template string'],
     ['unclosedString', 'unclose string'],
+    ['deprecatedAsync', 'deplacated:"非同期モード"'],
     // in nako3document
     ['mustThenFollowIf', 'moshi must follow naraba same line'],
     ['kokomadeUseInIndentMode', 'cannot use kokomade in indent semantic mode'],
@@ -34,12 +35,22 @@ export const messages = new Map<string,string>([
     ['cannnotDeleteFile', 'Processfile cannot be deleted ({error}:{file})'],
     ['conflictRuntimeEnv', 'Conflict runtime depend imported plugin'],
     // parser
+    ['errorParse', 'Invalid token at parser:{nodeset}'],
+    ['failParse', 'Parse filed:{nodestr}'],
     ['invalidLet', 'Invalid in let statement:{nodestr}'],
     ['invalidLetWithMessage', 'Invalid in let statement:{nodestr}\n{msg}'],
     ['noRightOperand', 'No value of operator("{op}") right'],
     ['notfondOneWordFunc', 'Not found one word function "{funcName}"'],
     ['noParamForOneWordFunc', 'Not enough parameter for one word function "{funcName}", reuire {paramCount}'],
-    ['ErrorInDeclareFunction', 'Error in declare function by called(meta:{MetaIsNull})']
+    ['ErrorInDeclareFunction', 'Error in declare function({name}) by called(meta:{MetaIsNull})'],
+    ['noKokomadeAtTry', 'Require "ここまで" for "エラー監視" statement'],
+    ['noKokomadeAtForLoop', 'Require "ここまで" for "回" statement'],
+    ['noKokomadeAtForOf', 'Require "ここまで" for "反復" statement'],
+    ['noKokomadeAtLoop', 'Require "ここまで" for "繰り返す" statement'],
+    ['noKokomadeAtWhile', 'Require "ここまで" for "間" statement'],
+    ['unusedWordInLineWithSuggest', 'Unused word("{desc}") in line.\n, suggest:{descFunc}'],
+    ['remainStack', ''],
+    ['usedBy', '']
 ])
 
 export type MessageArgs = Record<string, string|number>

@@ -22,7 +22,7 @@ class Logger {
         if (this.level > 0 && this.level <= 1) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>1):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>1):log:dropped(${message})`)
         }
     }
 
@@ -30,7 +30,7 @@ class Logger {
         if (this.level > 0 && this.level <= 2) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>2):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>2):log:dropped(${message})`)
         }
     }
 
@@ -38,7 +38,7 @@ class Logger {
         if (this.level > 0 && this.level <= 3) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>3):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>3):log:dropped(${message})`)
         }
     }
 
@@ -46,7 +46,7 @@ class Logger {
         if (this.level > 0 && this.level <= 4) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>4):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>4):log:dropped(${message})`)
         }
     }
 
@@ -54,7 +54,7 @@ class Logger {
         if (this.level > 0 && this.level <= 5) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>5):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>5):log:dropped(${message})`)
         }
     }
 
@@ -62,7 +62,7 @@ class Logger {
         if (this.level > 0 && this.level <= 6) {
             console.log(message)
         } else {
-            console.log(`logger(${this.level||"NONE"}>6):log:dropped(${message})`)
+            // console.log(`logger(${this.level||"NONE"}>6):log:dropped(${message})`)
         }
     }
 }

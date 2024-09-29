@@ -238,6 +238,7 @@ export class NakoParserBase {
    * カーソル位置にある単語の型を確かめる
    */
   check (ttype: string): boolean {
+    logger.log(`parserbase:check:${ttype} valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
     return (this.tokens[this.index].type === ttype)
   }
 
@@ -265,7 +266,7 @@ export class NakoParserBase {
    */
   checkTypes (a: TokenType[]): boolean {
     const type = this.tokens[this.index].type
-logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('","')}"`)
+    // logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('","')}"`)
     return (a.indexOf(type) >= 0)
   }
 
@@ -274,15 +275,19 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
    * 型にマッチしなければ false を返し、カーソルを巻き戻す
    */
   accept (types: any[]): boolean {
+    logger.log('parserbase:accept:start')
     const y = []
     const tmpIndex = this.index
     const rollback = () => {
       this.index = tmpIndex
+      logger.log('parserbase:accept:end rollback')
       return false
     }
     for (let i = 0; i < types.length; i++) {
+      logger.log(`parserbase:accept:varify(${i})`)
       if (this.isEOF()) { return rollback() }
       const type = types[i]
+      logger.log(`parserbase:accept:check type(${i}):${typeof type}`)
       if (type == null) { return rollback() }
       if (typeof type === 'string') {
         const token = this.get()
@@ -302,6 +307,7 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
         y[i] = this.get()
         continue
       }
+      logger.error('System Error : accept broken : ' + typeof type)
       throw new Error('System Error : accept broken : ' + typeof type)
     }
     this.y = y
@@ -312,6 +318,7 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
    * カーソル語句を取得して、カーソルを後ろに移動する
    */
   get (): Token | null {
+    logger.log(`parserbase:get:${this.index}:valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
     if (this.isEOF()) { return null }
     return this.tokens[this.index++]
   }
@@ -381,7 +388,7 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
     return { name: 'それ', type: 'var', value: '' }
   }
 
-  getCommandInfo (command: string): CommandInfo|null {
+  getCommandInfo (command: string): DeclareThing|null {
     const tv = trimOkurigana(command)
     for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
         const commandEntry = this.commands!.get(key)
@@ -402,19 +409,27 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
    * @param {boolean} debugMode
    */
   nodeToStr (node: Ast|Token|null, opts: {depth: number, typeName?: string}, debugMode: boolean): string {
+    logger.log(`parserbase:nodeToStr:start`)
     const depth = opts.depth - 1
     const typeName = (name: string) => (opts.typeName !== undefined) ? opts.typeName : name
     const debug = debugMode ? (' debug: ' + JSON.stringify(node, null, 2)) : ''
-    if (!node) { return '(NULL)' }
+    if (!node) {
+      logger.log('parserbase:nodeToStr:end node is null')
+      return '(NULL)'
+    }
     switch (node.type) {
       case 'not':
+        logger.log(`parserbase:nodeToStr:case not`)
         if (depth >= 0) {
           const subNode: Ast = (node as AstBlocks).blocks[0] as Ast
+          logger.log(`parserbase:nodeToStr:end depth > 0 not`)
           return `${typeName('')}『${this.nodeToStr(subNode, { depth }, debugMode)}に演算子『not』を適用した式${debug}』`
         } else {
+          logger.log(`parserbase:nodeToStr:end depth = 0 not`)
           return `${typeName('演算子')}『not』`
         }
       case 'op': {
+        logger.log(`parserbase:nodeToStr:case operator`)
         const node2: AstOperator = node as AstOperator
         let operator: string = node2.operator || ''
         const table:{[key: string]: string} = { eq: '＝', not: '!', gt: '>', lt: '<', and: 'かつ', or: 'または' }
@@ -425,31 +440,42 @@ logger.log(`value=${this.tokens[this.index].value} type=${type} in "${a.join('",
           const left: string = this.nodeToStr(node2.blocks[0] as Ast, { depth }, debugMode)
           const right: string = this.nodeToStr(node2.blocks[1] as Ast, { depth }, debugMode)
           if (node2.operator === 'eq') {
+            logger.log(`parserbase:nodeToStr:end operator(eq)`)
             return `${typeName('')}『${left}と${right}が等しいかどうかの比較${debug}』`
           }
+          logger.log(`parserbase:nodeToStr:end operator(${operator})`)
           return `${typeName('')}『${left}と${right}に演算子『${operator}』を適用した式${debug}』`
         } else {
           return `${typeName('演算子')}『${operator}${debug}』`
         }
       }
       case 'number':
+        logger.log(`parserbase:nodeToStr:end number`)
         return `${typeName('数値')}${(node as AstConst).value}`
       case 'bigint':
+        logger.log(`parserbase:nodeToStr:end bigint`)
         return `${typeName('巨大整数')}${(node as AstConst).value}`
       case 'string':
+        logger.log(`parserbase:nodeToStr:end string`)
         return `${typeName('文字列')}『${(node as AstConst).value}${debug}』`
       case 'word':
+        logger.log(`parserbase:nodeToStr:end word`)
         return `${typeName('単語')}『${(node as AstStrValue).value}${debug}』`
       case 'func':
+        logger.log(`parserbase:nodeToStr:end function`)
         return `${typeName('関数')}『${node.name || (node as AstStrValue).value}${debug}』`
       case 'eol':
+        logger.log(`parserbase:nodeToStr:end eol`)
         return '行の末尾'
       case 'eof':
+        logger.log(`parserbase:nodeToStr:end eof`)
         return 'ファイルの末尾'
       default: {
+        logger.log(`parserbase:nodeToStr:case other`)
         let name:any = (node as Ast).name
-        if (name) { name = (node as AstStrValue).value }
+        if (!name) { name = (node as AstStrValue).value }
         if (typeof name !== 'string') { name = node.type }
+        logger.log(`parserbase:nodeToStr:end other`)
         return `${typeName('')}『${name}${debug}』`
       }
     }

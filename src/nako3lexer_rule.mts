@@ -25,13 +25,14 @@ interface LexRule {
     withJosi?: boolean
     withUnit?: boolean
     withToten?: boolean
+    value?: string
 } 
 
 export const lexRules: LexRule[] = [
     { name: 'ここまで', group: '制御', pattern: /^(;;;|；；；)/ },
-    { name: 'eol', group: '区切', pattern: '\r\n' },
-    { name: 'eol', group: '区切', pattern: '\r' },
-    { name: 'eol', group: '区切', pattern: '\n' },
+    { name: 'eol', group: '区切', pattern: '\r\n', value: '\n' },
+    { name: 'eol', group: '区切', pattern: '\r', value: '\n' },
+    { name: 'eol', group: '区切', pattern: '\n', value: '\n' },
     { name: 'space', group: '空白', pattern: lexRulesRE.space },
     { name: 'bigint', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*n/, withJosi: true, withUnit: true},
     { name: 'bigint', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*n/, withJosi: true, withUnit: true},
@@ -62,11 +63,11 @@ export const lexRules: LexRule[] = [
     { name: 'string', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'string'] },
     { name: 'string', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'string'] },
     { name: 'string', group: '文字列', pattern: '🌿', proc: 'cbString', procArgs: ['🌿', '🌿', 'string'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '“', proc: 'cbStringEx', procArgs: ['“', '”', 'STRING_EX'] },
-    { name: 'STRING_EX', group: '文字列', pattern: '🌴', proc: 'cbStringEx', procArgs: ['🌴', '🌴', 'STRING_EX'] },
+    { name: 'string', group: '文字列', pattern: '"', proc: 'cbStringEx', procArgs: ['"', '"', 'string'] },
+    { name: 'string', group: '文字列', pattern: '”', proc: 'cbStringEx', procArgs: ['”', '”', 'string'] },
+    { name: 'string', group: '文字列', pattern: '「', proc: 'cbStringEx', procArgs: ['「', '」', 'string'] },
+    { name: 'string', group: '文字列', pattern: '“', proc: 'cbStringEx', procArgs: ['“', '”', 'string'] },
+    { name: 'string', group: '文字列', pattern: '🌴', proc: 'cbStringEx', procArgs: ['🌴', '🌴', 'string'] },
     { name: 'ここから', group: '制御', pattern: 'ここから' },
     { name: 'ここまで', group: '制御', pattern: 'ここまで' },
     { name: 'ここまで', group: '制御', pattern: '💧' },
@@ -107,7 +108,7 @@ export const lexRules: LexRule[] = [
     { name: '}', group: '記号', pattern: /^(\}|｝)/, withJosi: true },
     { name: ':', group: '記号', pattern: /^(:|：)/ },
     { name: ',', group: '記号', pattern: /^(,|，|、)/ },
-    { name: 'eos', group: '記号', pattern: /^(。|;|；)/ },
+    { name: 'eol', group: '記号', pattern: /^(。|;|；)/ },
     { name: 'word', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
     { name: 'word', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
     { name: 'word', group: '単語', pattern: /^《.+?》/, withJosi: true },
