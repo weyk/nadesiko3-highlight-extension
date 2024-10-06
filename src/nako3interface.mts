@@ -107,7 +107,6 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     fireChangeRuntimeEnv (fileName: string, uri: Uri, runtimeEnv: RuntimeEnv) {
         logger.debug(`docs:fireChangeRuntimeEnv(${fileName}:${runtimeEnv})`)
         this.emit('changeRuntimeEnv', { fileName, uri, runtimeEnv: runtimeEnv })
-
     }
 
     closeAtDocument (document: TextDocument):void {
@@ -119,8 +118,9 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         if (doc && doc.isTextDocument) {
             doc.isTextDocument = false
         }
-        // this.docs.delete(fileName)
-        // console.log('document close:leave')
+        this.docs.delete(fileName)
+        this.getDiagnostics()
+        console.log('document close:leave')
     }
 
     closeAtFile (uri: Uri):void {
@@ -128,7 +128,8 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         if (!this.docs.has(fileName)) {
             console.log(`document close: no open(${fileName})`)
         }
-        // this.docs.delete(fileName)
+        this.docs.delete(fileName)
+        this.getDiagnostics()
     }
 
     has (document: TextDocument|Uri): boolean {

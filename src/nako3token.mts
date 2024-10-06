@@ -11,6 +11,7 @@ export type Nako3TokenRawType = '?'
 | 'COMMENT_LINE'
 | 'COMMENT_BLOCK'
 | 'def_func'
+| 'func_ptr'
 | 'CHARACTER'
 | 'string'
 | 'fstring'
@@ -142,6 +143,7 @@ export type TokenGroup = '?'
   | '命令'
   | '！命令'
   | '宣言'
+  | '属性'
 
 export interface Indent {
     text: string
@@ -175,6 +177,7 @@ export interface TokenDefFunc extends Token {
 
 export interface TokenCallFunc extends Token {
   meta: DeclareFunction
+  isFuncPointer: boolean
 }
 
 export interface TokenRefVar extends Token {

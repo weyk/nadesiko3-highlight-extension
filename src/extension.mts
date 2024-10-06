@@ -5,6 +5,7 @@ import { Nako3Documents } from './nako3interface.mjs'
 import { logger } from './logger.mjs'
 import { nadesiko3, TerminalExt } from './nako3nadesiko3.mjs'
 import { showMessage } from './nako3message.mjs'
+import { nako3extensionOption } from './nako3option.mjs'
 
 import type { RuntimeEnv } from './nako3types.mjs'
 
@@ -157,6 +158,8 @@ function configurationInitialize() {
             level = 'INFO'
         } else if (traceLevel === 'messages') {
             level = 'ERROR'
+        } else if (traceLevel === 'off') {
+            level = 'NONE'
         } else {
             console.log(`trace level invalid(${traceLevel})`)
             level = 'NONE'
@@ -166,6 +169,18 @@ function configurationInitialize() {
     const limit = conf.get('maxNumberOfProblems')
     if (typeof limit === 'number') {
         nako3docs.setProblemsLimit(limit)
+    }
+    const useOperatorHint = conf.get('useOperatorHint')
+    if (typeof useOperatorHint === 'boolean') {
+        nako3extensionOption.useOperatorHint = useOperatorHint
+    } else {
+        nako3extensionOption.useOperatorHint = true
+    }
+    const useParser = conf.get('useParser')
+    if (typeof useParser === 'boolean') {
+        nako3extensionOption.useParser = useParser
+    } else {
+        nako3extensionOption.useParser = true
     }
     let runtime = conf.get('runtimeMode')
     if (typeof runtime === 'string') {
@@ -281,6 +296,18 @@ export function activate(context: vscode.ExtensionContext):void {
             if (typeof limit === 'number') {
                 nako3docs.setProblemsLimit(limit)
             }
+        } else if (e.affectsConfiguration('nadesiko3Highlight.useParser')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+            const useParser = conf.get('useParser')
+            if (typeof useParser === 'boolean') {
+                nako3extensionOption.useParser = useParser
+            }
+        } else if (e.affectsConfiguration('nadesiko3Highlight.useOperatorHint')) {
+            const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
+            const useOperatorHint = conf.get('useOperatorHint')
+            if (typeof useOperatorHint === 'boolean') {
+                nako3extensionOption.useOperatorHint = useOperatorHint
+            }
         } else if (e.affectsConfiguration('nadesiko3Highlight.runtimeMode')) {
             const conf = vscode.workspace.getConfiguration('nadesiko3Highlight')
             let runtime = conf.get('runtimeMode')
@@ -321,6 +348,8 @@ export function activate(context: vscode.ExtensionContext):void {
                     level = 'INFO'
                 } else if (traceLevel === 'messages') {
                     level = 'ERROR'
+                } else if (traceLevel === 'off') {
+                    level = 'NONE'
                 } else {
                     console.log(`trace level invalid(${traceLevel})`)
                     level = 'NONE'

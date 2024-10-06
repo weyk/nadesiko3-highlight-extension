@@ -16,7 +16,8 @@ import {
     Uri
 } from 'vscode'
 import { EventEmitter } from 'node:events'
-import { Token, TokenType } from './nako3token.mjs'
+import { nako3extensionOption } from './nako3option.mjs'
+import { Token } from './nako3token.mjs'
 import { COL_START } from './nako3lexer.mjs'
 import { trimOkurigana } from './nako3util.mjs'
 import { Nako3Document, SymbolInfo } from './nako3document.mjs'
@@ -25,6 +26,7 @@ import { getMessageWithArgs } from './nako3message.mjs'
 import { ModuleLink } from './nako3module.mjs'
 import { argsToString } from './nako3util.mjs'
 import { logger } from './logger.mjs'
+import { operatorCommand } from './nako3command.mjs'
 import type { RuntimeEnv, DeclareFunction } from './nako3types.mjs'
 
 export const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
@@ -269,44 +271,66 @@ export class Nako3DocumentExt extends EventEmitter {
         return []
     }
 
+    private getRangeFromTokenContent (token: Token, col: number): Range|null {
+        let range:Range
+        if (token.josi !== '' && typeof token.josiStartCol === 'number') {
+            if (col < token.josiStartCol) {
+                const startPos = new Position(token.startLine, token.startCol)
+                const endPos = new Position(token.endLine, token.josiStartCol)
+                range = new Range(startPos, endPos)
+            } else {
+                return null
+            }
+        } else {
+            const startPos = new Position(token.startLine, token.startCol)
+            const endPos = new Position(token.endLine, token.endCol)
+            range = new Range(startPos, endPos)
+        }
+        return range
+    }
     getHover (position: Position): Hover|null {
         this.tokenize()
         const line = position.line
         const col = position.character
         const token = this.nako3doc.getTokenByPosition(line, col)
-        if (token !== null && ['sys_func','sys_var','sys_const'].includes(token.type)) {
-            const commandInfo = this.nako3doc.lex.getCommandInfo(token.value)
-            if (!commandInfo) {
-                return null
-            }
-            let range:Range
-            if (token.josi !== '' && typeof token.josiStartCol === 'number') {
-                if (col < token.josiStartCol) {
-                    const startPos = new Position(token.startLine, token.startCol)
-                    const endPos = new Position(token.endLine, token.josiStartCol)
-                    range = new Range(startPos, endPos)
-                } else {
+        
+        if (token !== null) {
+            if (['sys_func','sys_var','sys_const'].includes(token.type)) {
+                const commandInfo = this.nako3doc.lex.getCommandInfo(token.value)
+                if (!commandInfo) {
                     return null
                 }
-            } else {
-                const startPos = new Position(token.startLine, token.startCol)
-                const endPos = new Position(token.endLine, token.endCol)
-                range = new Range(startPos, endPos)
-            }
-            let cmd:string
-            if (token.type === 'sys_var') {
-                cmd = `変数 ${commandInfo.name}`
-            } else if (token.type === 'sys_const') {
-                cmd = `定数 ${commandInfo.name}`
-            } else {
-                const declfunc = commandInfo as DeclareFunction
-                if (declfunc.args && declfunc.args.length > 0) {
-                    cmd = `命令 (${argsToString(declfunc.args)})${commandInfo.name}`
-                } else {
-                    cmd = `命令 ${commandInfo.name}`
+                let range = this.getRangeFromTokenContent(token, col)
+                if (range === null) {
+                    return null
                 }
+                let cmd:string
+                if (token.type === 'sys_var') {
+                    cmd = `変数 ${commandInfo.name}`
+                } else if (token.type === 'sys_const') {
+                    cmd = `定数 ${commandInfo.name}`
+                } else {
+                    const declfunc = commandInfo as DeclareFunction
+                    if (declfunc.args && declfunc.args.length > 0) {
+                        cmd = `命令 (${argsToString(declfunc.args)})${commandInfo.name}`
+                    } else {
+                        cmd = `命令 ${commandInfo.name}`
+                    }
+                }
+                return new Hover([cmd, commandInfo.hint || ''], range)
+            } else if (nako3extensionOption.useOperatorHint && token.group === '演算子') {
+                let range = this.getRangeFromTokenContent(token, col)
+                if (range === null) {
+                    return null
+                }
+                const opeInfo = operatorCommand.get(token.type)
+                if (!opeInfo) {
+                    return null
+                }
+                let cmd: string = '演算子 「' + opeInfo.cmd.join('」「') + '」'
+                let hint: string = opeInfo.hint
+                return new Hover([cmd, hint || ''], range)
             }
-            return new Hover([cmd, commandInfo.hint || ''], range)
         }
         return null
     }

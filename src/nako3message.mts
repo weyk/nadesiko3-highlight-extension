@@ -9,6 +9,7 @@ export const messages = new Map<string,string>([
     ['unclosedPlaceHolder', 'unclose wave parentis in template string'],
     ['unclosedString', 'unclose string'],
     ['deprecatedAsync', 'deplacated:"非同期モード"'],
+    ['noSupportDNCL', 'No support DNCL/DNCL2 mode'],
     // in nako3document
     ['mustThenFollowIf', 'moshi must follow naraba same line'],
     ['kokomadeUseInIndentMode', 'cannot use kokomade in indent semantic mode'],
@@ -48,9 +49,24 @@ export const messages = new Map<string,string>([
     ['noKokomadeAtForOf', 'Require "ここまで" for "反復" statement'],
     ['noKokomadeAtLoop', 'Require "ここまで" for "繰り返す" statement'],
     ['noKokomadeAtWhile', 'Require "ここまで" for "間" statement'],
+    ['noKokomadeAtNiwa', 'Require "ここまで" for "には" anonymous function'],
     ['unusedWordInLineWithSuggest', 'Unused word("{desc}") in line.\n, suggest:{descFunc}'],
     ['remainStack', ''],
-    ['usedBy', '']
+    ['usedBy', ''],
+    ['cannotkokomade', 'Cannot use "ここまで" in "インデント構文" on'],
+    ['unknownToken', '[System Error] Cannot convert unknown token to ast:type:{type}'],
+    ['noCatchAtTry', 'Require "エラーならば" fro "エラー監視" statement'],
+    ['invalidOptionForPerformanceMonitor', 'Invalid option "{opt}" for "パフォーマンスモニタ適用"'],
+    ['tikujiDeprecated', '"逐次実行" was deprecated'],
+    ['cannnotSetToFunction', 'Cannot set value to function'],
+    ['errorInFuncdefDupArg', 'Duplicate declare argument in function({nodestr)'],
+    ['noKokomadeAtFunc', 'Require "ここまで" for declare function'],
+    ['noExprWhile', 'While require condition'],
+    ['requireLfAfterWhile', 'While must follow LF'],
+    ['cannnotDeclareOtherModule', 'Cannnot declare variable with scope'],
+    ['errorInternalFor', '[System Error] Error at "増繰り返し"/"減繰り返し" statement'],
+    ['letFromToAtFor', 'Rquire "(変数名)をAからBまで繰り返す" syntax'],
+    ['errorFromToAtFor', 'Rquire "AからBまで" at "繰り返す" statement']
 ])
 
 export type MessageArgs = Record<string, string|number>

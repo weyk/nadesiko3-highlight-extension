@@ -101,7 +101,7 @@ export class Nako3Tokenizer {
     }
 
     /**
-     * 渡されたtextを解くんに分解して自身の保存すすｒ。
+     * 渡されたtextをトークンに分解して自身の保存する。
      * @param text 分析する対象の文字列を渡す            ,;.
      */
     private tokenizeProc (text: string):void {
@@ -200,7 +200,7 @@ export class Nako3Tokenizer {
                                 let josi = r[0].replace(/^\s+/, '')
                                 text = text.substring(r[0].length)
                                 // 助詞の直後にあるカンマを無視 #877
-                                if (text.charAt(0) === ',' || text.charAt(0) === '，' || text.charAt(0) === '、' || text.charAt(0) === '。') {
+                                if (text.charAt(0) === ',' || text.charAt(0) === '，' || text.charAt(0) === '、') {
                                     text = text.substring(1)
                                     token.len += 1
                                 }
@@ -217,7 +217,7 @@ export class Nako3Tokenizer {
                             }
                         }
                         if (rule.withToten) {
-                            if (text.charAt(0) === '、' || text.charAt(0) === '。') {
+                            if (text.charAt(0) === '、') {
                                 text = text.substring(1)
                                 token.len += 1
                             }
@@ -491,7 +491,7 @@ export class Nako3Tokenizer {
             josi = r[0].replace(/^\s+/, '')
             len += r[0].length
             endCol += r[0].length
-            if (text.charAt(len) === ',' || text.charAt(len) === '，' || text.charAt(len) === '、' || text.charAt(len) === '。') {
+            if (text.charAt(len) === ',' || text.charAt(len) === '，' || text.charAt(len) === '、') {
                 len += 1
                 endCol += 1
             }
@@ -587,7 +587,7 @@ export class Nako3Tokenizer {
                     josi = r[0].replace(/^\s+/, '')
                     len += r[0].length
                     line = line.substring(r[0].length)
-                    if (line.charAt(0) === ',' || line.charAt(0) === '，' || line.charAt(0) === '、' || line.charAt(0) === '。') {
+                    if (line.charAt(0) === ',' || line.charAt(0) === '，' || line.charAt(0) === '、') {
                         len += 1
                         line = line.substring(1)
                     }
@@ -610,7 +610,7 @@ export class Nako3Tokenizer {
         }
         if (len === 0 && resLen > 0) {
             len = resLen
-            if (line.charAt(0) === '、' || line.charAt(0) === '。') {
+            if (line.charAt(0) === '、') {
                 len += 1
                 line = line.substring(1)
             }
@@ -963,18 +963,20 @@ export class Nako3Tokenizer {
                 targetType = '非同期モード'
                 logger.info('async mode on')
                 logger.log('『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)。', token)
-                this.errorInfos.addFromToken('WARN', 'deprecatedAsync', {}, token)
+                this.errorInfos.addFromToken('WARN', 'deprecatedAsync', {}, tokens[index], token)
                 hit = true
             } else if (token.type === 'word' && token.value === 'DNCLモード') {
                 this.moduleOption.isDNCL = true
                 targetToken = token
                 targetType = 'DNCLモード'
+                this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
                 logger.info('DNCL1 mode on')
                 hit = true
-            } else if (token.type === 'word' && token.value === 'DNCL2モード') {
+            } else if (token.type === 'word' && ['DNCL2モード','DNCL2'].includes(token.value)) {
                 this.moduleOption.isDNCL2 = true
                 targetToken = token
                 targetType = 'DNCL2モード'
+                this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
                 logger.info('DNCL2 mode on')
                 hit = true
             } else if (token.type === 'word' && token.value === 'インデント構文') {
@@ -1231,12 +1233,16 @@ export class Nako3Tokenizer {
             const v = token.value
             const tv = trimOkurigana(v)
             let type = token.type
+            let nextTokenToFuncPointer = false
             if (type === 'word') {
                 const thing = this.declareThings.get(tv)
                 if (thing) {
                     switch (thing.type) {
                     case 'func':
                         (token as TokenCallFunc).meta = thing as DeclareFunction
+                        if (nextTokenToFuncPointer) {
+                            (token as TokenCallFunc).isFuncPointer = true
+                        }
                         type = 'user_func'
                         break
                     case 'var':
@@ -1268,6 +1274,9 @@ export class Nako3Tokenizer {
                 if (commandInfo) {
                     if (commandInfo.type === 'func') {
                         (token as TokenCallFunc).meta = commandInfo as DeclareFunction
+                        if (nextTokenToFuncPointer) {
+                            (token as TokenCallFunc).isFuncPointer = true
+                        }
                         type = 'sys_func'
                     } else if (commandInfo.type === 'var') {
                         (token as TokenRefVar).meta = commandInfo as DeclareVariable
@@ -1278,6 +1287,10 @@ export class Nako3Tokenizer {
                     }
                     token.type = type
                 }
+            }
+            nextTokenToFuncPointer = false
+            if (type === 'func_ptr' && token.value === '{関数}') {
+                nextTokenToFuncPointer = true
             }
         }
     }

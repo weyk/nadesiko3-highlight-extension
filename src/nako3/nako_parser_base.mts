@@ -1,5 +1,5 @@
 import { logger } from '../logger.mjs'
-import { SourceMap, DeclareFunction, ModuleOption, DeclareFunctions, LocalVariables, LocalVariable, DeclareThings, DeclareThing, RuntimeEnv } from '../nako3types.mjs'
+import { SourceMap, DeclareFunction, ModuleOption, LocalVariables, LocalVariable, ExternThings, DeclareThings, DeclareThing, RuntimeEnv } from '../nako3types.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { trimOkurigana } from '../nako3util.mjs'
 import { ModuleLink } from '../nako3module.mjs'
@@ -7,6 +7,10 @@ import { Nako3Command, CommandInfo } from '../nako3command.mjs'
 import { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
 import { Token, TokenType, NewEmptyToken } from '../nako3token.mjs'
 
+interface IndentLevel {
+  level: number
+  tag: string
+}
 /**
  * なでしこの構文解析のためのユーティリティクラス
  */
@@ -21,6 +25,7 @@ export class NakoParserBase {
   public namespaceStack: string[]
   public modList: string[]
   public globalThings: DeclareThings
+  public externThings: ExternThings
   public usedFuncs: Set<string>
   protected funcLevel: number
   protected usedAsyncFn: boolean
@@ -39,6 +44,8 @@ export class NakoParserBase {
   pluginNames: string[]
   moduleOption: ModuleOption
   protected link: ModuleLink
+  currentIndentLevel: number
+  indentLevelStack: IndentLevel[]
 
   constructor (filename: string, moduleOption: ModuleOption, link: ModuleLink) {
     this.filename = filename
@@ -63,6 +70,7 @@ export class NakoParserBase {
     this.modList = []
     /** グローバル変数・関数の確認用 */
     this.globalThings = new Map()
+    this.externThings = new Map()
     this.funcLevel = 0
     this.usedAsyncFn = false // asyncFnの呼び出しがあるかどうか
     /**
@@ -90,6 +98,8 @@ export class NakoParserBase {
     this.pluginNames = []
     this.moduleOption = moduleOption
     this.runtimeEnv = ''
+    this.currentIndentLevel = 0
+    this.indentLevelStack = []
     this.init()
   }
 
@@ -108,6 +118,8 @@ export class NakoParserBase {
     this.index = 0 // tokens[] のどこまで読んだかを管理する
     this.stack = [] // 計算用のスタック ... 直接は操作せず、pushStack() popStack() を介して使う
     this.y = [] // accept()で解析済みのトークンを配列で得るときに使う
+    this.currentIndentLevel = 0
+    this.indentLevelStack = []
     this.genMode = 'sync' // #637, #1056
     this.isErrorClear = true
     this.errorInfos.clear()
@@ -118,6 +130,26 @@ export class NakoParserBase {
     this.globalThings = things
   }
 
+  indentPush (tag: string):void {
+    this.indentLevelStack.push({
+      level: this.currentIndentLevel,
+      tag
+    })
+  }
+
+  indentPop (tags?: string[]):void {
+    const indentLevel = this.indentLevelStack.pop()
+    if (indentLevel) {
+      if (tags) {
+        if (!tags.includes(indentLevel.tag)) {
+          logger.info(`indentPop:tag unmach(expect:"${tags.join('","')}" != aquire:"${indentLevel.tag}")`)
+        } 
+      }
+      this.currentIndentLevel = indentLevel.level
+    } else {
+      this.currentIndentLevel = 0
+    }
+  }
   /**
    * 特定の助詞を持つ要素をスタックから一つ下ろす、指定がなければ末尾を下ろす
    * @param {string[]} josiList 下ろしたい助詞の配列
@@ -172,34 +204,45 @@ export class NakoParserBase {
     // モジュール名を含んでいる?
     let gvar: DeclareThing|undefined
     if (name.indexOf('__') >= 0) {
-      gvar = this.globalThings.get(name)
-      if (gvar) {
-        return {
-          name,
-          scope: 'global',
-          info: gvar
-        }
+      const index = name.lastIndexOf('__')
+      const mod =  name.substring(0, index)
+      const things = this.externThings.get(mod)
+      if (things) {
+        const funcName = name.substring(index+2)
+        gvar = things.get(funcName)
+        if (gvar) {
+          return {
+            name: funcName,
+            modName: mod,
+            scope: 'global',
+            info: gvar
+          }
+        } else { return undefined }
       } else { return undefined }
     }
     // グローバル変数（自身）？
-    const gnameSelf = `${this.modName}__${name}`
-    gvar = this.globalThings.get(gnameSelf)
+    const gnameSelf = `${name}`
+    gvar = this.globalThings.get(name)
     if (gvar) {
       return {
-        name: gnameSelf,
+        name,
+        modName: this.modName,
         scope: 'global',
         info: gvar
       }
     }
     // グローバル変数（モジュールを検索）？
     for (const mod of this.modList) {
-      const gname = `${mod}__${name}`
-      const funcObj: DeclareThing|undefined = this.globalThings.get(gname)
-      if (funcObj && funcObj.isExport === true) {
-        return {
-          name: gname,
-          scope: 'global',
-          info: funcObj
+      const things: DeclareThings|undefined = this.externThings.get(mod)
+      if (things) {
+        const funcObj: DeclareThing|undefined = things.get(name)
+        if (funcObj && funcObj.isExport === true) {
+          return {
+            name,
+            modName: mod,
+            scope: 'global',
+            info: funcObj
+          }
         }
       }
     }

@@ -12,7 +12,7 @@ export const lexRulesRE = {
     ijoIka: /^.+(以上|以下|超|未満)$/,
     andOr: /^(かつ|または)/,
     unit: /^(円|ドル|元|歩|㎡|坪|度|℃|°|個|つ|本|冊|才|歳|匹|枚|皿|セット|羽|人|件|行|列|機|品|m|ｍ|mm|cm|ｃｍ|km|ｋｍ|g|ｇ|kg|ｋｇ|t|ｔ|px|ｐｘ|dot|ｄｏｔ|pt|ｐｔ|em|ｅｍ|b|ｂ|mb|ｍｂ|kb|ｋｂ|gb|ｇｂ)/,
-    space: /^( |　|\t|・|⎿|└|｜)+/
+    space: /^( |　|\t|・|⎿|└)+/
 }
 
 interface LexRule {
@@ -29,7 +29,7 @@ interface LexRule {
 } 
 
 export const lexRules: LexRule[] = [
-    { name: 'ここまで', group: '制御', pattern: /^(;;;|；；；)/ },
+    { name: 'ここまで', group: '制御', pattern: /^(;;;|；；；|｡｡｡|。。。)/ },
     { name: 'eol', group: '区切', pattern: '\r\n', value: '\n' },
     { name: 'eol', group: '区切', pattern: '\r', value: '\n' },
     { name: 'eol', group: '区切', pattern: '\n', value: '\n' },
@@ -59,6 +59,7 @@ export const lexRules: LexRule[] = [
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
     { name: 'def_func', group: '記号', pattern: '●' },
     { name: 'def_func', group: '記号', pattern: '*', isFirstCol: true },
+    { name: 'func_ptr', group: '属性', pattern: '{関数}' },
     { name: 'string', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'string'] },
     { name: 'string', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'string'] },
     { name: 'string', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'string'] },
@@ -85,8 +86,8 @@ export const lexRules: LexRule[] = [
     { name: 'not', group: '演算子', pattern: /^(!|💡|！)/ },
     { name: 'gt', group: '演算子', pattern: /^(>|＞)/ },
     { name: 'lt', group: '演算子', pattern: /^(<|＜)/ },
-    { name: 'and', group: '演算子', pattern: /^(かつ|&&|＆＆|[Aa][Nn][Dd]\s)/ },
-    { name: 'or', group: '演算子', pattern: /^(または|或いは|あるいは|[Oo][Rr]\s|\|\||｜｜)/ },
+    { name: 'and', group: '演算子', pattern: /^(かつ|&&|＆＆|and\s)/ },
+    { name: 'or', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\||｜｜)/ },
     { name: '@', group: '記号', pattern: /^(@|＠)/ },
     { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
     { name: '-', group: '演算子', pattern: /^(-|−|－)/ },

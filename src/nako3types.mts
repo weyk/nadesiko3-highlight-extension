@@ -43,6 +43,7 @@ export type DeclareThings = Map<string, DeclareThing>
 export type DeclareFunctions = Map<string, DeclareFunction>
 export type DeclareVariables = Map<string, DeclareVariable>
 export type LocalVariables = Map<string, LocalVariable>
+export type ExternThings = Map<string, DeclareThings>
 
 export interface ModuleOption {
   isIndentSemantic: boolean

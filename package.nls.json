@@ -2,6 +2,8 @@
     "nadesiko3.exec": "Execute cnako3/snako on Node.js",
     "configuration.title": "nadesiko3Highlight",
     "maxNumberOfProblems.description": "Controls the maximum number of problems produced by the server.",
+    "useOperatorHint.description": "Use hover hint for operator",
+    "useParser.description": "Use parser for detail analizing.",
     "nadesiko3.folder.description": "Nadesiko3 instlled folder",
     "useRuntimeSnako.descriptions": "Use snako runtime",
     "useRuntimeCnako.descriptions": "Use cnako runtime",

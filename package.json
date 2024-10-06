@@ -73,6 +73,18 @@
                     "default": 100,
                     "description": "%maxNumberOfProblems.description%"
                 },
+                "nadesiko3Highlight.useOperatorHint": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%useOperatorHint.description%"
+                },
+                "nadesiko3Highlight.useParser": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%useParser.description%"
+                },
                 "nadesiko3Highlight.runtimeMode": {
                     "scope": "resource",
                     "type": "string",

@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { nako3extensionOption } from './nako3option.mjs'
 import { Nako3Tokenizer, COL_START } from './nako3lexer.mjs'
 import { NakoParser } from './nako3/nako_parser3.mjs'
 import { Token, Indent } from './nako3token.mjs'
@@ -15,7 +16,7 @@ export interface SymbolInfo {
 }
 
 const kokomadePeirsStatements = [
-    '回','間','繰返','増繰返','減繰返','後判定','反復','実行速度優先','パフォーマンスモニタ適用','条件分岐','条件分岐-違えば'
+    '回', '間','繰返','増繰返','減繰返','後判定','反復','実行速度優先','パフォーマンスモニタ適用','条件分岐','条件分岐-違えば'
 ]
 
 interface semanticStackInfo {
@@ -104,10 +105,12 @@ export class Nako3Document extends EventEmitter {
         this.parser.setGlobalThings(this.lex.declareThings)
         this.parser.moduleOption = this.lex.moduleOption
         this.lex.applyFunction()
-        try {
-            this.parser.parse(this.lex.tokens)
-        } catch (err) {
-            console.error(err)
+        if (nako3extensionOption.useParser) {
+            try {
+                this.parser.parse(this.lex.tokens)
+            } catch (err) {
+                console.error(err)
+            }
         }
         this.isErrorClear = false
         this.invalidate()
@@ -355,6 +358,9 @@ export class Nako3Document extends EventEmitter {
                     } else if (sameLineMode === '条件分岐-違えば' && hasBody) {
                         logger.log('              :条件分岐-違えば has immediate body')
                         semanticPop(index)
+                    } else if (sameLineMode === '回' && hasBody) {
+                        logger.log('              :回 has immediate body')
+                        semanticPop(index)
                     } else if (sameLineMode === 'もし-ならば' && hasBody) {
                         logger.log('              :もし-ならば has immediate body')
                         canChigaeba = true
@@ -418,9 +424,21 @@ export class Nako3Document extends EventEmitter {
                         }
                     } while (reccursive)
                 }
-                if (index+1 < tokenCount && token.type === '回' && tokens[index+1].type === '繰返') {
+                if (index+1 < tokenCount && token.type === '後判定' && tokens[index+1].type === '繰返') {
                     semanticPush(token.type, index)
                     skipToken = 1
+                } else if (index+1 < tokenCount && token.type === '間' && tokens[index+1].type === '繰返') {
+                    semanticPush(token.type, index)
+                    skipToken = 1
+                } else if (index+1 < tokenCount && token.type === '回' && tokens[index+1].type === '繰返') {
+                    semanticPush(token.type, index)
+                    sameLineMode = '回'
+                    hasBody = false
+                    skipToken = 1
+                } else if (token.type === '回') {
+                    semanticPush(token.type, index)
+                    sameLineMode = '回'
+                    hasBody = false
                 } else if (kokomadePeirsStatements.includes(token.type)) {
                     semanticPush(token.type, index)
                 } else if (token.type === 'ここまで') {
