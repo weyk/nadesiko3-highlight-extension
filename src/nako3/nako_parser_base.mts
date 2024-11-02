@@ -1,16 +1,18 @@
-import { logger } from '../logger.mjs'
-import { SourceMap, DeclareFunction, ModuleOption, LocalVariables, LocalVariable, ExternThings, DeclareThings, DeclareThing, RuntimeEnv } from '../nako3types.mjs'
+import { ModuleLink, ModuleEnv, ModuleOption } from '../nako3module.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
-import { trimOkurigana } from '../nako3util.mjs'
-import { ModuleLink } from '../nako3module.mjs'
-import { Nako3Command, CommandInfo } from '../nako3command.mjs'
-import { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
-import { Token, TokenType, NewEmptyToken } from '../nako3token.mjs'
+import { Nako3Range } from '../nako3range.mjs'
+import { nako3plugin } from '../nako3plugin.mjs'
+import { logger } from '../logger.mjs'
+import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
+import type { SourceMap, DeclareFunction, LocalVariables, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
+import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
+import type { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
 
 interface IndentLevel {
   level: number
   tag: string
 }
+
 /**
  * なでしこの構文解析のためのユーティリティクラス
  */
@@ -20,12 +22,9 @@ export class NakoParserBase {
   protected stack: any[]
   protected index: number
   protected y: any[]
-  public filename: string
   public modName: string
   public namespaceStack: string[]
   public modList: string[]
-  public globalThings: DeclareThings
-  public externThings: ExternThings
   public usedFuncs: Set<string>
   protected funcLevel: number
   protected usedAsyncFn: boolean
@@ -38,17 +37,16 @@ export class NakoParserBase {
   protected isReadingCalc: boolean
   protected isModifiedNodes: boolean
   public errorInfos: ErrorInfoManager
-  protected isErrorClear: boolean
-  commands: Nako3Command|null
-  runtimeEnv: RuntimeEnv
-  pluginNames: string[]
-  moduleOption: ModuleOption
+  protected moduleEnv: ModuleEnv
+  protected moduleOption: ModuleOption
   protected link: ModuleLink
-  currentIndentLevel: number
-  indentLevelStack: IndentLevel[]
+  protected currentIndentLevel: number
+  protected indentLevelStack: IndentLevel[]
+  protected scopeId: string
+  protected scopeIdStack: [ string, number][]
+  public scopeList: ScopeIdRange[]
 
-  constructor (filename: string, moduleOption: ModuleOption, link: ModuleLink) {
-    this.filename = filename
+  constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption, link: ModuleLink) {
     this.link = link
     this.stackList = [] // 関数定義の際にスタックが混乱しないように整理する
     this.tokens = []
@@ -69,8 +67,6 @@ export class NakoParserBase {
      */
     this.modList = []
     /** グローバル変数・関数の確認用 */
-    this.globalThings = new Map()
-    this.externThings = new Map()
     this.funcLevel = 0
     this.usedAsyncFn = false // asyncFnの呼び出しがあるかどうか
     /**
@@ -93,13 +89,13 @@ export class NakoParserBase {
     // エクスポート設定が未設定の関数・変数に対する既定値
     this.isModifiedNodes = false
     this.errorInfos = new ErrorInfoManager()
-    this.isErrorClear = true
-    this.commands = null
-    this.pluginNames = []
+    this.moduleEnv = moduleEnv
     this.moduleOption = moduleOption
-    this.runtimeEnv = ''
     this.currentIndentLevel = 0
     this.indentLevelStack = []
+    this.scopeId = 'global'
+    this.scopeIdStack = []
+    this.scopeList = moduleEnv.scopeIdList
     this.init()
   }
 
@@ -109,7 +105,6 @@ export class NakoParserBase {
   }
 
   init () {
-    this.globalThings = new Map() // 関数の一覧
     this.reset()
   }
 
@@ -121,13 +116,12 @@ export class NakoParserBase {
     this.currentIndentLevel = 0
     this.indentLevelStack = []
     this.genMode = 'sync' // #637, #1056
-    this.isErrorClear = true
     this.errorInfos.clear()
-    logger.info(`prser:clear`)
-  }
-
-  setGlobalThings (things: DeclareThings) {
-    this.globalThings = things
+    this.scopeId = 'global'
+    this.scopeIdStack = []
+    this.scopeList.length = 0
+    this.moduleEnv.allVariables.clear()
+    logger.info(`parser:clear`)
   }
 
   indentPush (tag: string):void {
@@ -150,6 +144,23 @@ export class NakoParserBase {
       this.currentIndentLevel = 0
     }
   }
+
+  // 関数定義によるスコープの出入りの際に呼び出す。
+  // scopeIdがglobalならばglobalスコープ、それ以外ならばユーザ関数か無名関数の中となる。
+  pushScopeId (t:TokenDefFunc, index: number): string {
+    this.scopeIdStack.push([ this.scopeId, index ])
+    this.scopeId = `scope-${t.meta.isMumei?this.index:t.meta.name}`
+    return this.scopeId
+  }
+
+  popScopeId (): string {
+    let startIndex: number
+    const scopeId = this.scopeId;
+    [ this.scopeId, startIndex] = this.scopeIdStack.pop() || [ 'global', 0 ]
+    this.scopeList.push([ scopeId, startIndex, this.index ])
+    return this.scopeId
+  }
+
   /**
    * 特定の助詞を持つ要素をスタックから一つ下ろす、指定がなければ末尾を下ろす
    * @param {string[]} josiList 下ろしたい助詞の配列
@@ -187,6 +198,38 @@ export class NakoParserBase {
     this.stack = this.stackList.pop()
   }
 
+  addLocalvars (vars: LocalVariable) {
+    if (vars.type === 'parameter') {
+      this.localvars.set(vars.name, Object.assign({}, { type: 'var' }, vars))
+      
+    } else {
+      this.localvars.set(vars.name, vars)
+    }
+    let scopedVars = this.moduleEnv.allVariables.get(vars.scopeId)
+    if (!scopedVars) {
+      scopedVars = new Map()
+      this.moduleEnv.allVariables.set(vars.scopeId, scopedVars)
+    }
+    scopedVars.set(vars.name, vars)
+  }
+
+  addGlobalvars (vars: DeclareThing, token: Token, activeDeclare: boolean) {
+    this.moduleEnv.declareThings.set(vars.nameNormalized, vars)
+    let globalVars = this.moduleEnv.allVariables.get('global')
+    if (!globalVars) {
+      globalVars = new Map()
+      this.moduleEnv.allVariables.set('global', globalVars)
+    }
+    globalVars.set(vars.nameNormalized, {
+      name: vars.nameNormalized,
+      scopeId: 'global',
+      type: vars.type,
+      activeDeclare,
+      range: Nako3Range.fromToken(token),
+      origin: 'local'
+    })
+  }
+
   /** 変数名を探す
    * @param {string} name
    * @returns {any}変数名の情報
@@ -206,9 +249,9 @@ export class NakoParserBase {
     if (name.indexOf('__') >= 0) {
       const index = name.lastIndexOf('__')
       const mod =  name.substring(0, index)
-      const things = this.externThings.get(mod)
+      const things = this.moduleEnv.externalThings.get(mod)
       if (things) {
-        const funcName = name.substring(index+2)
+        const funcName = trimOkurigana(name.substring(index+2))
         gvar = things.get(funcName)
         if (gvar) {
           return {
@@ -222,7 +265,7 @@ export class NakoParserBase {
     }
     // グローバル変数（自身）？
     const gnameSelf = `${name}`
-    gvar = this.globalThings.get(name)
+    gvar = this.moduleEnv.declareThings.get(name)
     if (gvar) {
       return {
         name,
@@ -233,7 +276,7 @@ export class NakoParserBase {
     }
     // グローバル変数（モジュールを検索）？
     for (const mod of this.modList) {
-      const things: DeclareThings|undefined = this.externThings.get(mod)
+      const things: DeclareThings|undefined = this.moduleEnv.externalThings.get(mod)
       if (things) {
         const funcObj: DeclareThing|undefined = things.get(name)
         if (funcObj && funcObj.isExport === true) {
@@ -246,8 +289,8 @@ export class NakoParserBase {
         }
       }
     }
-    // システム変数 (funclistを普通に検索)
-    const svar = this.getCommandInfo(name)
+    // システム変数 (nako3pluginにて検索)
+    const svar = nako3plugin.getCommandInfo(name, this.moduleEnv.pluginNames, this.moduleEnv.nakoRuntime)
     if (svar) {
       return {
         name,
@@ -281,7 +324,7 @@ export class NakoParserBase {
    * カーソル位置にある単語の型を確かめる
    */
   check (ttype: string): boolean {
-    logger.log(`parserbase:check:${ttype} valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
+    // logger.log(`parserbase:check:${ttype} valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
     return (this.tokens[this.index].type === ttype)
   }
 
@@ -318,19 +361,15 @@ export class NakoParserBase {
    * 型にマッチしなければ false を返し、カーソルを巻き戻す
    */
   accept (types: any[]): boolean {
-    logger.log('parserbase:accept:start')
     const y = []
     const tmpIndex = this.index
     const rollback = () => {
       this.index = tmpIndex
-      logger.log('parserbase:accept:end rollback')
       return false
     }
     for (let i = 0; i < types.length; i++) {
-      logger.log(`parserbase:accept:varify(${i})`)
       if (this.isEOF()) { return rollback() }
       const type = types[i]
-      logger.log(`parserbase:accept:check type(${i}):${typeof type}`)
       if (type == null) { return rollback() }
       if (typeof type === 'string') {
         const token = this.get()
@@ -351,7 +390,9 @@ export class NakoParserBase {
         continue
       }
       logger.error('System Error : accept broken : ' + typeof type)
-      throw new Error('System Error : accept broken : ' + typeof type)
+      this.errorInfos.addFromToken('ERROR', 'acceptBroken', { type: typeof type }, this.peekDef())
+      this.skipToEof()
+      return false
     }
     this.y = y
     return true
@@ -361,16 +402,22 @@ export class NakoParserBase {
    * カーソル語句を取得して、カーソルを後ろに移動する
    */
   get (): Token | null {
-    logger.log(`parserbase:get:${this.index}:valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
+    // logger.log(`parserbase:get:${this.index}:valid index:${this.index < this.tokens.length && this.index >= 0} type:${this.index < this.tokens.length && this.index >= 0 ? this.tokens[this.index].type : 'null'}`)
     if (this.isEOF()) { return null }
     return this.tokens[this.index++]
   }
 
   /** カーソル語句を取得してカーソルを進める、取得できなければエラーを出す */
   getCur (): Token {
-    if (this.isEOF()) { throw new Error('トークンが取得できません。') }
+    if (this.isEOF()) {
+       this.errorInfos.addFromToken('ERROR', 'nomoreToken', {}, this.peekDef())
+       return NewEmptyToken()
+    }
     const t = this.tokens[this.index++]
-    if (!t) { throw new Error('トークンが取得できません。') }
+    if (!t) {
+      this.errorInfos.addFromToken('ERROR', 'nomoreToken', {}, this.peekDef())
+      return NewEmptyToken()
+    }
     return t
   }
 
@@ -401,7 +448,7 @@ export class NakoParserBase {
     if (token === null) {
       token = this.tokens[this.tokens.length - 1]
     }
-    return { startLine: token.startLine, endLine: token.endLine, file: token.file, startCol: token.startCol, endCol: token.endCol, resEndCol: token.resEndCol }
+    return { startLine: token.startLine, endLine: token.endLine, uri: token.uri, startCol: token.startCol, endCol: token.endCol, resEndCol: token.resEndCol }
   }
 
   rangeMerge(start: SourceMap|Token|Ast, end: SourceMap|Token|Ast): SourceMap {
@@ -411,7 +458,7 @@ export class NakoParserBase {
       endLine: end.endLine,
       endCol: end.endCol,
       resEndCol: end.resEndCol,
-      file: start.file
+      uri: start.uri
     }
   }
 
@@ -423,28 +470,34 @@ export class NakoParserBase {
       endLine: end.endLine,
       endCol: end.endCol,
       resEndCol: end.resEndCol,
-      file: start.file
+      uri: start.uri
     }
   }
 
   genDeclareSore(): LocalVariable {
-    return { name: 'それ', type: 'var', value: '' }
+    return { name: 'それ', type: 'var', scopeId: this.scopeId, range: null, activeDeclare: true, origin: 'local' }
   }
 
-  getCommandInfo (command: string): DeclareThing|null {
-    const tv = trimOkurigana(command)
-    for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
-        const commandEntry = this.commands!.get(key)
-        if (commandEntry) {
-            const commandInfo = commandEntry.get(command) || commandEntry.get(tv)
-            if (commandInfo) {
-                return commandInfo
-            }
-        }
+  skipToEol ():void {
+    while (!this.check('eol')) {
+      const token = this.get()
+      if (token === null || token.type === 'eof') {
+        break
+      }
     }
-    return null
+    logger.log(`parser:skipToEol`)
   }
-
+ 
+  skipToEof ():void {
+    while (!this.isEOF()) {
+      const token = this.get()
+      if (token === null || token.type === 'eof') {
+        break
+      }
+    }
+    logger.log(`parser:skipToEof`)
+  }
+ 
   /**
    * depth: 表示する深さ
    * typeName: 先頭のtypeの表示を上書きする場合に設定する
@@ -452,27 +505,21 @@ export class NakoParserBase {
    * @param {boolean} debugMode
    */
   nodeToStr (node: Ast|Token|null, opts: {depth: number, typeName?: string}, debugMode: boolean): string {
-    logger.log(`parserbase:nodeToStr:start`)
     const depth = opts.depth - 1
     const typeName = (name: string) => (opts.typeName !== undefined) ? opts.typeName : name
     const debug = debugMode ? (' debug: ' + JSON.stringify(node, null, 2)) : ''
     if (!node) {
-      logger.log('parserbase:nodeToStr:end node is null')
       return '(NULL)'
     }
     switch (node.type) {
       case 'not':
-        logger.log(`parserbase:nodeToStr:case not`)
         if (depth >= 0) {
           const subNode: Ast = (node as AstBlocks).blocks[0] as Ast
-          logger.log(`parserbase:nodeToStr:end depth > 0 not`)
           return `${typeName('')}『${this.nodeToStr(subNode, { depth }, debugMode)}に演算子『not』を適用した式${debug}』`
         } else {
-          logger.log(`parserbase:nodeToStr:end depth = 0 not`)
           return `${typeName('演算子')}『not』`
         }
       case 'op': {
-        logger.log(`parserbase:nodeToStr:case operator`)
         const node2: AstOperator = node as AstOperator
         let operator: string = node2.operator || ''
         const table:{[key: string]: string} = { eq: '＝', not: '!', gt: '>', lt: '<', and: 'かつ', or: 'または' }
@@ -483,42 +530,31 @@ export class NakoParserBase {
           const left: string = this.nodeToStr(node2.blocks[0] as Ast, { depth }, debugMode)
           const right: string = this.nodeToStr(node2.blocks[1] as Ast, { depth }, debugMode)
           if (node2.operator === 'eq') {
-            logger.log(`parserbase:nodeToStr:end operator(eq)`)
             return `${typeName('')}『${left}と${right}が等しいかどうかの比較${debug}』`
           }
-          logger.log(`parserbase:nodeToStr:end operator(${operator})`)
           return `${typeName('')}『${left}と${right}に演算子『${operator}』を適用した式${debug}』`
         } else {
           return `${typeName('演算子')}『${operator}${debug}』`
         }
       }
       case 'number':
-        logger.log(`parserbase:nodeToStr:end number`)
         return `${typeName('数値')}${(node as AstConst).value}`
       case 'bigint':
-        logger.log(`parserbase:nodeToStr:end bigint`)
         return `${typeName('巨大整数')}${(node as AstConst).value}`
       case 'string':
-        logger.log(`parserbase:nodeToStr:end string`)
         return `${typeName('文字列')}『${(node as AstConst).value}${debug}』`
       case 'word':
-        logger.log(`parserbase:nodeToStr:end word`)
         return `${typeName('単語')}『${(node as AstStrValue).value}${debug}』`
       case 'func':
-        logger.log(`parserbase:nodeToStr:end function`)
         return `${typeName('関数')}『${node.name || (node as AstStrValue).value}${debug}』`
       case 'eol':
-        logger.log(`parserbase:nodeToStr:end eol`)
         return '行の末尾'
       case 'eof':
-        logger.log(`parserbase:nodeToStr:end eof`)
         return 'ファイルの末尾'
       default: {
-        logger.log(`parserbase:nodeToStr:case other`)
         let name:any = (node as Ast).name
         if (!name) { name = (node as AstStrValue).value }
         if (typeof name !== 'string') { name = node.type }
-        logger.log(`parserbase:nodeToStr:end other`)
         return `${typeName('')}『${name}${debug}』`
       }
     }

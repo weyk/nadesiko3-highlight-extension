@@ -1,79 +1,37 @@
-import reservedWords from './nako3/nako_reserved_words.mjs'
-// 助詞の一覧
-import { josiRE, removeJosiMap, tararebaMap } from './nako3/nako_josi_list.mjs'
-import { Token, Indent, TokenDefFunc, TokenCallFunc, TokenRefVar, TokenType, Nako3TokenTypePlugin } from './nako3token.mjs'
-import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs, reservedGroup} from './nako3lexer_rule.mjs'
-import { trimOkurigana, filenameToModName, convert } from './nako3util.mjs'
-import { ModuleLink  } from './nako3module.mjs'
+import { ModuleLink, ModuleEnv  } from './nako3module.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
-import { Nako3Command, CommandInfo } from './nako3command.mjs'
-import { logger } from './logger.mjs'
-import type { RuntimeEnv,  DeclareThings, ModuleOption, DeclareThing, DeclareFunction, FunctionArg, DeclareVariable } from './nako3types.mjs'
+import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs } from './nako3lexer_rule.mjs'
+import { josiRE, removeJosiMap } from './nako3/nako_josi_list.mjs'
+import { filenameToModName, convert } from './nako3util.mjs'
+import type { Token, Indent } from './nako3token.mjs'
 
-interface ImportInfo {
-    value: string
-    tokenIndex: number
-    startLine: number
-    startCol: number
-    endLine: number
-    endCol: number
+export interface TokenizeResult {
+    tokens: Token[]
+    lengthLines: number[]
 }
 
 export const COL_START = 0
 export const LINE_START = 0
 
-interface UserFunctionInfo {
-    name: string
-    nameNormalized: string
-    fileName: string|null
-    tokenIndex: number
-    isPrivate: boolean
-}
-
 export class Nako3Tokenizer {
-    filename: string
-    modName: string
     // textから生成したtoken列。全てのトークンを含む。書き換えなし。
-    rawTokens: Token[]
-    // rawTokensから書き換えのあるトークン列。ただしコメントは除く。
-    tokens: Token[]
-    commentTokens: Token[]
+    private rawTokens: Token[]
+    private lengthLines: number[]
     errorInfos: ErrorInfoManager
-    lengthLines: number[]
-    procMap: ProcMap
-    line: number
-    col: number
-    commands: Nako3Command|null
-    runtimeEnv: RuntimeEnv
-    runtimeEnvDefault: RuntimeEnv
-    useShebang: boolean
-    pluginNames: string[]
-    imports: ImportInfo[]
-    declareThings: DeclareThings
-    link: ModuleLink
-    moduleOption: ModuleOption
-    moduleSearchPath: string[]
+    private procMap: ProcMap
+    private line: number
+    private col: number
+    private moduleEnv: ModuleEnv
+    private link: ModuleLink
 
-    constructor (filename: string, moduleOption: ModuleOption, link: ModuleLink) {
-        this.filename = filename
-        this.modName = filenameToModName(filename, link)
+    constructor (moduleEnv: ModuleEnv, link: ModuleLink) {
+        this.moduleEnv = moduleEnv
+        this.link = link
         this.rawTokens = []
-        this.tokens = []
-        this.commentTokens = []
         this.errorInfos = new ErrorInfoManager()
-        this.declareThings = new Map()
         this.lengthLines = []
         this.line = 0
         this.col = 0
-        this.commands = null
-        this.pluginNames = []
-        this.moduleSearchPath = []
-        this.runtimeEnv = ''
-        this.runtimeEnvDefault = 'wnako'
-        this.useShebang = true
-        this.imports = []
-        this.link = link
-        this.moduleOption = moduleOption
         this.procMap = {
             cbCommentBlock: this.parseBlockComment,
             cbCommentLine: this.parseLineComment,
@@ -87,16 +45,22 @@ export class Nako3Tokenizer {
      * 保持しているトークンや解析毛結果を削除し生トークンを生成する
      * @param text トークン化する
      */
-    tokenize (text: string): void {
+    tokenize (text: string): TokenizeResult {
         this.rawTokens = []
         this.lengthLines = []
         this.errorInfos.clear()
         this.line = LINE_START
         this.col = COL_START
-        this.tokenizeProc(text)
+        const tokens = this.tokenizeProc(text)
+        const lengthLines = this.lengthLines
+        this.lengthLines = []
+        return {
+            tokens,
+            lengthLines
+        }
     }
 
-    setProblemsLimit (limit: number) {
+    setProblemsLimit (limit: number):void {
         this.errorInfos.problemsLimit = limit
     }
 
@@ -104,7 +68,7 @@ export class Nako3Tokenizer {
      * 渡されたtextをトークンに分解して自身の保存する。
      * @param text 分析する対象の文字列を渡す            ,;.
      */
-    private tokenizeProc (text: string):void {
+    private tokenizeProc (text: string): Token[] {
         let indent: Indent = {
             len: 0,
             text: '',
@@ -128,7 +92,7 @@ export class Nako3Tokenizer {
             let token: Token = {
                 type: '?',
                 group: '?',
-                file: this.filename,
+                uri: this.moduleEnv.uri,
                 startLine: this.line,
                 startCol: this.col,
                 endLine: this.line,
@@ -141,6 +105,7 @@ export class Nako3Tokenizer {
                 unit: '',
                 josi: '',
                 indent,
+                asWord: false
             }
             let hit: boolean = false
             let len: number
@@ -249,6 +214,9 @@ export class Nako3Tokenizer {
                 this.col = COL_START
             }
         }
+        const rawTokens = this.rawTokens
+        this.rawTokens = []
+        return rawTokens
     }    
 
     /**
@@ -296,7 +264,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'COMMENT_LINE',
             group: 'コメント',
-            file: this.filename,
+            uri: this.moduleEnv.uri,
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -308,7 +276,8 @@ export class Nako3Tokenizer {
             len,
             text: text.substring(0, len),
             value: text.substring(startTagLen, len),
-            indent
+            indent,
+            asWord: false
         }
         this.rawTokens.push(token)
         return len
@@ -342,7 +311,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'COMMENT_BLOCK',
             group: 'コメント',
-            file: this.filename,
+            uri: this.moduleEnv.uri,
             startLine,
             startCol,
             endLine: this.line,
@@ -355,6 +324,7 @@ export class Nako3Tokenizer {
             text: text.substring(0, len),
             value: text.substring(startTag.length, len - (index >= 0 ? endTag.length : 0)),
             indent,
+            asWord: false
         }
         this.rawTokens.push(token)
         return len
@@ -396,7 +366,7 @@ export class Nako3Tokenizer {
                     const token: Token = {
                         type: type,
                         group :'文字列',
-                        file: this.filename,
+                        uri: this.moduleEnv.uri,
                         startLine,
                         startCol,
                         endLine: this.line,
@@ -409,6 +379,7 @@ export class Nako3Tokenizer {
                         text: str.substring(0, parenIndex),
                         value: str.substring(isFirstStringPart ? startTag.length : 0, parenIndex),
                         indent,
+                        asWord: false
                     }
                     this.rawTokens.push(token)
                     str = str.substring(parenIndex)
@@ -422,7 +393,7 @@ export class Nako3Tokenizer {
                         token = {
                             type: 'STRING_INJECT_START',
                             group: '記号',
-                            file: this.filename,
+                            uri: this.moduleEnv.uri,
                             startLine: this.line,
                             startCol: this.col,
                             endLine: this.line,
@@ -435,6 +406,7 @@ export class Nako3Tokenizer {
                             text: parenStartTag,
                             value: parenStartTag,
                             indent,
+                            asWord: false
                         }
                         this.rawTokens.push(token)
                         this.col++
@@ -444,7 +416,7 @@ export class Nako3Tokenizer {
                         token = {
                             type: 'STRING_INJECT_END',
                             group: '記号',
-                            file: this.filename,
+                            uri: this.moduleEnv.uri,
                             startLine: this.line,
                             startCol: this.col,
                             endLine: this.line,
@@ -457,6 +429,7 @@ export class Nako3Tokenizer {
                             text: parenEndTag,
                             value: parenEndTag,
                             indent,
+                            asWord: false
                         }
                         this.rawTokens.push(token)
                         this.col++
@@ -509,7 +482,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: hasInject ? type: 'string',
             group: '文字列',
-            file: this.filename,
+            uri: this.moduleEnv.uri,
             startLine,
             startCol,
             endLine: this.line,
@@ -523,6 +496,7 @@ export class Nako3Tokenizer {
             text: text.substring(isFirstStringPart ? 0 : lastPartIndex, len),
             value: text.substring(isFirstStringPart ? startTag.length : lastPartIndex, resLen + lastPartIndex - (index >= 0 ? endTag.length : 0)),
             indent,
+            asWord: false
         }
         this.rawTokens.push(token)
         // console.log(`stringex: leave(col=${this.col})`)
@@ -655,7 +629,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'word',
             group: '単語',
-            file: this.filename,
+            uri: this.moduleEnv.uri,
             startLine: this.line,
             startCol,
             endLine: this.line,
@@ -669,643 +643,9 @@ export class Nako3Tokenizer {
             josi,
             josiStartCol,
             indent,
+            asWord: false
         }
         this.rawTokens.push(token)
         return len
-    }
-
-    fixTokens ():void {
-        this.tokens = []
-        this.commentTokens = []
-        this.moduleOption.isIndentSemantic = false
-        this.moduleOption.isPrivateDefault = false
-        this.moduleOption.isExportDefault = false
-        this.runtimeEnv = ''
-        this.imports = []
-        this.declareThings.clear()
-        let token:Token
-        let rawToken:Token|null = null
-        let reenterToken:Token[] = []
-        const functionIndex:number[] = []
-        const preprocessIndex: number[] = []
-        let topOfLine = true
-        let isLine0Col0 = true
-        let delayedToken: Token|null = null
-        const pushToken = (token: Token) => {
-            let type = token.type
-            if ((type === 'def_func' || type === '*') && token.startCol === 0 && token.josi === '') {
-                functionIndex.push(this.tokens.length)
-                if (type === '*') {
-                    logger.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
-                }
-            } else if (type === 'には') {
-                functionIndex.push(this.tokens.length)
-            }
-            if (type === 'COMMENT_LINE' || type === 'COMMENT_BLOCK' || type === '_eol') {
-                if (isLine0Col0 && type === 'COMMENT_LINE') {
-                    if (this.useShebang && token.text.startsWith('#!')) {
-                        if (token.text.includes('snako')) {
-                            this.runtimeEnv = 'snako'
-                        } else if (token.text.includes('cnako')) {
-                            this.runtimeEnv = 'cnako'
-                        }
-                    }
-                }
-                this.commentTokens.push(token)
-            } else {
-                if (type === 'eol') {
-                    topOfLine = true
-                } else {
-                    if (topOfLine && type === 'not') {
-                        preprocessIndex.push(this.tokens.length)
-                    }
-                    topOfLine = false
-                }
-                this.tokens.push(token)
-            }
-        }
-        for (let i = 0; i < this.rawTokens.length;) {
-            if (reenterToken.length > 0) {
-                rawToken = reenterToken.shift()!
-            } else {
-                rawToken = this.rawTokens[i]
-                i++
-            }
-            token = Object.assign({}, rawToken)
-            let requirePush = true
-            let type = rawToken.type
-            // 「回」で終わるWORDから「回」を分離する。
-            if (type === 'word' && rawToken.josi === '' && rawToken.value.length >= 2) {
-                if (rawToken.value.match(/回$/)) {
-                    token = Object.assign({}, rawToken, {
-                        type,
-                        value : rawToken.value.slice(0, -1),
-                        text : rawToken.text.slice(0, -1),
-                        len : rawToken.len - 1,
-                        endCol : rawToken.endCol - 1,
-                        resEndCol: rawToken.resEndCol - 1,
-                    })
-                    reenterToken.push(token)
-                    token = Object.assign({}, rawToken, {
-                        startCol: rawToken.endCol - 1,
-                        endCol: rawToken.endCol,
-                        resEndCol: rawToken.endCol,
-                        len: 1,
-                        type: '回',
-                        group: '制御',
-                        text: '回',
-                        value: '回',
-                    })
-                    reenterToken.push(token)
-                    requirePush = false
-                    continue
-                }
-            }
-            if (typeof rawToken.josi === 'undefined') {
-                token.josi = ''
-            }
-            if ((rawToken.josi === 'には' || rawToken.josi === 'は~' || rawToken.josi === 'は～') && typeof rawToken.josiStartCol === 'number') {
-                token = Object.assign({}, rawToken, {
-                    type,
-                    josi: '',
-                    josiStartCol: null,
-                    len: rawToken.josiStartCol,
-                    text: rawToken.text.slice(0, - (rawToken.len - rawToken.josiStartCol!)),
-                    endCol: rawToken.josiStartCol,
-                })
-                reenterToken.push(token)
-                token = Object.assign({}, rawToken, {
-                    type: 'には',
-                    group: '制御',
-                    len: rawToken.len - rawToken.josiStartCol,
-                    josi: '',
-                    josiStartCol: null,
-                    text: rawToken.text.substring(rawToken.len - rawToken.josiStartCol),
-                    value: 'には',
-                    startCol: rawToken.josiStartCol,
-                    resEndCol: rawToken.endCol,
-                })
-                reenterToken.push(token)
-                requirePush = false
-            }
-            if (rawToken.josi === 'は') {
-                token = Object.assign({}, rawToken, {
-                    type,
-                    josi: '',
-                    josiStartCol: null,
-                    len: rawToken.len - 1,
-                    text: rawToken.text.slice(0, -1),
-                    endCol: rawToken.endCol - 1,
-                })
-                reenterToken.push(token)
-                token = Object.assign({}, rawToken, {
-                    type: 'eq',
-                    group: '演算子',
-                    len: 1,
-                    text: '=',
-                    value: '=',
-                    josi: '',
-                    josiStartCol: null,
-                    startCol: rawToken.endCol - 1,
-                    resEndCol: rawToken.endCol,
-                })
-                reenterToken.push(token)
-                requirePush = false
-            }
-            if (rawToken.josi === 'とは' && typeof rawToken.josiStartCol === 'number') {
-                token = Object.assign({}, rawToken, {
-                    type,
-                    josi: '',
-                    josiStartCol: null,
-                    len: rawToken.josiStartCol,
-                    text: rawToken.text.slice(0, - (rawToken.len - rawToken.josiStartCol)),
-                    endCol: rawToken.josiStartCol,
-                })
-                reenterToken.push(token)
-                token = Object.assign({}, rawToken, {
-                    type: 'とは',
-                    group: '制御',
-                    len: rawToken.len - rawToken.josiStartCol!,
-                    josi: '',
-                    josiStartCol: null,
-                    text: rawToken.text.substring(rawToken.len - rawToken.josiStartCol),
-                    value: 'とは',
-                    startCol: rawToken.josiStartCol,
-                    resEndCol: rawToken.endCol,
-                })
-                reenterToken.push(token)
-                requirePush = false
-            }
-            if (tararebaMap[rawToken.josi] && typeof rawToken.josiStartCol === 'number') {
-                const rawJosi = rawToken.josi
-                const josi = (rawJosi === 'でなければ' || rawJosi === 'なければ') ? 'でなければ' : 'ならば'
-                token = Object.assign({}, rawToken, {
-                    type,
-                    len: rawToken.len - rawJosi.length,
-                    text: rawToken.text.slice(0, - (rawToken.endCol - rawToken.josiStartCol)),
-                    endCol: rawToken.josiStartCol,
-                    josiStartCol: null,
-                    josi: '',
-                })
-                reenterToken.push(token)
-                token = Object.assign({}, rawToken, {
-                    type: 'ならば',
-                    group: '制御',
-                    len: rawToken.len - rawToken.josiStartCol,
-                    text: rawJosi,
-                    value: josi,
-                    josi: '',
-                    josiStartCol: null,
-                    startCol: rawToken.josiStartCol,
-                    resEndCol: rawToken.josiStartCol + rawJosi.length,
-                })
-                reenterToken.push(token)
-                requirePush = false
-            }
-            if (requirePush) { 
-                token.type = type
-                if (delayedToken === null) {
-                    delayedToken = token
-                } else {
-                    if (delayedToken.type === 'word' && delayedToken.value === '_' && delayedToken.josi === '' && token.type === 'eol') {
-                        token.startLine = delayedToken.startLine
-                        token.startCol = delayedToken.startCol
-                        token.len = token.endCol - delayedToken.startCol
-                        token.text = '_\n'
-                        token.value = '_\n'
-                        token.type = '_eol'
-                        delayedToken = null
-                    } else if (delayedToken.type === 'エラー' && token.type === 'ならば' && delayedToken.josi === '' && delayedToken.endCol === token.startCol) {
-                        token.startLine = delayedToken.startLine
-                        token.startCol = delayedToken.startCol
-                        token.len = token.endCol - delayedToken.startCol
-                        token.text = 'エラーならば'
-                        token.value = 'エラーならば'
-                        token.type = 'エラーならば'
-                        delayedToken = null
-                    }
-                    if (delayedToken) {
-                        pushToken(delayedToken)
-                    }
-                    delayedToken = token
-                }
-                isLine0Col0 = false
-            }
-        }
-        if (delayedToken) {
-            pushToken(delayedToken)
-        }
-
-        const lastToken = this.tokens[this.tokens.length - 1]
-        this.tokens.push({
-            type: 'eol',
-            group: '区切',
-            len: 0,
-            lineCount: 0,
-            startLine: lastToken.endLine,
-            startCol: lastToken.endCol,
-            endLine: lastToken.endLine,
-            endCol: lastToken.endCol,
-            resEndCol: lastToken.endCol,
-            text: '---',
-            value: ';',
-            unit: '',
-            josi: '',
-            indent: { len: 0, level: 0, text: '' },
-            file: lastToken.file
-        })
-        this.tokens.push({
-            type: 'eof',
-            group: '区切',
-            len: 0,
-            lineCount: 0,
-            startLine: lastToken.endLine,
-            startCol: lastToken.endCol,
-            endLine: lastToken.endLine,
-            endCol: lastToken.endCol,
-            resEndCol: lastToken.endCol,
-            text: '',
-            value: '',
-            unit: '',
-            josi: '',
-            indent: { len: 0, level: 0, text: '' },
-            file: lastToken.file
-        })
-        this.preprocess(preprocessIndex)
-        this.enumlateFunction(functionIndex)
-    }
-
-    preprocess (preprocessIndex: number[]):void {
-        let token: Token
-        const tokens = this.tokens
-        const tokenCount = tokens.length
-        for (const index of preprocessIndex) {
-            let hit = false
-            let causeError = false
-            let i = index
-            let targetToken: Token|null = null
-            let targetType: TokenType = '?'
-            token = tokens[i]
-            if (!(token.type === 'not' && (token.value === '!' || token.value === '！'))) {
-                logger.log(`internal error: invalid token, expected 'NOT' token`)                
-            }
-            i++
-            token = tokens[i]
-            if (token.type === 'word' && trimOkurigana(token.value) === '厳チェック') {
-                this.moduleOption.isStrict = true
-                targetToken = token
-                targetType = '厳チェック'
-                logger.info('strict on')
-                hit = true
-            } else if (token.type === 'word' && token.value === '非同期モード') {
-                this.moduleOption.isAsync = true
-                targetToken = token
-                targetType = '非同期モード'
-                logger.info('async mode on')
-                logger.log('『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)。', token)
-                this.errorInfos.addFromToken('WARN', 'deprecatedAsync', {}, tokens[index], token)
-                hit = true
-            } else if (token.type === 'word' && token.value === 'DNCLモード') {
-                this.moduleOption.isDNCL = true
-                targetToken = token
-                targetType = 'DNCLモード'
-                this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
-                logger.info('DNCL1 mode on')
-                hit = true
-            } else if (token.type === 'word' && ['DNCL2モード','DNCL2'].includes(token.value)) {
-                this.moduleOption.isDNCL2 = true
-                targetToken = token
-                targetType = 'DNCL2モード'
-                this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
-                logger.info('DNCL2 mode on')
-                hit = true
-            } else if (token.type === 'word' && token.value === 'インデント構文') {
-                this.moduleOption.isIndentSemantic = true
-                targetToken = token
-                targetType = 'インデント構文'
-                logger.info('indent semantic on')
-                hit = true
-            } else if (token.type === 'word' && token.value === 'モジュール公開既定値') {
-                targetToken = token
-                targetType = 'モジュール公開既定値'
-                i++
-                token = tokens[i]
-                if (token.type === 'eq') {
-                    i++
-                    token = tokens[i]
-                    if (token.type === 'string') {
-                        this.moduleOption.isPrivateDefault = token.value === '非公開'
-                        this.moduleOption.isExportDefault = token.value === '公開'
-                        logger.info(`change default publishing:${token.value}`)
-                    } else if (token.type === 'STRING_EX') {
-                        this.errorInfos.addFromToken('ERROR', `cannotUseTemplateString`, {}, token)
-                        causeError = true
-                    } else {
-                        this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocess`, { type: token.type, value: token.value }, token)
-                        causeError = true
-                    }
-                } else {
-                    this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'=', type: token.type, value: token.value }, token)
-                    causeError = true
-                }
-                hit = true
-            } else if (i+1 < tokenCount && token.type === 'string' && token.josi === 'を' && tokens[i+1].type === 'word' && trimOkurigana(tokens[i+1].value) === '取込') {
-                targetToken = token
-                targetType = '取込'
-                logger.info('import file')
-                const importInfo: ImportInfo = {
-                    value: token.value,
-                    tokenIndex: i,
-                    startLine: tokens[i-1].startLine,
-                    startCol: tokens[i-1].startCol,
-                    endLine: tokens[i+1].endLine,
-                    endCol: tokens[i+1].endCol
-                }
-                this.imports.push(importInfo)
-                i += 1
-                hit = true
-            }
-            if (hit) {
-                tokens[index].type = '!'
-                if (targetToken) {
-                    targetToken.type = targetType
-                }
-                if (!causeError) {
-                    i++
-                    token = tokens[i]
-                    if (!(token.type === 'eol')) {
-                        this.errorInfos.addFromToken('ERROR', `invalidTokenInPreprocessExpected`, { expected:'EOL', type: token.type, value: token.value }, token)
-                    }
-                }
-            }
-        }
-    }
-
-    enumlateFunction (functionIndex: number[]):void {
-        let args = new Map<string, FunctionArg>()
-        let argOrder: string[] = []
-        const parseArguments = (i:number):number => {
-            // jに先頭位置、iに最短の')'またはEOLの位置を求める。
-            let token: Token
-            let j = i
-            for (;i < this.tokens.length && this.tokens[i].type !== ')' && this.tokens[i].type !== 'eol';i++) {
-                //
-            }
-            if (j < i && this.tokens[i].type === ')') {
-                token = this.tokens[j]
-                if (token.type === '(') {
-                    token.type = 'FUNCTION_ARG_PARENTIS_START'
-                    j++
-                }
-                while (j <= i) {
-                    let attr: string[] = []
-                    let varname: string = ''
-                    let josi: string[] = []
-                    token = this.tokens[j]
-                    let k = j
-                    if (token.type === '{') {
-                        token.type = 'FUNCTION_ARG_ATTR_START'
-                        j++
-                        token = this.tokens[j]
-                        if (token.type === 'word') {
-                            token.type = 'FUNCTION_ARG_ATTRIBUTE'
-                            attr.push(token.value)
-                            j++
-                            token = this.tokens[j]
-                        }
-                        if (token.type === '}') {
-                            token.type = 'FUNCTION_ARG_ATTR_END'
-                            j++
-                            token = this.tokens[j]
-                        }
-                    }
-                    if (token.type === 'word') {
-                        token.type = 'FUNCTION_ARG_PARAMETER'
-                        varname = token.value
-                        if (args.has(varname)) {
-                            const arg = args.get(varname)
-                            josi = arg!.josi
-                            arg!.attr.push(...attr)
-                            attr = arg!.attr
-                        } else {
-                            const arg = {
-                                varname, attr, josi
-                            }
-                            args.set(varname, arg)
-                            argOrder.push(varname)
-                        }
-                        if (token.josi !== '') {
-                            josi.push(token.josi)
-                        }
-                        j++
-                        token = this.tokens[j]
-                    }
-                    if (token.type === ',' || token.type === '|') {
-                        token.type = 'FUNCTION_ARG_SEPARATOR'
-                        j++
-                        token = this.tokens[j]
-                    }
-                    if (token.type === ')') {
-                        token.type = 'FUNCTION_ARG_PARENTIS_END'
-                        j++
-                        token = this.tokens[j]
-                    }
-                    if (j === k) {
-                        this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
-                        break
-                    }
-                }
-                if (j !== i + 1) {
-                    token = this.tokens[j]
-                    this.errorInfos.addFromToken('ERROR', 'unknownTokenInFuncParam', {type: token.type}, token)
-                }
-                i++
-            } else {
-                this.errorInfos.addFromToken('ERROR', 'noFunctionParamParentisR', {token:this.tokens[j].type}, this.tokens[j])
-            }
-            return i
-        }
-        let token: Token
-        for (const index of functionIndex) {
-            let i = index
-            let isMumei = false
-            let isPrivate = this.moduleOption.isPrivateDefault
-            let isExport = this.moduleOption.isExportDefault
-            args = new Map<string, FunctionArg>()
-            argOrder = []
-            token = this.tokens[i]
-            if (token.type === '*') {
-                token.type = 'def_func'
-            }
-            if (token.type === 'には') {
-                isMumei = true
-                token.type = 'def_func'
-            }
-            i++
-            token = this.tokens[i]
-            if (!isMumei && token.type === '{') {
-                let j = i
-                for (;i < this.tokens.length && this.tokens[i].type !== '}' && this.tokens[i].type !== 'eol';i++) {
-                    //
-                }
-                if (this.tokens[i].type === '}') {
-                    this.tokens[j].type = 'FUNCTION_ATTR_PARENTIS_START'
-                    j++
-                    this.tokens[i].type = 'FUNCTION_ATTR_PARENTIS_END'
-                    for (;j < i;j++) {
-                        token = this.tokens[j]
-                        token.type = 'FUNCTION_ATTRIBUTE'
-                        if (token.value === '非公開') {
-                            isPrivate = true
-                            isExport = false
-                        } else if (token.value === '公開') {
-                            isExport = true
-                            isPrivate = false
-                        }
-                    }
-                    i++
-                }
-            }
-            let hasParameter = false
-            token = this.tokens[i]
-            if (token.type === '(') {
-                i = parseArguments(i)
-                hasParameter = true
-            }
-            token = this.tokens[i]
-            let hasToha = false
-            let funcName: string = ''
-            let funcNameIndex: number = -1
-            if (!isMumei && token.type === 'word') {
-                token.type = 'FUNCTION_NAME'
-                funcName = token.value
-                funcNameIndex = index
-                if (token.josi === 'とは') {
-                    hasToha = true
-                }
-                i++
-            }
-            token = this.tokens[i]
-            if (!isMumei && !hasToha && (token.type === 'とは' || (token.type === 'word' && token.value === 'とは'))) {
-                if (token.type === 'word' && token.value === 'とは') {
-                    console.warn(`とは type was WORD`)
-                }
-                i++
-            }
-            token = this.tokens[i]
-            if (!isMumei && !hasParameter && token.type === '(') {
-                i = parseArguments(i)
-                hasParameter = true
-            }
-            const orderedArgs: FunctionArg[] = []
-            for (const orderKey of argOrder) {
-                const arg = args.get(orderKey)!
-                orderedArgs.push(arg)
-            }
-            this.addUserFunction(funcName, orderedArgs, isExport, isPrivate, isMumei, funcNameIndex, index)
-        }
-    }
-
-    addUserFunction (name: string, args: FunctionArg[], isExport: boolean, isPrivate: boolean, isMumei: boolean, index: number, defTokenIndex: number):void {
-        const nameTrimed = name.trim()
-        const nameNormalized = trimOkurigana(nameTrimed)
-        const declFunction: DeclareFunction = {
-            name: nameTrimed,
-            nameNormalized: nameNormalized,
-            modName: this.modName,
-            type: 'func',
-            isMumei,
-            args: args,
-            isPure: true,
-            isAsync: false,
-            isVariableJosi: false,
-            isExport,
-            isPrivate
-        }
-        if (nameTrimed.length > 0) {
-            this.declareThings.set(nameNormalized, declFunction)
-        }
-        (this.tokens[defTokenIndex] as TokenDefFunc).meta = declFunction
-    }
-
-    applyFunction() {
-        for (const token of this.tokens) {
-            const v = token.value
-            const tv = trimOkurigana(v)
-            let type = token.type
-            let nextTokenToFuncPointer = false
-            if (type === 'word') {
-                const thing = this.declareThings.get(tv)
-                if (thing) {
-                    switch (thing.type) {
-                    case 'func':
-                        (token as TokenCallFunc).meta = thing as DeclareFunction
-                        if (nextTokenToFuncPointer) {
-                            (token as TokenCallFunc).isFuncPointer = true
-                        }
-                        type = 'user_func'
-                        break
-                    case 'var':
-                        type = 'user_var'
-                        break
-                    case 'const':
-                        type = 'user_const'
-                        break
-                    default:
-                        type = '?'
-                        break
-                    }
-                    token.type = type
-                }
-            }
-            if (type === 'word') {
-                const rtype = reservedWords.get(v) || reservedWords.get(tv)
-                if (rtype) {
-                    type = rtype
-                    token.type = type
-                    token.group = reservedGroup.get(type)!
-                }
-                if (token.value === 'そう') {
-                    token.value = 'それ'
-                }
-            }
-            if (type === 'word' && this.commands) {
-                const commandInfo = this.getCommandInfo(v)
-                if (commandInfo) {
-                    if (commandInfo.type === 'func') {
-                        (token as TokenCallFunc).meta = commandInfo as DeclareFunction
-                        if (nextTokenToFuncPointer) {
-                            (token as TokenCallFunc).isFuncPointer = true
-                        }
-                        type = 'sys_func'
-                    } else if (commandInfo.type === 'var') {
-                        (token as TokenRefVar).meta = commandInfo as DeclareVariable
-                        type = 'sys_var'
-                    } else {
-                        (token as TokenRefVar).meta = commandInfo as DeclareVariable
-                        type = 'sys_const'
-                    }
-                    token.type = type
-                }
-            }
-            nextTokenToFuncPointer = false
-            if (type === 'func_ptr' && token.value === '{関数}') {
-                nextTokenToFuncPointer = true
-            }
-        }
-    }
-
-    getCommandInfo (command: string): DeclareThing|null {
-        const tv = trimOkurigana(command)
-        for (const key of [`runtime:${this.runtimeEnv}`, ...this.pluginNames]) {
-            const commandEntry = this.commands!.get(key)
-            if (commandEntry) {
-                const commandInfo = commandEntry.get(command) || commandEntry.get(tv)
-                if (commandInfo) {
-                    return commandInfo
-                }
-            }
-        }
-        return null
     }
 }

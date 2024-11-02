@@ -3,31 +3,13 @@ import { EventEmitter } from 'node:events'
 import process from 'node:process'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { showMessage } from './nako3message.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3types.mjs'
+import type { NakoRuntime } from './nako3types.mjs'
 
 export interface TerminalExt extends Terminal {
     filePath?: string
     terminalIndex?: number
-}
-
-/**
-* ファイル名からモジュール名へ変換
-* @param {string} filename
-* @returns {string}
-*/
-export function filenameToModName (filename: string): string {
-    if (!filename) { return 'main' }
-    // パスがあればパスを削除
-    filename = filename.replace(/[\\:]/g, '/') // Windowsのpath記号を/に置換
-    if (filename.indexOf('/') >= 0) {
-        const a = filename.split('/')
-        filename = a[a.length - 1]
-    }
-    filename = filename.replace(/\.nako3?$/, '')
-    return filename
 }
 
 class Nako3Nadesiko3 extends EventEmitter {
@@ -119,7 +101,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         return this.home
     }
 
-    async execForFile(uri: Uri, runtimeEnv: RuntimeEnv):Promise<void> {
+    async execForFile(uri: Uri, nakoRuntime: NakoRuntime):Promise<void> {
         const startTime = new Date()
         const configNode = workspace.getConfiguration('nadesiko3Highlight.node')
         let nako3folder:string = await this.getNako3Home()
@@ -137,7 +119,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         logger.debug(`command:nadesiko3.exec:nodeBin=${nodeBin}`)
         const cnako3 = path.resolve(nako3folder, path.join('src', 'cnako3.mjs'))
         const snako = path.resolve(nako3folder, path.join('core', 'command', 'snako.mjs'))
-        const nako3exec = runtimeEnv === 'snako' ? snako : cnako3
+        const nako3exec = nakoRuntime === 'snako' ? snako : cnako3
         if (!dirName || dirName === '' || dirName === '.') {
             showMessage('WARN', 'unknwonCWD', {})
           return
@@ -148,7 +130,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         terminal.sendText(`${nodeBin} "${nako3exec}" "${path.basename(fileName)}"`)
     }
 
-    async execForText(text: string, uri: Uri, runtimeEnv: RuntimeEnv):Promise<void> {
+    async execForText(text: string, uri: Uri, nakoRuntime: NakoRuntime):Promise<void> {
         const startTime = new Date()
         const configNode = workspace.getConfiguration('nadesiko3Highlight.node')
         let nako3folder:string = await this.getNako3Home()
@@ -167,7 +149,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         logger.debug(`command:nadesiko3.exec:nodeBin=${nodeBin}`)
         const cnako3 = path.resolve(nako3folder, path.join('src', 'cnako3.mjs'))
         const snako = path.resolve(nako3folder, path.join('core', 'command', 'snako.mjs'))
-        const nako3exec = runtimeEnv === 'snako' ? snako : cnako3
+        const nako3exec = nakoRuntime === 'snako' ? snako : cnako3
         if (!dirName || dirName === '' || dirName === '.') {
             showMessage('WARN', 'unknwonCWD', {})
           return
@@ -201,7 +183,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         }
         const cnakomjs = path.join(folderpath, 'src', 'cnako3.mjs')
         try {
-            let f = await fs.lstat(cnako)
+            let f = await fs.lstat(cnakomjs)
             if (!f.isFile) {
                 return false
             }

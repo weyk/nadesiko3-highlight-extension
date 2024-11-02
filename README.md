@@ -8,6 +8,8 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 - Document highlight(word highlight)
 - Document symbols(outline)
 - Hover(built-in function hint)
+- Definition(go to definition)
+- Reference(find all references)
 - Launch snako/cnako3 program with shebang line
 
 ## Install

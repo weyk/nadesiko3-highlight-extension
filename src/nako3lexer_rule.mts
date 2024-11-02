@@ -1,4 +1,4 @@
-import { Indent, TokenType, Nako3TokenTypeReserve, TokenGroup } from './nako3token.mjs'
+import type { Indent, TokenType, Nako3TokenTypeReserve, TokenGroup } from './nako3token.mjs'
 
 export type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'
 export type SubProcOptArgs = [] | [string, string] | [string, string, TokenType]

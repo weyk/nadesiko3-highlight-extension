@@ -11,6 +11,7 @@ export default {
     'node:fs/promises',
     'node:path',
     'node:process',
+    'node:timers',
     'vscode',
     './nako3/command.json'
   ]

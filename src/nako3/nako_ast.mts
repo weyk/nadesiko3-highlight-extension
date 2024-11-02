@@ -1,9 +1,9 @@
 /**
  * 抽象構文木( Abstract Syntax Tree )を定義したもの
  */
-
-import { Token } from '../nako3token.mjs'
-import { DeclareFunction } from '../nako3types.mjs'
+import { Uri } from 'vscode'
+import type { DeclareFunction } from '../nako3types.mjs'
+import type { Token } from '../nako3token.mjs'
 
 /** ASTのノードの種類を定義 */
 export type NodeType = 'nop'
@@ -55,7 +55,6 @@ export type NodeType = 'nop'
   | 'speed_mode'
   | 'run_mode'
 
-
 export interface Ast {
   type: NodeType;
   name?: Token | Ast | null | string;
@@ -70,7 +69,7 @@ export interface Ast {
   endLine: number;
   endCol: number;
   resEndCol: number;
-  file?: string;
+  uri?: Uri;
   startOffset?: number | undefined;
   endOffset?: number | undefined;
   rawJosi?: string;
@@ -87,7 +86,6 @@ export interface AstEol extends Ast {
 export interface AstStrValue extends Ast {
   value: string;
 }
-
 
 type VarOrConstType = '変数' | '定数'
 export interface AstDefVar extends AstBlocks {

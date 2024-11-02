@@ -1,135 +1,197 @@
 import {
-    languages,
-    workspace,
-    DiagnosticCollection,
-    DocumentHighlight,
-    DocumentSymbol,
-    Hover,
-    Position,
-    SemanticTokens,
-    SemanticTokensBuilder,
+    FileSystemWatcher,
     TextDocument,
-    Uri
+    Uri,
+    workspace
 } from 'vscode'
 import { EventEmitter } from 'node:events'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
-import { Nako3Command } from './nako3command.mjs'
+import { Nako3Range } from './nako3range.mjs'
+import { ImportInfo } from './nako3module.mjs'
+import { ImportStatementInfo } from './nako3tokenfixer.mjs'
+import { nako3extensionOption } from './nako3option.mjs'
+import { nako3plugin } from './nako3plugin.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from './logger.mjs'
-import type { RuntimeEnv } from './nako3types.mjs'
+import type { NakoRuntime } from './nako3types.mjs'
+import type { Token } from './nako3token.mjs'
+
+interface DependNako3Info {
+    uri: Uri
+    importKey?: string
+    range?: Nako3Range
+}
 
 export class Nako3Documents extends EventEmitter implements Disposable {
-    runtimeEnv: RuntimeEnv
-    useShebang: boolean
-    problemsLimit: number
     docs: Map<string, Nako3DocumentExt>
-    diagnosticsCollection: DiagnosticCollection
-    commands: Nako3Command
+    fileWacther: FileSystemWatcher
 
     constructor () {
         super()
         // console.log('nako3documnets constructed')
         this.docs = new Map()
-        this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
-        this.runtimeEnv = 'wnako'
-        this.useShebang = true
-        this.problemsLimit = 100
-        this.commands = new Nako3Command()
-        this.commands.initialize()
+        this.fileWacther = workspace.createFileSystemWatcher('{**/*.nako3,**/*.js,**/*.cjs,**/*.mjs}', true)
+        this.fileWacther.onDidChange(async uri => {
+            await this.fileOnDidChange(uri)
+        })
+        this.fileWacther.onDidDelete(uri => {
+            this.fileOnDidDelete(uri)
+        })
     }
 
     [Symbol.dispose](): void {
-        if (this.diagnosticsCollection) {
-            this.diagnosticsCollection.dispose()
+        if (this.fileWacther) {
+            this.fileWacther.dispose()
         }
     }
-
-    setRuntimeEnv (runtime: RuntimeEnv) {
-        this.runtimeEnv = runtime
-        for (const [ , doc] of this.docs) {
-            doc.setRuntimeEnvDefault(runtime)
-        }
-    }
-
-    setUseShebang (useShebang: boolean) {
-        this.useShebang = useShebang
-        for (const [ , doc] of this.docs) {
-            doc.setUseShebang(useShebang)
-        }
-    }
-
-    setProblemsLimit (limit: number) {
-        this.problemsLimit = limit
-        for (const [ , doc] of this.docs) {
-            doc.setProblemsLimit(limit)
-        }
-    }
-
-    openFromDocument (document: TextDocument|Uri):void {
-        const fileName = this.getFileName(document)
-        const uri = this.getUri(document)
-        if (!this.has(document)) {
-            const doc = new Nako3DocumentExt(document)
-            this.docs.set(fileName, doc)
-            doc.setRuntimeEnvDefault(this.runtimeEnv)
-            doc.setUseShebang(this.useShebang)
-            doc.nako3doc.lex.commands = this.commands
-            doc.nako3doc.parser.commands = this.commands
-            doc.setProblemsLimit(this.problemsLimit)
-            doc.nako3doc.addListener('changeRuntimeEnv', e => {
-                logger.debug(`docs:onChangeRuntimeEnv`)
-                this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
-            })
-        } else {
-            const doc = this.get(document)!
-            if (!doc.isTextDocument) {
-                doc.isTextDocument = true
+   
+    async fileOnDidChange (uri: Uri) {
+        if (/\.nako3$/.test(uri.fsPath)) {
+            const doc = this.get(uri)
+            if (doc) {
+                const uristr = uri.toString()
+                if (!doc.isTextDocument) {
+                    await doc.updateText(uri)
+                    await doc.tokenize()
+                }
+            }
+        } if (/\.(js|cja|mjs)$/.test(uri.fsPath)) {
+            if (nako3plugin.has(uri.toString())) {
+                nako3plugin.importFromFile(uri.toString())
             }
         }
     }
-
-    openFromFile (uri: Uri):void {
-        const fileName = this.getFileName(uri)
-        if (!this.has(uri)) {
-            const doc = new Nako3DocumentExt(uri)
-            this.docs.set(fileName, doc)
-            doc.setRuntimeEnvDefault(this.runtimeEnv)
-            doc.setUseShebang(this.useShebang)
-            doc.nako3doc.lex.commands = this.commands
-            doc.nako3doc.parser.commands = this.commands
-            doc.setProblemsLimit(this.problemsLimit)
-            doc.nako3doc.addListener('changeRuntimeEnv', e => {
-                logger.debug(`docs:onChangeRuntimeEnv`)
-                this.fireChangeRuntimeEnv(fileName, uri, e.runtimeEnv)
-            })
+ 
+    fileOnDidDelete (uri: Uri) {
+        if (/\.nako3$/.test(uri.fsPath)) {
+            const doc = this.get(uri)
+            if (doc) {
+                const uristr = uri.toString()
+                this.docs.delete(uristr)
+                doc.link.imports.clear()
+                for (const [ ,target ] of this.docs) {
+                    target.nako3doc.moduleEnv.externalThings.delete(uristr)
+                    target.link.importBy.delete(uristr)
+                }
+                nako3diagnostic.markRefreshDiagnostics()
+            }
+        } if (/\.(js|cja|mjs)$/.test(uri.fsPath)) {
+            if (nako3plugin.has(uri.toString())) {
+                nako3plugin.plugins.delete(uri.toString())
+            }
         }
     }
+ 
+    openFromDocument (document: TextDocument): Nako3DocumentExt {
+        const fileName = this.getFileName(document)
+        let doc = this.get(document)
+        if (!doc) {
+            const uri = this.getUri(document)
+            doc = this.newDocument(fileName, uri, document)
+            console.log(`document open: open by TextDocument(${fileName})`)
+        } else {
+            if (!doc.isTextDocument) {
+                doc.isTextDocument = true
+                console.log(`document open: already opened, change to TextDocument(${fileName})`)
+            } else {
+                console.log(`document open: already opened by TextDocument(${fileName})`)
+            }
+        }
+        return doc
+    }
 
-    fireChangeRuntimeEnv (fileName: string, uri: Uri, runtimeEnv: RuntimeEnv) {
-        logger.debug(`docs:fireChangeRuntimeEnv(${fileName}:${runtimeEnv})`)
-        this.emit('changeRuntimeEnv', { fileName, uri, runtimeEnv: runtimeEnv })
+    openFromFile (uri: Uri): Nako3DocumentExt {
+        const fileName = this.getFileName(uri)
+        let doc: Nako3DocumentExt|undefined = this.get(uri)
+        if (!doc) {
+            doc = this.newDocument(fileName, uri)
+            console.log(`document open: open by file(${fileName})`)
+        } else {
+            if (doc.isTextDocument) {
+                console.log(`document open: already file opened by TextDocument(${fileName})`)
+            } else {
+                console.log(`document open: already file opened by file(${fileName})`)
+            }
+        }
+        return doc
+    }
+
+    private newDocument (fileName: string, uri: Uri, document?: TextDocument) {
+        const doc = new Nako3DocumentExt(document || uri)
+        this.docs.set(fileName, doc)
+        /*doc.nako3doc.addListener('changeNakoRuntime', e => {
+            logger.debug(`docs:onChangeNakoRuntime`)
+            this.fireChangeNakoRuntime(fileName, uri, e.nakoRuntime)
+        })
+        doc.nako3doc.addListener('refreshLink', async e => {
+            logger.debug(`docs:onRefreshLink`)
+            await this.refreshLink(doc, e.imports)
+        })*/
+        doc.nako3doc.onChangeNakoRuntime = (nakoRuntime:NakoRuntime) => {
+            logger.debug(`docs:onChangeNakoRuntime`)
+            this.fireChangeNakoRuntime(fileName, uri, nakoRuntime)
+        }
+        doc.nako3doc.onRefreshLink = async (imports) => {
+            logger.debug(`docs:onRefreshLink`)
+            await this.refreshLink(doc, imports)
+        }
+        return doc
+    }
+
+    fireChangeNakoRuntime (fileName: string, uri: Uri, nakoRuntime: NakoRuntime) {
+        logger.debug(`docs:fireChangeNakoRuntime(${fileName}:${nakoRuntime})`)
+        this.emit('changeNakoRuntime', { fileName, uri, nakoRuntime })
     }
 
     closeAtDocument (document: TextDocument):void {
-        const fileName = document.fileName
+        const fileName = document.uri.toString()
         if (!this.docs.has(fileName)) {
             console.log(`document close: no open(${fileName})`)
         }
         const doc = this.get(document)
         if (doc && doc.isTextDocument) {
             doc.isTextDocument = false
+            if (doc.link.importBy.size > 0) {
+                console.log(`document close: no close: import by other(${fileName})`)
+                return
+            }
+            doc.link.imports.clear()
+        }
+        for (const [ , doc ] of this.docs) {
+            if (doc.link.importBy.has(fileName)) {
+                doc.link.importBy.delete(fileName)
+            }
         }
         this.docs.delete(fileName)
-        this.getDiagnostics()
-        console.log('document close:leave')
+        console.log(`document close: closed(${fileName})`)
+        nako3diagnostic.refreshDiagnostics()
     }
 
     closeAtFile (uri: Uri):void {
-        const fileName = uri.fsPath
+        const fileName = uri.toString()
         if (!this.docs.has(fileName)) {
             console.log(`document close: no open(${fileName})`)
         }
+        const doc = this.get(uri)
+        if (doc) {
+            if (doc.isTextDocument) {
+                console.log(`document close: no close: document is textDocument(${fileName})`)
+                return
+            }
+            if (doc.link.importBy.size > 0) {
+                console.log(`document close: no close: import by other(${fileName})`)
+                return
+            }
+            doc.link.imports.clear()
+        }
+        for (const [ , doc ] of this.docs) {
+            if (doc.link.importBy.has(fileName)) {
+                doc.link.importBy.delete(fileName)
+            }
+        }
         this.docs.delete(fileName)
-        this.getDiagnostics()
+        console.log(`document close: closed(${fileName})`)
+        nako3diagnostic.refreshDiagnostics()
     }
 
     has (document: TextDocument|Uri): boolean {
@@ -141,82 +203,311 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     getFileName (doc: TextDocument|Uri): string {
-        return doc instanceof Uri ? doc.fsPath : doc.fileName
+        return doc instanceof Uri ? doc.toString() : doc.uri.toString()
     }
 
     getUri (doc: TextDocument|Uri): Uri {
         return doc instanceof Uri ? doc : doc.uri
     }
 
-    async setFullText (document: TextDocument|Uri):Promise<void> {
-        const doc = this.get(document)
-        if (doc) {
-            if (document instanceof Uri) {
-                if (workspace) {
-                    workspace.fs.stat(document).then(l => {
-                        workspace.fs.readFile(document).then(value => {
-                            doc.updateText(value.toString(), l.mtime)
-                        })
-                    })
+    async refreshLink(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<void> {
+        const moduleEnv = doc.nako3doc.moduleEnv
+        doc.errorInfos.clear()
+        moduleEnv.pluginNames.length = 0
+        console.log(`refreshLink: pluginNames cleared`)
+        doc.link.imports.clear()
+        const dependNako3UriList = this.getDependNako3UriList(doc, imports)
+        this.refreshNako3InLink(doc, dependNako3UriList)
+        let r: RegExpExecArray | null
+        for (const importInfo of imports) {
+            const imp = importInfo.value
+            if (/\.nako3?$/.test(imp)) {
+                continue
+            }
+            r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
+            if (r && r.length > 1 && r[1] != null) {
+                const plugin = r[1]
+                logger.info(`imports:check js plugin with plugin name:${plugin}`)
+                if (nako3plugin.has(plugin)) {
+                    moduleEnv.pluginNames.push(plugin)
+                    const info : ImportInfo = {
+                        importKey: imp,
+                        type: 'js',
+                        pluginKey: plugin,
+                        exists: true,
+                        startLine: importInfo.startLine,
+                        startCol: importInfo.startCol,
+                        endLine: importInfo.endLine,
+                        endCol: importInfo.endCol,
+                        wasErrorReported: false
+                    }
+                    doc.link.imports.set(imp, info)
+                    continue
+                }
+            }
+            r = /[\\\/]?(([^\\\/]*)(\.(js|mjs|cjs))?)$/.exec(imp)
+            if (r && r.length > 1 && r[1] != null) {
+                const plugin = r[1]
+                logger.info(`imports:add js plugin without plugin name:${plugin}`)
+                const info : ImportInfo = {
+                    importKey: imp,
+                    pluginKey: imp,
+                    type: 'js',
+                    exists: false,
+                    startLine: importInfo.startLine,
+                    startCol: importInfo.startCol,
+                    endLine: importInfo.endLine,
+                    endCol: importInfo.endCol,
+                    wasErrorReported: false
+                }
+                doc.link.imports.set(imp, info)
+                let filepath = await nako3plugin.importFromFile(imp, doc.link, doc.errorInfos)
+                if (filepath !== null) {                                  
+                    info.exists = true
+                    moduleEnv.pluginNames.push(filepath)
+                    nako3plugin.registPluginMap(doc.link.filePath, imp, filepath)
+                    if (!nako3plugin.has(filepath)) {
+                        doc.errorInfos.add('WARN', 'noPluginInfo', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                        info.exists = false
+                        info.wasErrorReported = true
+                    }
+                } else {
+                    // this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                    doc.errorInfos.add('ERROR', 'errorImport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                    info.exists = false
+                    info.wasErrorReported = true
+                    moduleEnv.pluginNames.push(plugin)
                 }
             } else {
-                doc.updateText(document.getText(), document.version)
-            }
-        } else {
-            console.log(`setFullText: document not opend`)
-        }
-    }
-
-    getSemanticTokens(document: TextDocument): SemanticTokens {
-        const doc = this.get(document)
-        if (doc == null) {
-            console.log(`getSemanticTokens: document not opend`)
-            const builder = new SemanticTokensBuilder()
-            return builder.build()
-        }
-        return doc.getSemanticTokens()
-    }
-
-    getHighlight (document: TextDocument, position: Position): DocumentHighlight[] {
-        const doc = this.get(document)
-        if (doc == null) {
-            console.log(`getHighlight: document not opend`)
-            return []
-        }
-        return doc.getHighlight(position)
-    }
-
-    getSymbols (document: TextDocument): DocumentSymbol[] {
-        const doc = this.get(document)
-        if (doc == null) {
-            console.log(`getSymbols: document not opend`)
-            return []
-        }
-        return doc.getDocumentSymbols()
-    }
-
-    getHover (document: TextDocument, position: Position): Hover|null {
-        const doc = this.get(document)
-        if (doc == null) {
-            console.log(`getHover: document not opend`)
-            return null
-        }
-        return doc.getHover(position)
-    }
-
-    getDiagnostics (document?: TextDocument|Uri): DiagnosticCollection {
-        logger.log(`interface:getDiagnostics:start`)
-        this.diagnosticsCollection.clear()
-        if (document) {
-            const doc = this.get(document)
-            if (doc == null) {
-                console.log(`getDiagnostics: document not opend`)
+                doc.errorInfos.add('WARN', 'unknownImport', { file: imp }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
             }
         }
-        for (const [ , doc] of this.docs) {
-            this.diagnosticsCollection.set(doc.uri, doc.getDiagnostics())
+        let exist = false
+        let currentImportList:DependNako3Info[] = dependNako3UriList
+        const alreadyImportedList:DependNako3Info[] = [...currentImportList]
+        let newNakoUriList:DependNako3Info[] = []
+        let tickCount = 0
+        while (currentImportList.length > 0) {
+            console.log(`refreshLink:Nako3:tick=${tickCount}, count=${currentImportList.length}`)
+            for (const uriInfo of currentImportList) {
+                const target = await this.importNako3(doc, uriInfo)
+                if (target) {
+                    exist = true
+                    for (const [ uriStr, ] of target.nako3doc.moduleEnv.externalThings) {
+                        const uri = Uri.parse(uriStr)
+                        let alreadyExist = false
+                        for (const info of newNakoUriList) {
+                            if (uriStr === info.uri.toString()) {
+                                alreadyExist = true
+                                break
+                            }
+                        }
+                        if (!alreadyExist) {
+                            for (const uriInfo of alreadyImportedList) {
+                                if (uriStr === uriInfo.uri.toString()) {
+                                    alreadyExist = true
+                                    break
+                                }
+                            }
+                        }
+                        if (!alreadyExist) {
+                            newNakoUriList.push({uri})
+                        }
+                    }
+                }
+            }
+            alreadyImportedList.push(...currentImportList)
+            currentImportList = newNakoUriList
+            newNakoUriList = []
+            tickCount++
         }
-        logger.log(`interface:getDiagnostics:create diagnostic collection`)
-        return this.diagnosticsCollection
+        if (exist) {
+            doc.nako3doc.validFixToken = false
+            // await doc.nako3doc.tokenize()
+        }
+    }
+
+    private getDependNako3UriList(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): DependNako3Info[] {
+        const dependUriList: DependNako3Info[] = []
+        const pushDepend = (dependInfo: DependNako3Info|DependNako3Info[]) => {
+            const pushIfNotExist = (info: DependNako3Info) => {
+                for (const d of dependUriList) {
+                    if (info.uri.toString() === d.uri.toString()) {
+                        return
+                    }
+                }
+                dependUriList.push(info)
+            }
+            if (dependInfo instanceof Array) {
+                for (const info of dependInfo) {
+                    pushIfNotExist(info)
+                }
+            } else {
+                pushIfNotExist(dependInfo)
+            }
+        }
+        const getDependUriList = (impUri: Uri): DependNako3Info[] => {
+            const target = this.get(impUri)
+            const dependUriList: DependNako3Info[] = []
+            if (target) {
+                console.log(`document exist ${impUri.toString()}`)
+                for (const [ uriStr, ] of target.nako3doc.moduleEnv.externalThings) {
+                    const uri = Uri.parse(uriStr)
+                    console.log(`document exist and exist extern ${uriStr}`)
+                    console.log(uri)
+                    pushDepend({ uri })
+                    pushDepend(getDependUriList(uri))
+                }
+            }
+            return dependUriList
+        } 
+        for (const info of imports) {
+            const imp = info.value
+            if (/\.nako3?$/.test(imp)) {
+                let isRemote = false
+                if (imp.startsWith('http://') || imp.startsWith('https://')) {
+                    isRemote = true
+                }
+                let impUri : Uri
+                if (isRemote) {
+                    impUri = Uri.parse(imp)
+                } else {
+                    impUri = Uri.joinPath(doc.nako3doc.link.uri, "..", imp)
+                }
+                pushDepend({ uri: impUri, importKey: info.value, range: Nako3Range.fromToken(info as unknown as Token) })
+                pushDepend(getDependUriList(impUri))
+            }
+        }
+        return dependUriList
+    }
+
+    private refreshNako3InLink (doc: Nako3DocumentExt, dependUriList: DependNako3Info[]) {
+        const deleteList: string[] = []
+        for (const [ uri, ] of doc.nako3doc.moduleEnv.externalThings) {
+            let uriExist = false
+            for (const dependUri of dependUriList) {
+                if (uri === dependUri.toString()) {
+                    uriExist = true
+                    const target = this.get(dependUri.uri)
+                    if (target) {
+                        if (target.nako3doc.link.importBy.has(doc.uri.toString())) {
+                            target.nako3doc.link.importBy.delete(doc.uri.toString())
+                        }
+                    }
+                }
+            }
+            if (!uriExist) {
+                deleteList.push(uri)
+            }
+        }
+        for (const deleteKey of deleteList) {
+            doc.nako3doc.moduleEnv.externalThings.delete(deleteKey)
+        }
+    }
+
+    async importNako3(doc: Nako3DocumentExt, info: DependNako3Info): Promise<Nako3DocumentExt|null> {
+        const bindDocument = (doc: Nako3DocumentExt, impUri: Uri, target: Nako3DocumentExt) => {
+            if (!doc.nako3doc.moduleEnv.externalThings.has(impUri.toString())) {
+                doc.nako3doc.moduleEnv.externalThings.set(impUri.toString(), target.nako3doc.moduleEnv.declareThings)
+            }
+            if (!target.nako3doc.link.importBy.has(doc.uri.toString())) {
+                target.nako3doc.link.importBy.add(doc.uri.toString())
+            }
+        }
+        const unbindDocument = (doc: Nako3DocumentExt, impUri: Uri) => {
+            if (doc.nako3doc.moduleEnv.externalThings.has(impUri.toString())) {
+                doc.nako3doc.moduleEnv.externalThings.delete(impUri.toString())
+            }
+        }
+        let wasErrorReported = false
+        const impUrl = info.uri.toString()
+        let isRemote = false
+        if (impUrl.startsWith('http://') || impUrl.startsWith('https://')) {
+            isRemote = true
+            if (!nako3extensionOption.enableNako3FromRemote) {
+                if (!wasErrorReported) {
+                    if (info.range) {
+                        doc.errorInfos.add('WARN', 'disabledImportFromRemoteNako3', { file: info.uri.toString() }, info.range.startLine, info.range.startCol, info.range.endLine, info.range.endCol)
+                    }
+                    wasErrorReported = true
+                }
+                return null
+            }
+        }
+        if (!wasErrorReported) {
+            let impUri : Uri = info.uri
+            const target = this.get(impUri)
+            if (target) {
+                logger.info(`refreshLink: found in docs(${impUri.toString()})`)
+                bindDocument(doc, impUri, target)
+                if (!target.isTextDocument && (!isRemote || target.nako3doc.text === '')) {
+                    await target.updateText(impUri)
+                }
+                await target.tokenize()
+                logger.info(`importNako3: success return(${impUri.toString()})`)
+                return target
+            } else {
+                logger.info(`importNako3: open from file(${impUri.toString()})`)
+                let target:Nako3DocumentExt|null
+                try {
+                    console.log('before stat')
+                    if (isRemote) {
+                        const response = await fetch(impUri.toString())
+                        if (response.status !== 200) {
+                            throw new Error('NOENT: file not found in url')
+                        }
+                    } else {
+                        await workspace.fs.stat(impUri)
+                    }
+                    console.log('after  stat')
+                    target = this.openFromFile(impUri)
+                } catch (err) {
+                    logger.info(`importNako3: failed(${impUri.toString()})`)
+                    console.log(err)
+                    if (err instanceof Error) {
+                        if (err.message.indexOf('NOENT') >= -1) {
+                            if (!wasErrorReported) {
+                                if (info.range) {
+                                    doc.errorInfos.add('ERROR', 'noImportNako3file', { file: impUri.toString() }, info.range.startLine, info.range.startCol, info.range.endLine, info.range.endCol)
+                                }
+                                wasErrorReported = true
+                            }
+                        } else {
+                            console.log(`importNako3: cause error in openFromFile`)
+                            console.log(err)
+                        }
+                    }
+                    if (!wasErrorReported) {
+                        if (info.range) {
+                            doc.errorInfos.add('ERROR', 'errorImportNako3file', { file: impUri.toString() }, info.range.startLine, info.range.startCol, info.range.endLine, info.range.endCol)
+                        }
+                        wasErrorReported = true
+                    }
+                    unbindDocument(doc, impUri)
+                    target = null
+                }
+                if (target) {
+                    logger.info(`importNako3: open successed(${impUri.toString()})`)
+                    try {
+                        bindDocument(doc, impUri, target)
+                        if (!target.isTextDocument) {
+                            await target.updateText(impUri)
+                        }
+                        await target.tokenize()
+                        logger.info(`importNako3: success return(${impUri.toString()})`)
+                        return target
+                    } catch (err) {
+                        logger.info(`importNako3: failed(${impUri.toString()})`)
+                        unbindDocument(doc, impUri)
+                        this.closeAtFile(impUri)
+                        console.log(`importNako3: cause error in new open file(${impUri.toString()})`)
+                        console.log(err)
+                    }
+                }
+            }
+        }
+        return null
     }
 }
+
+export const nako3docs = new Nako3Documents()

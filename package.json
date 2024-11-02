@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.0.9",
+    "version": "0.1.0",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -84,6 +84,18 @@
                     "type": "boolean",
                     "default": true,
                     "description": "%useParser.description%"
+                },
+                "nadesiko3Highlight.enablePluginFromRemote": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%enablePluginFromRemote.description%"
+                },
+                "nadesiko3Highlight.enableNako3FromRemote": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%enableNako3FromRemote.description%"
                 },
                 "nadesiko3Highlight.runtimeMode": {
                     "scope": "resource",

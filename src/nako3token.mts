@@ -1,4 +1,6 @@
-import { DeclareFunction, DeclareVariable } from './nako3types.mjs'
+import { Uri } from 'vscode'
+import type { DeclareFunction, DeclareVariable, LocalVariable } from './nako3types.mjs'
+import { Nako3Range } from './nako3range.mjs'
 
 export type Nako3TokenRawType = '?'
 | 'ここまで'
@@ -168,11 +170,13 @@ export interface Token {
     josi: ''|string
     josiStartCol?: number
     indent: Indent
-    file: string
+    uri: Uri
+    asWord: boolean
 }
 
 export interface TokenDefFunc extends Token {
   meta: DeclareFunction
+  endTokenIndex: number
 }
 
 export interface TokenCallFunc extends Token {
@@ -180,30 +184,10 @@ export interface TokenCallFunc extends Token {
   isFuncPointer: boolean
 }
 
-export interface TokenRefVar extends Token {
-  meta: DeclareVariable
+export interface TokenRefFunc extends Token {
+  meta: DeclareFunction
 }
 
-export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent = -1, startLine = 0, file = 'main.nako3'): Token {
-  return {
-    type,
-    group,
-    value,
-    indent: {
-      level: 0,
-      len: 0,
-      text: ''
-    },
-    len: 0,
-    lineCount: 0,
-    startLine,
-    startCol: 0,
-    endLine: startLine,
-    endCol: 0,
-    resEndCol: 0,
-    file,
-    josi: '',
-    text: '',
-    unit: ''
-  }
+export interface TokenRefVar extends Token {
+  meta: DeclareVariable|LocalVariable
 }

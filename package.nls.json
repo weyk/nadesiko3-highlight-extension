@@ -4,6 +4,8 @@
     "maxNumberOfProblems.description": "Controls the maximum number of problems produced by the server.",
     "useOperatorHint.description": "Use hover hint for operator",
     "useParser.description": "Use parser for detail analizing.",
+    "enablePluginFromRemote.description": "Enable import javascript plugin from remote.",
+    "enableNako3FromRemote.description": "Enable import nako3 file from remote.",
     "nadesiko3.folder.description": "Nadesiko3 instlled folder",
     "useRuntimeSnako.descriptions": "Use snako runtime",
     "useRuntimeCnako.descriptions": "Use cnako runtime",

@@ -1,7 +1,7 @@
-import { Token } from './nako3token.mjs'
-import { SourceMap } from './nako3types.mjs'
-import { Ast } from './nako3/nako_ast.mjs'
 import { MessageArgs } from './nako3message.mjs'
+import type { SourceMap } from './nako3types.mjs'
+import type { Token } from './nako3token.mjs'
+import type { Ast } from './nako3/nako_ast.mjs'
 
 export type MessageLevel = 'ERROR'|'WARN'|'INFO'|'HINT'
 

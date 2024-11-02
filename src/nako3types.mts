@@ -1,15 +1,22 @@
-export type RuntimeEnv = 'wnako'|'cnako'|'snako'|''
+import { Uri } from 'vscode'
+import { Nako3Range } from './nako3range.mjs'
 
+export type NakoRuntime = 'wnako'|'cnako'|'snako'|''
+export type DeclareOrigin = 'plugin'|'global'|'local'
 export interface FunctionArg {
   varname: string
   attr: string[]
   josi: string[]
+  range: Nako3Range|null
 }
+
+export type ScopeIdRange = [ string, number, number ]
 
 export interface DeclareFunction {
   name: string
   nameNormalized: string
   modName: string
+  uri?: Uri
   type: 'func'
   args?: FunctionArg[]
   isMumei: boolean
@@ -19,22 +26,31 @@ export interface DeclareFunction {
   isExport: boolean
   isPrivate: boolean
   hint?: string
+  range: Nako3Range|null
+  scopeId: string|null
+  origin: DeclareOrigin
 }
 
 export interface DeclareVariable {
   name: string
   nameNormalized: string
   modName: string
+  uri?: Uri
   type: 'var'|'const'
   isExport: boolean
   isPrivate: boolean
   hint?: string
+  range: Nako3Range|null
+  origin: DeclareOrigin
 }
 
 export interface LocalVariable {
   name: string
   type: string
-  value: string|number
+  scopeId: string
+  activeDeclare: boolean
+  range: Nako3Range|null
+  origin: DeclareOrigin
 }
 
 export type DeclareThing = DeclareFunction | DeclareVariable
@@ -44,17 +60,7 @@ export type DeclareFunctions = Map<string, DeclareFunction>
 export type DeclareVariables = Map<string, DeclareVariable>
 export type LocalVariables = Map<string, LocalVariable>
 export type ExternThings = Map<string, DeclareThings>
-
-export interface ModuleOption {
-  isIndentSemantic: boolean
-  isPrivateDefault: boolean
-  isExportDefault: boolean
-  isDNCL: boolean
-  isDNCL2: boolean
-  isAsync: boolean // deprecated
-  genMode: string
-  isStrict: boolean
-}
+export type AllVariables = Map<string, LocalVariables>
 
 export interface SourceMap {
     startLine: number
@@ -62,29 +68,5 @@ export interface SourceMap {
     endLine: number
     endCol: number
     resEndCol: number
-    file: string | undefined
+    uri: Uri | undefined
 }
-
-// 関数に関する定義
-export type FuncArgs = string[][]
-
-export type FuncListItemType = 'func' | 'var' | 'const' | 'test_func'
-
-// FuncListの定義
-export interface FuncListItem {
-  type: FuncListItemType
-  value?: any
-  josi?: FuncArgs
-  isVariableJosi?: boolean
-  fn?: null | ((...args: any[]) => any) | string
-  varnames?: string[]
-  funcPointers?: any[]
-  asyncFn?: boolean
-  isExport?: null|boolean
-  return_none?: boolean
-  pure?: boolean
-  name?: string
-}
-
-export type FuncList = Map<string, FuncListItem>
-export type ExportMap = Map<string, boolean>

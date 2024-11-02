@@ -1,6 +1,11 @@
+import { Uri } from 'vscode'
 import { lexRulesRE } from './nako3lexer_rule.mjs'
 import { ModuleLink } from './nako3module.mjs'
-import type { FunctionArg } from './nako3types.mjs'
+import type { FunctionArg, ScopeIdRange } from './nako3types.mjs'
+import type { Token, TokenType, TokenGroup } from './nako3token.mjs'
+
+const SerialIdStart = 0
+const SerialIdMax = 999999
 
 const convertCharTable = new Map<number, string>([
     // ハイフンへの変換
@@ -92,6 +97,9 @@ export function convert(code: string): string {
 }
 
 export function trimOkurigana (str: string): string {
+    if (str == null) {
+        return str
+    }
     // ひらがなから始まらない場合、送り仮名を削除。(例)置換する
     if (!lexRulesRE.hira.test(str)) {
         return str.replace(/[ぁ-ん]+/g, '')
@@ -153,7 +161,8 @@ export function argsFromString(argstr: string): FunctionArg[] {
                 argmap.set(varname, {
                     varname,
                     josi: [],
-                    attr: []
+                    attr: [],
+                    range: null
                 })
             }
             const arg = argmap.get(varname)!
@@ -166,4 +175,57 @@ export function argsFromString(argstr: string): FunctionArg[] {
         args.push(argmap.get(key)!)
     }
     return args
+}
+
+export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent: number = -1, startLine: number = 0, uri: Uri|null = null): Token {
+    return {
+      type,
+      group,
+      value,
+      indent: {
+        level: 0,
+        len: 0,
+        text: ''
+      },
+      len: 0,
+      lineCount: 0,
+      startLine,
+      startCol: 0,
+      endLine: startLine,
+      endCol: 0,
+      resEndCol: 0,
+      uri: uri === null ? Uri.parse('main.nako3') : uri,
+      josi: '',
+      text: '',
+      unit: '',
+      asWord: false
+    }
+}
+
+export function getScopeId (index: number, scopeList: ScopeIdRange[]): string {
+    let scopeId: string = 'global'
+    let currentLength: number = 0
+    for (const scope of scopeList) {
+        if (index < scope[1]) {
+            break
+        } else if (index > scope[2]) {
+            continue
+        }
+        if (index >= scope[1] && index <= scope[2] && (currentLength === 0 || scope[2] - scope[1] < currentLength)) {
+            scopeId = scope[0]
+            currentLength = scope[2] - scope[1]
+        }
+    }
+    return scopeId
+}
+
+export function setSerialId(): number {
+    return SerialIdStart
+}
+
+export function incSerialId(serialId: number): number {
+    if (serialId >= SerialIdMax) {
+        return SerialIdStart
+    }
+    return serialId + 1
 }

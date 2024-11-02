@@ -1,3 +1,12 @@
+## 0.1.0
+- Add go to Definition support.
+- Add find all references support.
+- Add hover hint for expr operator.
+- Use inernal parser.
+- Support import js-plugin.
+- Support import nako3 file.
+- Update bundled command.json 
+
 ## 0.0.9
 - Add auto detect runtimeEnv from using plugin.
 - Can launch dirty file.
