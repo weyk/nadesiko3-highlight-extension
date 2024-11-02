@@ -178,12 +178,10 @@ export class Nako3Document {
             this.validAst = false
         }
         if (!this.validAst) {
-            if (nako3extensionOption.useParser) {
-                try {
-                    this.parser.parse(this.tokens)
-                } catch (err) {
-                    console.error(err)
-                }
+            try {
+                this.parser.parse(this.tokens)
+            } catch (err) {
+                console.error(err)
             }
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return

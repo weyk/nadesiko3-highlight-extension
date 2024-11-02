@@ -3,7 +3,6 @@
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
     "useOperatorHint.description": "演算子に対するヒントの表示を有効にする",
-    "useParser.description": "詳細な解析のためにパーサーを使用する。\n取込が未対応のため未解決な識別子のエラーが多く出る場合がある",
     "enablePluginFromRemote.description": "Javascriptで書かれたプラグインのリモートからの取り込みを有効にする",
     "enableNako3FromRemote.description": "なでしこ３で書かれたファイルのリモートからの取り込みを有効にする",
     "nadesiko3.folder.description": "なでしこ３をインストールしたフォルダー。ワークスペースのnode_modules/nadesiko3に無い場合に使用する",

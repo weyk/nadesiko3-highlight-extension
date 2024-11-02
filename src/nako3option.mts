@@ -9,7 +9,6 @@ import type { NakoRuntime} from './nako3types.mjs'
 
 class Nako3ExtensionOption {
     useShebang: boolean
-    useParser: boolean
     enablePluginFromRemote: boolean
     enableNako3FromRemote: boolean
     defaultNakoRuntime: NakoRuntime
@@ -17,7 +16,6 @@ class Nako3ExtensionOption {
     problemsLimit: number
 
     constructor () {
-        this.useParser = true
         this.enablePluginFromRemote = true
         this.enableNako3FromRemote = true
         this.useOperatorHint = true
@@ -32,7 +30,6 @@ class Nako3ExtensionOption {
         this.loadNakoRuntime(conf)
         this.loadUseShebang(conf)
         this.loadUseOperatorHint(conf)
-        this.loadUseParser(conf)
         this.loadEnablePluginFromRemote(conf)
         this.loadEnableNako3FromRemote(conf)
         this.loadNako3Folder(conf)
@@ -80,15 +77,6 @@ class Nako3ExtensionOption {
             this.useOperatorHint = useOperatorHint
         } else {
             this.useOperatorHint = true
-        }
-    }
-
-    loadUseParser (conf: WorkspaceConfiguration) {
-        const useParser = conf.get('useParser')
-        if (typeof useParser === 'boolean') {
-            this.useParser = useParser
-        } else {
-            this.useParser = true
         }
     }
 
@@ -155,9 +143,6 @@ export function configurationChanged (e: ConfigurationChangeEvent) {
     if (e.affectsConfiguration('nadesiko3Highlight.maxNumberOfProblems')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadProbremsLimit(conf)
-    } else if (e.affectsConfiguration('nadesiko3Highlight.useParser')) {
-        const conf = workspace.getConfiguration('nadesiko3Highlight')
-        nako3extensionOption.loadUseParser(conf)
     } else if (e.affectsConfiguration('nadesiko3Highlight.enablePluginFromRemote')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadEnablePluginFromRemote(conf)

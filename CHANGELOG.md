@@ -1,3 +1,6 @@
+## 0.1.1
+- Delete "useParser" option, always use.
+
 ## 0.1.0
 - Add go to Definition support.
 - Add find all references support.
