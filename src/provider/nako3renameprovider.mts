@@ -14,7 +14,7 @@ import { trimOkurigana, getScopeId } from '../nako3util.mjs'
 import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import type { DeclareThing, DeclareFunction, DeclareVariable, LocalVariable } from '../nako3types.mjs'
 import type { Token, TokenCallFunc, TokenDefFunc, TokenRefVar, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
@@ -40,7 +40,7 @@ export class Nako3RenameProvider implements RenameProvider {
                 return null
             }
             logger.info('prepareRename: before tokenize')
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`prepareRename: canceled after tokenize`)
                 return null
@@ -77,7 +77,7 @@ export class Nako3RenameProvider implements RenameProvider {
                 return null
             }
             logger.info('provideRenameEdits: before tokenize')
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideRenameEdits: canceled after tokenize`)
                 return null
@@ -132,6 +132,19 @@ export class Nako3RenameProvider implements RenameProvider {
             if (['sys_func','sys_var','sys_const'].includes(token.type)) {
                 return getMessageWithArgs('cannnotRenameInPluginEntry', { name: token.value })
             } else if (['user_func', 'user_var', 'user_const', 'FUNCTION_NAME', 'FUNCTION_ARG_PARAMETER', ].includes(token.type)) {
+                let isRemote = false
+                if (token.type === 'user_func') {
+                    const meta = (token as TokenCallFunc).meta
+                    isRemote = meta.isRemote
+                } else if (token.type === 'user_var' || token.type === 'user_const') {
+                    const meta = (token as TokenRefVar).meta
+                    if (meta.origin === 'global') {
+                        isRemote = (meta as DeclareThing).isRemote
+                    }
+                }
+                if (isRemote) {
+                    return getMessageWithArgs('cannnotRenameInRemoteEntry', { name: token.value })
+                }
                 const result: PrepareRenameResult = {
                     range: this.getRangeFromTokenContent(token),
                     placeholder: token.value
@@ -194,7 +207,7 @@ export class Nako3RenameProvider implements RenameProvider {
                         return null
                     }
                 }
-                await doc.nako3doc.tokenize(canceltoken)
+                await nako3docs.analyze(doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
                     return null
                 }

@@ -5,7 +5,7 @@ import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3TokenApplyer } from './nako3tokenapplyer.mjs'
 import { NakoParser } from './nako3/nako_parser3.mjs'
 import { ModuleLink, ModuleEnv, ModuleOption } from './nako3module.mjs'
-import { setSerialId, incSerialId } from './nako3util.mjs'
+import { setSerialId, incSerialId, dumpScopIdList } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
@@ -24,25 +24,22 @@ export class Nako3Document {
     public lexerResult: TokenizeResult
     public tokens: Token[]
     public commentTokens: Token[]
-    lengthLines: number[]
+    public importStatements: ImportStatementInfo[]
     validRawToken: boolean
     validFixToken: boolean
     validNakoRuntime: boolean
     validApplyerFuncToken: boolean
-    validApplyerVarToken: boolean
     validAst: boolean
+    validApplyerVarToken: boolean
     rawTokenSerialId: number
     fixTokenSerialId: number
     applyerFuncTokenSerialId: number
     applyerVarTokenSerialId: number
     astSerialId: number
-    nakoRuntime: NakoRuntime
     link: ModuleLink
     moduleEnv: ModuleEnv
     moduleOption: ModuleOption
-    onChangeNakoRuntime: ((nakoRuntime: NakoRuntime) => void)|null
-    onRefreshLink: ((importInfo: ImportStatementInfo[]) => Promise<void>)|null
-
+ 
     constructor(filename: string, link: ModuleLink) {
         this.moduleOption = new ModuleOption()
         this.moduleEnv = new ModuleEnv(filename, link)
@@ -58,7 +55,7 @@ export class Nako3Document {
         this.lexerResult = { tokens: [], lengthLines: [] }
         this.tokens = []
         this.commentTokens = []
-        this.lengthLines = []
+        this.importStatements = []
         this.rawTokenSerialId = setSerialId()
         this.fixTokenSerialId = setSerialId()
         this.applyerFuncTokenSerialId = setSerialId()
@@ -70,9 +67,6 @@ export class Nako3Document {
         this.validApplyerFuncToken = false
         this.validAst = false
         this.validApplyerVarToken = false
-        this.nakoRuntime = ''
-        this.onChangeNakoRuntime = null
-        this.onRefreshLink = null
     }
 
     updateText (text: string, textVersion: number|null): boolean {
@@ -93,35 +87,25 @@ export class Nako3Document {
         this.validFixToken = false
         this.validApplyerFuncToken = false
         this.validNakoRuntime = false
-        this.validApplyerVarToken = false
         this.validAst = false
+        this.validApplyerVarToken = false
     }
 
-    setNakoRuntime(nakoRuntime: NakoRuntime) {
-        if (nakoRuntime !== this.nakoRuntime) {
-            this.nakoRuntime = nakoRuntime
-            this.fireChangeNakoRuntime(nakoRuntime)
-        }
-    }
-
-    setProblemsLimit (limit: number) {
+    public setProblemsLimit (limit: number) {
         this.errorInfos.problemsLimit = limit
     }
 
-    fireChangeNakoRuntime(nakoRuntime: NakoRuntime) {
-        logger.debug(`doc:fireChangeNakoRuntime(${nakoRuntime})`)
-        if (this.onChangeNakoRuntime) {
-            this.onChangeNakoRuntime(nakoRuntime)
-        }
-    }
-
-    async fireRefreshLink(imports: ImportStatementInfo[]) {
-        logger.debug(`doc:fireRefreshLink()`)
-        if (this.onRefreshLink) {
-            await this.onRefreshLink(imports)
-        }
-    }
-
+    // 以下の３つのmethodにより解析を行う。
+    // tokenize     :テキストからトークンの生成とユーザ関数と取り込み情報の抽出
+    // parse        :システム関数、ユーザ関数をトークン列に反映。
+    //               トークン列とユーザ定義関数情報から各位置のスコープの確定と変数の抽出
+    // applyVarConst:変数をトークン列に反映
+    // tokenizeとparseの間に以下の処置が必要
+    //   取り込み情報からpluginの取り込みとpluginNamesへの反映
+    //   取り込み情報からnako3を取り込みし含まれるユーザ関数の情報を参照できるようにする
+    // parseとapplyVarConstの間に以下の処置が必要
+    //   変数のうちモジュールを跨るグローバル変数の確定(定義箇所を確定と参照の設定)
+    //   明示的な宣言の無いローカル変数でグローバル変数にあるものを読み替え
     async tokenize(canceltoken?: CancellationToken): Promise<void> {
         console.info(`doc:tokenize start:${this.filename}`)
         if (canceltoken && canceltoken.isCancellationRequested) {
@@ -145,6 +129,7 @@ export class Nako3Document {
             }
             this.tokens = fixerResult.tokens
             this.commentTokens = fixerResult.commentTokens
+            this.importStatements= fixerResult.imports
             this.fixTokenSerialId = incSerialId(this.fixTokenSerialId)
             this.validFixToken = true
             this.validNakoRuntime = false
@@ -152,7 +137,7 @@ export class Nako3Document {
         if (!this.validNakoRuntime) {
             this.errorInfos.clear()
             if (this.moduleEnv.nakoRuntime === '') {
-                const runtimes = nako3plugin.getRuntimezEnvFromPlugin(this.fixer.imports, this.errorInfos)
+                const runtimes = nako3plugin.getNakoRuntimeFromPlugin(this.importStatements, this.errorInfos)
                 if (runtimes.length > 0) {
                     this.moduleEnv.nakoRuntime = runtimes[0] as NakoRuntime
                 }
@@ -166,8 +151,9 @@ export class Nako3Document {
             this.validNakoRuntime = true
             this.validApplyerFuncToken = false
         }
-        this.setNakoRuntime(this.moduleEnv.nakoRuntime)
-        await this.fireRefreshLink(this.fixer.imports)
+    }
+
+    async parse(canceltoken?: CancellationToken): Promise<void> {
         if (!this.validApplyerFuncToken) {
             this.applyer.applyFunction(this.tokens)
             if (canceltoken && canceltoken.isCancellationRequested) {
@@ -190,16 +176,20 @@ export class Nako3Document {
             this.validAst = true
             this.validApplyerVarToken = false
         }
+    }
+
+    async applyVarConst(canceltoken?: CancellationToken): Promise<void> {
         if (!this.validApplyerVarToken) {
             this.moduleEnv.fixAlllVars()
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return
             }
+            // dumpScopIdList (this.moduleEnv.scopeIdList, this.tokens)
             this.applyer.applyVarConst(this.tokens, this.moduleEnv.scopeIdList)
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return
             }
-            this.applyerVarTokenSerialId = incSerialId(this.applyerVarTokenSerialId)
+            this.applyerVarTokenSerialId = incSerialId(this.applyerVarTokenSerialId)                                                                    
             this.validApplyerVarToken = true
         }
         console.info(`doc:tokenize end:${this.filename}`)

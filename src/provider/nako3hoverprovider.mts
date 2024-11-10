@@ -8,10 +8,10 @@ import {
 } from 'vscode'
 import { Nako3DocumentExt } from '../nako3documentext.mjs'
 import { argsToString } from '../nako3util.mjs'
-import { operatorCommand } from '../nako3command.mjs'
+import { operatorCommand } from '../nako3operatorhint.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { logger } from '../logger.mjs'
 import type { DeclareFunction } from '../nako3types.mjs'
@@ -31,7 +31,7 @@ export class Nako3HoverProvider implements HoverProvider {
                 logger.debug(`provideHover: canceled after updateText`)
                 return hover
             }
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideHover: canceled after tokenize`)
                 return hover

@@ -20,6 +20,7 @@ export interface ImportStatementInfo {
 export interface TokenFixerResult {
     tokens: Token[]
     commentTokens: Token[]
+    imports: ImportStatementInfo[]
 }
 
 export class Nako3TokenFixer {
@@ -27,7 +28,7 @@ export class Nako3TokenFixer {
     private tokens: Token[]
     private commentTokens: Token[]
     public errorInfos: ErrorInfoManager
-    imports: ImportStatementInfo[]
+    private imports: ImportStatementInfo[]
     private moduleOption: ModuleOption
     private moduleEnv: ModuleEnv
 
@@ -260,10 +261,10 @@ export class Nako3TokenFixer {
                     }
                     if (delayedToken) {
                         pushToken(delayedToken)
+                        isLine0Col0 = false
                     }
                     delayedToken = token
                 }
-                isLine0Col0 = false
             }
         }
         if (delayedToken) {
@@ -350,9 +351,14 @@ export class Nako3TokenFixer {
         this.enumlateFunction(functionIndex)
         const tokens = this.tokens
         const commentTokens = this.commentTokens
+        const imports = this.imports
+        this.tokens = []
+        this.commentTokens = []
+        this.imports = []
         return {
             tokens,
-            commentTokens
+            commentTokens,
+            imports
         }
     }
 
@@ -645,7 +651,8 @@ export class Nako3TokenFixer {
             isPrivate,
             range: Nako3Range.fromToken(this.tokens[funcNameIndex ? funcNameIndex : defTokenIndex]),
             scopeId: null,
-            origin: 'global'
+            origin: 'global',
+            isRemote: this.moduleEnv.isRemote
         }
         if (nameTrimed.length > 0) {
             this.moduleEnv.declareThings.set(nameNormalized, declFunction)

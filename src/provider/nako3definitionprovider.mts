@@ -11,7 +11,7 @@ import {
 import { Nako3DocumentExt } from '../nako3documentext.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { nako3docs } from '../nako3interface.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import type { LocalVariable } from '../nako3types.mjs'
 import type { TokenCallFunc, TokenRefVar } from '../nako3token.mjs'
@@ -30,7 +30,7 @@ export class Nako3DefinitionProvider implements DefinitionProvider {
                 logger.debug(`provideDefinition: canceled after updateText`)
                 return definition
             }
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideDefinition: canceled after tokenize`)
                 return definition

@@ -206,9 +206,7 @@ export function getScopeId (index: number, scopeList: ScopeIdRange[]): string {
     let scopeId: string = 'global'
     let currentLength: number = 0
     for (const scope of scopeList) {
-        if (index < scope[1]) {
-            break
-        } else if (index > scope[2]) {
+        if (scope[2] < index) {
             continue
         }
         if (index >= scope[1] && index <= scope[2] && (currentLength === 0 || scope[2] - scope[1] < currentLength)) {
@@ -217,6 +215,15 @@ export function getScopeId (index: number, scopeList: ScopeIdRange[]): string {
         }
     }
     return scopeId
+}
+
+export function dumpScopIdList (scopeList: ScopeIdRange[], tokens : Token[]) {
+    for (const scope of scopeList) {
+        const scopeId = scope[0]
+        const scopeStartIndex = scope[1]
+        const scopeEndIndex = scope[2]
+        console.log(`${scopeId}:${tokens[scopeStartIndex].startLine}:${tokens[scopeStartIndex].startCol} - ${tokens[scopeEndIndex].endLine}:${tokens[scopeEndIndex].endCol}`)
+    }
 }
 
 export function setSerialId(): number {

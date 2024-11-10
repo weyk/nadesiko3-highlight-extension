@@ -70,6 +70,7 @@ export class ModuleEnv {
     filename: string
     modName: string
     uri: Uri
+    isRemote: boolean
     declareThings: DeclareThings
     externalThings: ExternThings
     allVariables: AllVariables
@@ -81,6 +82,7 @@ export class ModuleEnv {
         this.filename = filename
         this.modName = filenameToModName(filename, link)
         this.uri = link.uri
+        this.isRemote = false
         this.pluginNames = []
         this.declareThings = new Map()
         this.externalThings = new Map()

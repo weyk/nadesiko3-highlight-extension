@@ -12,9 +12,11 @@ import { Nako3HoverProvider } from './provider/nako3hoverprovider.mjs'
 import { Nako3DefinitionProvider } from './provider/nako3definitionprovider.mjs'
 import { Nako3ReferenceProvider } from './provider/nako3referenceprovider.mjs'
 import { Nako3RenameProvider } from './provider/nako3renameprovider.mjs'
+import * as commands from './commands/index.mjs'
+import { CommandManager } from './nako3command.mjs'
 
 import { nako3docs } from './nako3interface.mjs'
-import { nako3diagnostic } from './nako3diagnotic.mjs'
+import { nako3diagnostic } from './provider/nako3diagnotic.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
 
@@ -37,82 +39,6 @@ export class Nako3CodeActionProvider implements vscode.CodeActionProvider {
     }
 }
 
-async function getNakoRuntimeFromFile (uri: vscode.Uri): Promise<NakoRuntime> {
-    let runtime: NakoRuntime = ''
-    try {
-        const bin = await vscode.workspace.fs.readFile(uri)
-        const decoder = new TextDecoder('utf-8')
-        const text = decoder.decode(bin)
-        const r = text.match(/([^\r\n]*)(\r|\n)/)
-        if (r && r.length > 0) {
-            const topLine = r[0]
-            if (topLine.startsWith('#!')) {
-                if (topLine.indexOf('cnako3') >= 0) {
-                    runtime = 'cnako'
-                } else if (topLine.indexOf('snako') >= 0) {
-                    runtime = 'snako'
-                }
-            }
-        }
-    } catch (ex) {
-        logger.info('getRuntimeFromFile: casuse error on file read')
-        runtime = ''
-    }
-    return runtime
-}
-
-async function nako3commandExec (uri:vscode.Uri) {
-    logger.debug(`command:nadesiko3.exec`)
-    let doc:Nako3DocumentExt|undefined
-    const editor = vscode.window.activeTextEditor
-    if (uri === undefined && editor) {
-        uri = editor.document.uri
-    }
-    let document = vscode.workspace.textDocuments.find(f => f.uri.toString() === uri.toString())
-    if (document && nako3docs.has(document)) {
-        logger.log(`command:nadesiko3.exec:has document`)
-        // execute from editor's text
-        doc = nako3docs.get(document)
-        if (doc) {
-            const nakoRuntime = doc.nako3doc.nakoRuntime
-            if (nakoRuntime === '') {
-                showMessage('WARN', 'unknownRuntime', {})
-                return
-            }
-            if (nakoRuntime === 'wnako') {
-                showMessage('WARN', 'unsupportRuntimeOnLaunch', {})
-                return
-            }
-            if (doc.isDirty) {
-                logger.log(`command:nadesiko3.exec:is dirty`)
-                const text = document.getText()
-                await nadesiko3.execForText(text, document.uri, nakoRuntime)
-                // showMessage('WARN', 'documnetIsDirty', {})
-                // return
-            } else {
-                await nadesiko3.execForFile(uri, nakoRuntime)
-           }
-        }
-    } else {
-        // execute from explorer file    
-        logger.log(`command:nadesiko3.exec:hasn't document`)
-        const nakoRuntime = await getNakoRuntimeFromFile(uri)
-        if (nakoRuntime === '') {
-            showMessage('WARN', 'unknownRuntime', {})
-            return
-        }
-        if (nakoRuntime === 'wnako') {
-            showMessage('WARN', 'unsupportRuntimeOnLaunch', {})
-            return
-        }
-        await nadesiko3.execForFile(uri, nakoRuntime)
-    }
-}
-
-async function nako3TerminalClose(e: vscode.Terminal) {
-    await nadesiko3.terminalClose(e)
-}
-
 export function activate(context: vscode.ExtensionContext):void {
     configurationInitialize()
     logger.info(`workspace is ${vscode.workspace.name}`)
@@ -120,7 +46,6 @@ export function activate(context: vscode.ExtensionContext):void {
     nadesiko3.setWorkspaceFolders(vscode.workspace.workspaceFolders)
     nako3diagnostic.setNako3Docs(nako3docs)
     pluginInitialize()
-
 
 	// create a new status bar item that we can now manage
 	nako3RuntimeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 40)
@@ -149,7 +74,7 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerHoverProvider(NAKO3_MODE, new Nako3HoverProvider()))
     context.subscriptions.push(vscode.languages.registerDefinitionProvider(NAKO3_MODE, new Nako3DefinitionProvider()))
     context.subscriptions.push(vscode.languages.registerReferenceProvider(NAKO3_MODE, new Nako3ReferenceProvider()))
-    // context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
+    context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
 
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpenTextDocument  :${e.languageId}:${e.fileName}`)
@@ -189,13 +114,14 @@ export function activate(context: vscode.ExtensionContext):void {
             nadesiko3.addWorkspaceFolders(e.added)
         }
     }))
-    context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
-        logger.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
-        logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
+    //context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
+        //logger.log(`onTabChange:${e.opened.length}/${e.closed.length}/${e.changed.length}`)
+        //logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
         //console.log(e)
-    }))
-    context.subscriptions.push(vscode.commands.registerCommand('nadesiko3highlight.nadesiko3.exec', nako3commandExec))
-    context.subscriptions.push(vscode.window.onDidCloseTerminal(nako3TerminalClose))
+    //}))
+	const commandManager = new CommandManager()
+	context.subscriptions.push(commandManager)
+	commandManager.register(new commands.Nako3Execute(context))
 
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(configurationChanged))
 	// register some listener that make sure the status bar 
@@ -226,10 +152,10 @@ export function activate(context: vscode.ExtensionContext):void {
 
 export function deactivate() {
     if (nako3diagnostic) {
-        nako3diagnostic[Symbol.dispose]()
+        nako3diagnostic.dispose()
     }
     if (nako3docs) {
-        nako3docs[Symbol.dispose]()
+        nako3docs.dispose()
     }
     return undefined
 }
@@ -240,7 +166,7 @@ function updateNako3RunimeStatusBarItem(): void {
     if (editor) {
         const doc = nako3docs.get(editor.document)
         if (doc) {
-            nakoRuntime = doc.nako3doc.nakoRuntime
+            nakoRuntime = doc.nako3doc.moduleEnv.nakoRuntime
         }
     }
     if (nakoRuntime !== '') {

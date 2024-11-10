@@ -1,0 +1,42 @@
+body {
+    background-color: #ffffff;
+}
+
+.edit_head {
+    margin: 0;
+}
+
+.info, .err {
+    font-size: 1em;
+}
+
+.turtle_canvas {
+    border: 1px solid silver;
+}
+
+.edit_head {
+    padding: 0.3em;
+}
+
+.edit_head {
+    font-size: 0.8em;
+    color: gray;
+}
+
+.info, .err {
+    line-height: 1.5em;
+}
+
+.info, .err {
+    border: 1px solid gray;
+    padding: 8px;
+}
+.info {
+    background-color: #f0fff0;
+    margin-top: 0;
+}
+
+.err {
+    background-color: #fff0f0;
+    display: none;
+}

@@ -112,5 +112,7 @@
     "errorCallForCstyleFunc": "C風関数呼び出しのエラー",
     "mismatchFunctionArgumentNumber": "関数『{funcname}』で引数{realargsnum}個が指定されましたが、{defargsnum}個の引数を指定してください。",
     "cannnotRenameInPluginEntry": "『{name}』はプラグインで定義されている名前のためRenameできません。",
-    "cannnotRenameThis": "この項目はRenameできません"
+    "cannnotRenameInRemoteEntry": "『{name}』はリモートのファイルで定義されている名前のためRenameできません。",
+    "cannnotRenameThis": "この項目はRenameできません",
+    "unknwonWord": "不明な単語『{value}』があります。代入のない変数の可能性があります。"
 }

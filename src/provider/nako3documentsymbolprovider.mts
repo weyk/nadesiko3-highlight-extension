@@ -12,7 +12,7 @@ import { Nako3DocumentExt } from '../nako3documentext.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { ModuleEnv } from '../nako3module.mjs'
 import { nako3docs } from '../nako3interface.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import { DeclareFunction } from '../nako3types.mjs'
 import type { Token } from '../nako3token.mjs'
@@ -50,7 +50,7 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
                 logger.debug(`provideDocumentSymbols: canceled after updateText`)
                 return symbols
             }
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideDocumentSymbols: canceled after tokeninze`)
                 return symbols

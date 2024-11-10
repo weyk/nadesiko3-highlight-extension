@@ -113,7 +113,8 @@ function importCommandJson (json: CmdJsonEntry):void {
                         args: argsFromString(args),
                         range: null,
                         scopeId: null,
-                        origin: 'plugin'
+                        origin: 'plugin',
+                        isRemote: false
                     }
                     commandEntry.set(command, func)
                 } else if (rawType === '定数' || rawType === '変数') {
@@ -127,7 +128,8 @@ function importCommandJson (json: CmdJsonEntry):void {
                         isPrivate: false,
                         hint,
                         range: null,
-                        origin: 'plugin'
+                        origin: 'plugin',
+                        isRemote: false
                     }
                     commandEntry.set(command, varConst)
                 } else {

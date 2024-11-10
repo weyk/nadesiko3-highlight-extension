@@ -29,6 +29,7 @@ export interface DeclareFunction {
   range: Nako3Range|null
   scopeId: string|null
   origin: DeclareOrigin
+  isRemote: boolean
 }
 
 export interface DeclareVariable {
@@ -42,6 +43,7 @@ export interface DeclareVariable {
   hint?: string
   range: Nako3Range|null
   origin: DeclareOrigin
+  isRemote: boolean
 }
 
 export interface LocalVariable {

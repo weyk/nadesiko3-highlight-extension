@@ -13,7 +13,7 @@ import { Nako3Range } from '../nako3range.mjs'
 import { trimOkurigana, getScopeId } from '../nako3util.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import type { DeclareThing, DeclareVariable, LocalVariable } from '../nako3types.mjs'
 import type { Token, TokenCallFunc, TokenRefVar, TokenRefFunc, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
@@ -35,7 +35,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                 return refs
             }
             logger.info('provideReferences: before tokenize')
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideReferences: canceled after tokenize`)
                 return refs
@@ -111,6 +111,13 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
         return results
     }
 
+    /**
+     * システム関数(Pluginの関数)とユーザ関数について参照箇所の一覧を生成して返す。
+     * @param thing - 一覧化する対象の定義情報
+     * @param context - 検索する際のオプション。定義自身を含むか含まないかがある。
+     * @param canceltoken - 取り消しトークン。呼び元で取り消したらフラグが立つ。
+     * @returns 参照箇所のUriとLine-Colの一覧。ない場合は空配列を返す。
+     */
     private async enumlateRefFunction (thing:DeclareThing, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]> {
         const results: Location[] = []
         logger.info(`enumlateRefFunction: call   findFiles`)
@@ -146,7 +153,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                         return []
                     }
                 }
-                await doc.nako3doc.tokenize(canceltoken)
+                await nako3docs.analyze(doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
                     return []
                 }
@@ -233,7 +240,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                         return []
                     }
                 }
-                await doc.nako3doc.tokenize(canceltoken)
+                await nako3docs.analyze(doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
                     return []
                 }

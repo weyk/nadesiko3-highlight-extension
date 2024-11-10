@@ -9,7 +9,7 @@ import {
 import { Nako3DocumentExt } from '../nako3documentext.mjs'
 import { COL_START } from '../nako3lexer.mjs'
 import { nako3docs } from '../nako3interface.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import type { Token } from '../nako3token.mjs'
 
@@ -126,7 +126,7 @@ export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticToke
                 logger.debug(`provideDocumentSemanticTokens: canceled updateText`)
                 return symbols
             }
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideDocumentSemanticTokens: canceled begining`)
                 return symbols
@@ -157,7 +157,7 @@ export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticToke
     private getSemanticTokens (doc: Nako3DocumentExt): SemanticTokens {
         const tokens = doc.nako3doc.tokens
         const commentTokens = doc.nako3doc.commentTokens
-        const lengthLines = doc.nako3doc.lengthLines
+        const lengthLines = doc.nako3doc.lexerResult.lengthLines
         const symbols = this.computeSemanticToken(tokens, commentTokens, lengthLines, doc)
         return symbols
     }

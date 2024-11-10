@@ -130,7 +130,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         terminal.sendText(`${nodeBin} "${nako3exec}" "${path.basename(fileName)}"`)
     }
 
-    async execForText(text: string, uri: Uri, nakoRuntime: NakoRuntime):Promise<void> {
+    public async execForText(text: string, uri: Uri, nakoRuntime: NakoRuntime):Promise<void> {
         const startTime = new Date()
         const configNode = workspace.getConfiguration('nadesiko3Highlight.node')
         let nako3folder:string = await this.getNako3Home()
@@ -142,7 +142,7 @@ class Nako3Nadesiko3 extends EventEmitter {
         const fileName = uri.fsPath
         const dirName = path.dirname(uri.fsPath)
         const extName = path.extname(fileName) || '.nako3'
-                let nodeBin = configNode.nodeBin
+        let nodeBin = configNode.nodeBin
         if (nodeBin === null || nodeBin === undefined || nodeBin === '') {
             nodeBin = 'node'
         } 
@@ -206,6 +206,17 @@ class Nako3Nadesiko3 extends EventEmitter {
                 this.terminals.splice(terminal.terminalIndex!, 1)
             }
         }        
+    }
+
+    public async getWnako3Path(): Promise<string|null> {
+        let nako3folder:string = await this.getNako3Home()
+        if (nako3folder === '') {
+            showMessage('WARN', 'unknwonNadesiko3home', {})
+            return null
+        }
+        logger.debug(`command:nadesiko3.exec:nako3folder=${nako3folder}`)
+        const wnako3 = path.resolve(nako3folder, path.join('release', 'wnako3.js'))
+        return wnako3
     }
 }
 

@@ -796,7 +796,7 @@ export class NakoParser extends NakoParserBase {
       kara = kara || this.yNop()
       made = made || this.yNop()
     }
-    const meta = nako3plugin.get('plugin_system')?.get('範囲') as DeclareFunction|undefined
+    const meta = nako3plugin.getDeclare('plugin_system')?.get('範囲') as DeclareFunction|undefined
     if (!meta) {
       this.errorInfos.addFromToken('ERROR', 'noRangeInSystemPlugin', {}, map)
       return this.yNop()
@@ -1102,6 +1102,7 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'letFromToAtFor', {}, vWord)
       } else {
         wordStr = (vWord as AstStrValue).value
+        const nameToken = this.getVarName(vWord)
       }
     }
     if (vFrom === null || vTo === null) {
@@ -1191,6 +1192,7 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'suggestForEach', {}, map)
       } else {
         wordStr = (name as AstStrValue).value
+        const nameToken = this.getVarName(name)
       }
     }
     let block: Ast = this.yNop()
@@ -1718,20 +1720,6 @@ export class NakoParser extends NakoParserBase {
       ...this.fromSourceMap(map)
     }
 
-    // 「プラグイン名設定」ならば、そこでスコープを変更することを意味する (#1112)
-    if (funcNode.name === 'プラグイン名設定') {
-      if (args.length > 0 && args[0]) {
-        let fname: string = '' + args[0].value
-        if (fname === 'メイン') { fname = '' + args[0].file }
-        this.namespaceStack.push(this.modName)
-        this.modName = filenameToModName(fname, this.link)
-        this.modList.push(this.modName)
-      }
-    } else if (funcNode.name === '名前空間ポップ') { // (#1409)
-      const space = this.namespaceStack.pop()
-      if (space) { this.modName = space }
-    }
-
     // 言い切りならそこで一度切る
     if (t.josi === '') { return funcNode }
 
@@ -1839,7 +1827,8 @@ export class NakoParser extends NakoParserBase {
           isExport,
           isPrivate: false,
           range: Nako3Range.fromToken(wordToken),
-          origin: 'global'
+          origin: 'global',
+          isRemote: this.moduleEnv.isRemote
         }
         this.addGlobalvars(decvar, wordToken, true)
       }
@@ -2547,7 +2536,8 @@ export class NakoParser extends NakoParserBase {
           isExport,
           isPrivate: false,
           range: Nako3Range.fromToken(word as Token),
-          origin: 'global'
+          origin: 'global',
+          isRemote: this.moduleEnv.isRemote
         }
         this.addGlobalvars(defValue, word as Token, isActiveDeclare)
         const wordAst = word as AstStrValue
@@ -2615,7 +2605,7 @@ export class NakoParser extends NakoParserBase {
       if (this.check('}')) { break }
       
       // key : value
-      if (this.accept(['word', ':', this.yCalc])) {
+      if (this.accept([['word', 'sys_func', 'user_func'], ':', this.yCalc])) {
         this.y[0].type = 'string' // キー名の文字列記号省略の場合
         a.push(this.y[0])
         a.push(this.y[2])
@@ -2626,7 +2616,7 @@ export class NakoParser extends NakoParserBase {
         a.push(this.y[2])
       }
       // key
-      else if (this.accept(['word'])) {
+      else if (this.accept([['word', 'sys_func', 'user_func']])) {
         const key = this.y[0]
         const val = JSON.parse(JSON.stringify(key)) as Ast
         key.type = 'string' // キー名の文字列記号省略の場合

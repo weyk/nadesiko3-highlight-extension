@@ -1,5 +1,5 @@
 {
-    "nadesiko3.exec": "Node上でcnako3またはsnakoを用いて実行する",
+    "nadesiko3.exec": "なでしこ３で実行する",
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
     "useOperatorHint.description": "演算子に対するヒントの表示を有効にする",

@@ -9,7 +9,7 @@ import {
 } from 'vscode'
 import { Nako3Document } from '../nako3document.mjs'
 import { nako3docs } from '../nako3interface.mjs'
-import { nako3diagnostic } from '../nako3diagnotic.mjs'
+import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
@@ -27,7 +27,7 @@ export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider
                 logger.debug(`provideDocumentHighlights: canceled adter updateText`)
                 return highlight
             }
-            await nako3doc.tokenize(canceltoken)
+            await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
                 logger.debug(`provideDocumentHighlights: canceled after tokenize`)
                 return highlight

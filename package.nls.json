@@ -1,5 +1,5 @@
 {
-    "nadesiko3.exec": "Execute cnako3/snako on Node.js",
+    "nadesiko3.exec": "Execute on nadesiko3",
     "configuration.title": "nadesiko3Highlight",
     "maxNumberOfProblems.description": "Controls the maximum number of problems produced by the server.",
     "useOperatorHint.description": "Use hover hint for operator",

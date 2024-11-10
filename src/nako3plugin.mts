@@ -75,15 +75,15 @@ class Nako3Plugin {
         return this.plugins.has(plugin)
     }
 
-    get (plugin: string): DeclareThings|undefined {
+    getDeclare (plugin: string): DeclareThings|undefined {
         return this.plugins.get(plugin)?.declare
     }
 
-    getRuntimesFromPlugin (plugin: string): NakoRuntime[]|undefined {
+    getNakoRuntimes (plugin: string): NakoRuntime[]|undefined {
         return this.plugins.get(plugin)?.nakoRuntime 
     }
 
-    getRuntimezEnvFromPlugin(imports: ImportStatementInfo[], errorInfos: ErrorInfoManager): NakoRuntime[] {
+    getNakoRuntimeFromPlugin(imports: ImportStatementInfo[], errorInfos: ErrorInfoManager): NakoRuntime[] {
         let nakoRuntimes: NakoRuntime[] = []
         let runtimeWork: NakoRuntime[]|'invalid' = []
         for (const importInfo of imports) {
@@ -95,7 +95,7 @@ class Nako3Plugin {
             if (r && r.length > 1) {
                 const plugin = r[1]
                 if (nako3plugin.has(plugin)) {
-                    const runtimes = nako3plugin.getRuntimesFromPlugin(plugin)
+                    const runtimes = nako3plugin.getNakoRuntimes(plugin)
                     if (runtimes && runtimes.length > 0) {
                         if (runtimeWork.length === 0) {
                             runtimeWork = runtimes
@@ -136,7 +136,7 @@ class Nako3Plugin {
             searchList.unshift(...this.pluginsInNakoruntime[nakoRuntime])
         }
         for (const key of searchList) {
-            const commandEntry = nako3plugin.plugins.get(key)?.declare
+            const commandEntry = nako3plugin.getDeclare(key)
             if (commandEntry) {
                 const commandInfo = commandEntry.get(command) || commandEntry.get(tv)
                 if (commandInfo) {
@@ -148,8 +148,10 @@ class Nako3Plugin {
     }
 
     async importFromFile (pluginName: string, link?: ModuleLink, errorInfos?: ErrorInfoManager): Promise<string|null> {
+        let isRemote = false
         if (pluginName.startsWith('http://') || pluginName.startsWith('https://')) {
             // absolute uri
+            isRemote = true
             if (!nako3extensionOption.enableNako3FromRemote) {
                 errorInfos?.add('WARN','disabledImportFromRemotePlugin', { plugin: pluginName }, 0,0,0,0)
                 return null
@@ -165,8 +167,9 @@ class Nako3Plugin {
         logger.debug(`importFromFile:${pluginName}`)
         const f = await this.searchPlugin(pluginName, link)
         if (f.exists) {
-            const p = this.parsePlugin(f.text, f.uri)
+            const p = this.parsePlugin(f.text, f.uri, isRemote)
             if (p !== null && p.declare.size > 0) {
+                logger.info(`importFromFile:plugin set ${pluginName}`)
                 const info: PluginInfo = {
                     pluginName: p.meta.pluginName || pluginName,
                     isBuiltin: false,
@@ -174,7 +177,7 @@ class Nako3Plugin {
                     declare: p.declare
                 }
                 this.plugins.set(f.uri.toString(), info)
-                return f.filepath
+                return f.uri.toString()
             }
         }
         return null
@@ -373,12 +376,12 @@ class Nako3Plugin {
         return ngFileContent
     }
 
-    parsePlugin (text: string, uri: Uri): PluginContent|null {
+    parsePlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
         let result:PluginContent|null = null
         try {
-            result = this.parseWelformedPlugin(text, uri)
+            result = this.parseWelformedPlugin(text, uri, isRemote)
             if (!result || result.declare.size === 0) {
-                result = this.parseMinifiedPlugin(text, uri)
+                result = this.parseMinifiedPlugin(text, uri, isRemote)
              }
         } catch (err) {
             (`parsePlugin: error in parse`)
@@ -388,7 +391,7 @@ class Nako3Plugin {
         return result
     }
 
-    private parseMinifiedPlugin (text: string, uri: Uri): PluginContent|null {
+    private parseMinifiedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
         const plugin: PluginContent = {
             meta:{ pluginName: '', description: '', nakoRuntime: [] },
             declare: new Map()
@@ -415,9 +418,12 @@ class Nako3Plugin {
                     }
                 }
             }
+            if (meta.pluginName || meta.description || meta.nakoRuntime) {
+                logger.info(`parseMinifiedPlugin: meta info found`)
+            }
 
             // 変数・定数の定義を列挙して取り込む
-            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9"]+):\{type:"(var|const)",value:([^}]*)\}/g)) {
+            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9]+):\{type:"(var|const)",value:([^}]*)\}/g)) {
                 let name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
                 let type = m[3].trim() as ('var'|'const')
                 let v = m[4].trim()
@@ -434,13 +440,17 @@ class Nako3Plugin {
                     hint: v,
                     range: null,
                     uri,
-                    origin: 'plugin'
+                    origin: 'plugin',
+                    isRemote
                 }
                 commandEntry.set(name, varible)
             }
+            if (commandEntry.size > 0) {
+                logger.info(`parseMinifiedPlugin: variable / constant found`)
+            }
 
             // 関数の定義を列挙して取り込む
-            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9"]+):\{(type:"func",[^\{]*)\{/g)) {
+            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9]+):\{(type:"func",[^\{]*)\{/g)) {
                 let name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
                 let memo = m[3].trim()
                 let info:any = {
@@ -510,7 +520,8 @@ class Nako3Plugin {
                         range: null,
                         scopeId: null,
                         uri,
-                        origin: 'plugin'
+                        origin: 'plugin',
+                        isRemote
                     }
                     commandEntry.set(info.name, func)
                 } else {
@@ -526,7 +537,7 @@ class Nako3Plugin {
         return plugin
     }
 
-    private parseWelformedPlugin (text: string, uri: Uri): PluginContent|null {
+    private parseWelformedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
         const plugin: PluginContent = {
             meta:{ pluginName: '', description: '', nakoRuntime: [] },
             declare: new Map()
@@ -570,11 +581,17 @@ class Nako3Plugin {
                     }
                     if (/^\s*\},$/.test(line)) {
                         inMeta = false
+                        if (meta.pluginName || meta.description || meta.nakoRuntime) {
+                            logger.info(`parseWenformedPlugin: meta info found`)
+                        } else {
+                            logger.info(`parseWenformedPlugin: meta info empty`)
+                        }
                     }
                     continue
                 }
                 if (/^\s*'meta':\s*\{/.test(line)) {
                     inMeta = true
+                    logger.info(`parseWenformedPlugin: meta tag found`)
                     continue
                 }
                 // 見出し行
@@ -584,12 +601,14 @@ class Nako3Plugin {
                     continue
                 }
                 // 変数・定数行
-                r = /^\s*'([^']+)'\s*:\s*\{\s*type\s*:\s*'(const|var)'\s*,\s*value\s*:\s*([^\}]*)\}\s*,\s*(\/\/ @(.*))?$/.exec(line)
-                if (r && r.length > 4 && r[1] != null && r[2] != null && r[3] != null) {
-                    const name = trimOkurigana(r[1].trim())
-                    const type = r[2].trim() as 'var'|'const'
-                    const v = r[3].trim()
-                    const yomi = r[5] != null ? r[5].trim() : ''
+                r = /^(\s*)'([^']+)'\s*:\s*\{\s*type\s*:\s*'(const|var)'\s*,\s*value\s*:\s*([^\}]*)\}\s*,\s*(\/\/ @(.*))?$/.exec(line)
+                if (r && r.length > 4 && r[1] != null && r[2] != null && r[3] != null && r[4] != null) {
+                    const col = r[1].length + 1
+                    const resLen = r[2].length
+                    const name = trimOkurigana(r[2].trim())
+                    const type = r[3].trim() as 'var'|'const'
+                    const v = r[4].trim()
+                    const yomi = r[6] != null ? r[6].trim() : ''
                     const varible: DeclareVariable = {
                         name,
                         nameNormalized: name,
@@ -598,17 +617,20 @@ class Nako3Plugin {
                         isExport: true,
                         isPrivate: false,
                         hint: v,
-                        range: null,
+                        range: { startLine: i, startCol: col, endLine: i, endCol: col + resLen, resEndCol: col + resLen },
                         uri,
-                        origin: 'plugin'
+                        origin: 'plugin',
+                        isRemote
                     }
                     commandEntry.set(name, varible)
                     continue
                 }
                 // 関数定義開始行
-                r = /^\s*'([^']+)'\s*:\s*(\{|\[)\s*(\/\/\s*@(.+))?$/.exec(line)
-                if (r && r.length > 1 && r[1] != null) {
-                    const name = trimOkurigana(r[1].trim())
+                r = /^(\s*)'([^']+)'\s*:\s*(\{|\[)\s*(\/\/\s*@(.+))?$/.exec(line)
+                if (r && r.length > 1 && r[1] != null && r[2] != null) {
+                    const col = r[1].length + 1
+                    const resLen = r[2].length
+                    const name = trimOkurigana(r[2].trim())
                     let yomi = ''
                     let desc = ''
                     if (r.length > 4 && r[4] != null) {
@@ -628,7 +650,8 @@ class Nako3Plugin {
                         josi: null,
                         pure: true,
                         asyncFn: false,
-                        args: []
+                        args: [],
+                        range: { startLine: i, startCol: col, endLine: i, endCol: col + resLen, resEndCol: col + resLen },
                     }
                     continue
                 }
@@ -703,10 +726,11 @@ class Nako3Plugin {
                             isVariableJosi: false,
                             hint: info.desc + info.asyncFn ? '(非同期関数)' : '',
                             args,
-                            range: null,
+                            range: info.range,
                             scopeId: null,
                             uri,
-                            origin: 'plugin'
+                            origin: 'plugin',
+                            isRemote
                         }
                         commandEntry.set(info.name, func)
                     } else {

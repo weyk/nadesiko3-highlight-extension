@@ -8,16 +8,17 @@ import { Nako3Document } from './nako3document.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { ModuleLink } from './nako3module.mjs'
 import { logger } from './logger.mjs'
+import type { NakoRuntime } from './nako3types.mjs'
 
 export class Nako3DocumentExt {
     nako3doc: Nako3Document
-    validTokens: boolean
     uri: Uri
     errorInfos: ErrorInfoManager
     link: ModuleLink
     isTextDocument: boolean
     isDirty: boolean
     cache: any
+    nakoRuntime: NakoRuntime
 
     constructor (target: TextDocument|Uri) {
         if (target instanceof Uri) {
@@ -30,15 +31,10 @@ export class Nako3DocumentExt {
         }
         this.link = new ModuleLink(this.uri, this.uri)
         this.nako3doc = new Nako3Document(this.uri.toString(), this.link)
-        this.validTokens = false
         this.cache = {}
         this.errorInfos = new ErrorInfoManager()
         this.isDirty = false
-
-    }
-
-    rename (newFilename: string):void {
-        this.nako3doc.filename = newFilename
+        this.nakoRuntime = ''
     }
 
     setProblemsLimit (limit: number) {
@@ -63,12 +59,8 @@ export class Nako3DocumentExt {
                         return false
                     }
                     const changed = this.nako3doc.updateText(text.toString(), 0)
-                    if (changed) {
-                        this.validTokens = false
-                    }
                     return changed
                 } else {
-                    this.validTokens = false
                     return false
                 }
             } else {
@@ -82,33 +74,14 @@ export class Nako3DocumentExt {
                         return false
                     }
                     const changed = this.nako3doc.updateText(text.toString(), stat.mtime)
-                    if (changed) {
-                        this.validTokens = false
-                    }
                     return changed
                 } else {
-                    this.validTokens = false
                     return false
                 }
             }
         } else {
             const changed = this.nako3doc.updateText(document.getText(), document.version)
-            if (changed) {
-                this.validTokens = false
-            }
             return changed
         }
     }
-
-    async tokenize (canceltoken?: CancellationToken): Promise<void> {
-        if (!this.validTokens) {
-            logger.debug(`process tokenize:start:${this.uri.toString()}`)
-            await this.nako3doc.tokenize(canceltoken)
-            this.validTokens = true
-            logger.debug(`process tokenize:end  :${this.uri.toString()}`)
-        } else {
-            logger.debug(`skip tokenize:      ${this.uri.toString()}`)
-        }
-    }
-
 }

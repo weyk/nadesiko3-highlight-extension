@@ -1,4 +1,5 @@
 import { ModuleLink, ModuleEnv, ModuleOption } from './nako3module.mjs'
+import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import reservedWords from './nako3/nako_reserved_words.mjs'
 import { trimOkurigana, getScopeId } from './nako3util.mjs'
 import { reservedGroup } from './nako3lexer_rule.mjs'
@@ -8,6 +9,7 @@ import type { DeclareFunction, DeclareVariable, LocalVariable, ScopeIdRange } fr
 import type { Token, TokenCallFunc, TokenRefVar } from './nako3token.mjs'
 
 export class Nako3TokenApplyer {
+    public errorInfos: ErrorInfoManager
     moduleOption: ModuleOption
     moduleEnv: ModuleEnv
     link: ModuleLink
@@ -15,10 +17,16 @@ export class Nako3TokenApplyer {
     constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption, link: ModuleLink) {
         this.moduleEnv = moduleEnv
         this.moduleOption = moduleOption
+        this.errorInfos = new ErrorInfoManager()
         this.link = link
     }
 
-    applyFunction(tokens: Token[]) {
+    public setProblemsLimit (limit: number):void {
+        this.errorInfos.problemsLimit = limit
+    }
+
+    public applyFunction(tokens: Token[]) {
+        this.errorInfos.clear()
         for (const token of tokens) {
             let type = token.type
             let nextTokenToFuncPointer = false
@@ -69,6 +77,9 @@ export class Nako3TokenApplyer {
                                 }
                                 token.type = type
                             }
+                            if (type === 'word') {
+                                
+                            }
                         }
                     }
                 }
@@ -80,7 +91,7 @@ export class Nako3TokenApplyer {
         }
     }
 
-    applyVarConst(tokens: Token[], scopeList: ScopeIdRange[]) {
+    applyVarConst(tokens: Token[], scopeIdList: ScopeIdRange[]) {
         let i = 0
         for (const token of tokens) {
             let type = token.type
@@ -101,7 +112,7 @@ export class Nako3TokenApplyer {
                     (token as TokenRefVar).meta = thing as DeclareVariable
                 }
                 if (type === 'word') {
-                    const scopeId = getScopeId(i, scopeList)
+                    const scopeId = getScopeId(i, scopeIdList)
                     const vars = this.moduleEnv.allVariables.get(scopeId)
                     if (vars) {
                         const thing = vars.get(tv)
@@ -149,11 +160,32 @@ export class Nako3TokenApplyer {
                             if (commandInfo.type === 'var') {
                                 (token as TokenRefVar).meta = commandInfo as DeclareVariable
                                 type = 'sys_var'
-                            } else {
+                            } else if (commandInfo.type === 'const') {
                                 (token as TokenRefVar).meta = commandInfo as DeclareVariable
                                 type = 'sys_const'
                             }
                             token.type = type
+                        }
+                        if (type === 'word') {
+                            if (token.value === 'それ') {
+                                const declareSore: DeclareVariable = {
+                                    name: 'それ',
+                                    nameNormalized: 'それ',
+                                    type: 'var',
+                                    modName: '',
+                                    isExport: true,
+                                    isPrivate: false,
+                                    origin: 'plugin',
+                                    range: null,
+                                    isRemote: false
+                                };
+                                (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                                type = 'sys_var'
+                                token.type = type
+                            }
+                            if (type === 'word') {
+                                this.errorInfos.addFromToken('ERROR', 'unknwonWord', { value: token.value }, token)
+                            }
                         }
                     }
                 }

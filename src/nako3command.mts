@@ -1,30 +1,39 @@
-interface OperatorHint {
-    cmd: string[]
-    hint: string
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import {
+    Disposable,
+    commands
+} from 'vscode'
+
+export interface Command {
+	readonly id: string
+
+	execute(...args: any[]): void
 }
 
-export const operatorCommand = new Map<string, OperatorHint>([
-  ['and',  { cmd: ['AかつB', 'A&&B'], hint: '論理演算子としてはAかBの両方が真ならば真を返す\n具体的な動作はAが偽と評価できる場合はAを返しそうではない場合はBを返す'}],
-  ['or', { cmd: ['AまたはB', 'A||B'], hint: '論理演算子としてはAかBのいずれかが真ならば真を返す\nA具体的な動作はAが真と評価できる場合はAを返しそうではない場合はBを返す'}],
-  ['eq', { cmd: ['A=B', 'A==B'], hint: '代入もしくは比較する。比較の場合はAとBが等しいかどうかを緩く比較し等しいと見なせれば真を返す。等しいと見なせないならば偽を返す\n『もし』構文の条件式でのみ『=』の替りに『が』を用いることも出来る'}],
-  ['noteq', { cmd: ['A!=B', 'A<>B', 'A≠B'], hint: '比較する。AとBが等しいかどうかを緩く比較し等しいと見なせれば真を返す。等しいと見なせないならば偽を返す'}],
-  ['===', { cmd: ['A===B'], hint: '比較する。AとBが等しいかどうかを厳密に比較し等しければ真を返す。等しくなければ偽を返す'}],
-  ['!==', { cmd: ['A!==B'], hint: '比較する。AとBが等しいく無いかどうかを厳密に比較し等しくなければ真を返す。等しければ偽を返す'}],
-  ['gt', { cmd: ['A>B'], hint: '比較する。AがBより大きい場合に真を返す。AがB以下ならば偽を返す'}],
-  ['gteq', { cmd: ['A>=B', 'A≧B'], hint: '比較する。AがB以上ならば真を返す。AがB未満ならば偽を返す'}],
-  ['lt', { cmd: ['A<B'], hint: '比較する。AがBより小さい場合に真を返す。そうではない場合は偽を返す'}],
-  ['lteq', { cmd: ['A<=B', 'A≦B'], hint: '比較する。AがB以下ならば真を返す。AがBより大きければ偽を返す'}],
-  ['&', { cmd: ['A&B'], hint: '文字列の連結。Aに続く形でBを連結した文字列を返す'}],
-  ['+', { cmd: ['A+B'], hint: '加算。AとBの和を返す'}],
-  ['-', { cmd: ['A-B'], hint: '減算。AからBを引いた差を返す'}],
-  ['shift_l', { cmd: ['A<<B'], hint: 'ビット操作。Aを左にBビットシフトした値を返す。ずらした分は0が詰められる\nこの操作はAに2^Bを乗ずるのに等しい'}],
-  ['shift_r', { cmd: ['A>>B'], hint: 'ビット操作。Aを右にBビットシフトした値を返す。ずらした分は最上位ビットと同じ値が詰められる\nこの操作はAを2^Bで除するのに等しい。Aの符号付き整数として使われる'}],
-  ['shift_r0', { cmd: ['A>>>B'], hint: 'ビット操作。Aを右にBビットシフトした値を返す。ずらした分は0が詰められる\nこの操作はAを2^Bで除するのに等しい。Aの符号なし整数として扱われる'}],
-  ['*', { cmd: ['A*B', 'A×B'], hint: '乗算。AとBを掛けた積を返す'}],
-  ['/', { cmd: ['A/B', 'A÷B'], hint: '除算。AをBで割った商を返す\n両辺が整数でも実数計算となる'}], // 一般的な割り算
-  ['÷', { cmd: ['A/B', 'A÷B'], hint: '除算。AをBで割った商を返す\n両辺が整数でも実数計算となる'}], // 一般的な割り算
-  ['÷÷', { cmd: ['A÷÷B'], hint: '整数除算。AをBで割った商を整数で返す'}], // 整数の割り算(商)
-  ['%', { cmd: ['A%B'], hint: '整数の剰余。AをBで割った余り返す'}], // 整数の割り算(余り)
-  ['^', { cmd: ['A^B', 'A**B'], hint: 'べき乗を計算する。AのB乗を返す'}],
-  ['**', { cmd: ['A^B', 'A**B'], hint: 'べき乗を計算する。AのB乗を返す'}]
-])
+export class CommandManager implements Disposable {
+	private readonly commands = new Map<string, Disposable>()
+
+	dispose(): void {
+		for (const registration of this.commands.values()) {
+			registration.dispose()
+		}
+		this.commands.clear()
+	}
+
+	public register<T extends Command>(command: T): T {
+		this.registerCommand(command.id, command.execute, command)
+		return command
+	}
+
+	private registerCommand(id: string, impl: (...args: any[]) => void, thisArg?: any) {
+		if (this.commands.has(id)) {
+			return
+		}
+
+		this.commands.set(id, commands.registerCommand(id, impl, thisArg))
+	}
+}

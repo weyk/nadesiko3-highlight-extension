@@ -1,4 +1,6 @@
 import {
+    CancellationToken,
+    Disposable,
     FileSystemWatcher,
     TextDocument,
     Uri,
@@ -11,7 +13,7 @@ import { ImportInfo } from './nako3module.mjs'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
-import { nako3diagnostic } from './nako3diagnotic.mjs'
+import { nako3diagnostic } from './provider/nako3diagnotic.mjs'
 import { logger } from './logger.mjs'
 import type { NakoRuntime } from './nako3types.mjs'
 import type { Token } from './nako3token.mjs'
@@ -39,7 +41,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         })
     }
 
-    [Symbol.dispose](): void {
+    dispose(): void {
         if (this.fileWacther) {
             this.fileWacther.dispose()
         }
@@ -52,7 +54,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 const uristr = uri.toString()
                 if (!doc.isTextDocument) {
                     await doc.updateText(uri)
-                    await doc.tokenize()
+                    await this.analyze(doc)
                 }
             }
         } if (/\.(js|cja|mjs)$/.test(uri.fsPath)) {
@@ -82,7 +84,13 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         }
     }
  
-    openFromDocument (document: TextDocument): Nako3DocumentExt {
+    /**
+     * TextDocumentを元にして登録する
+     * 既にUriから登録してある場合はTextDocument管理に切り替わる。
+     * @param document 登録をするvscode.TextDocumentを指定する
+     * @returns １対１対応するNako3DocumentExtを返す
+     */
+    public openFromDocument (document: TextDocument): Nako3DocumentExt {
         const fileName = this.getFileName(document)
         let doc = this.get(document)
         if (!doc) {
@@ -100,7 +108,13 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         return doc
     }
 
-    openFromFile (uri: Uri): Nako3DocumentExt {
+    /**
+     * Uriを元にして登録する
+     * 既に登録してある場合は何も変化しない。
+     * @param uri 登録をするvscode.Uriを指定する
+     * @returns １対１対応するNako3DocumentExtを返す
+     */
+    public openFromFile (uri: Uri): Nako3DocumentExt {
         const fileName = this.getFileName(uri)
         let doc: Nako3DocumentExt|undefined = this.get(uri)
         if (!doc) {
@@ -116,31 +130,22 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         return doc
     }
 
-    private newDocument (fileName: string, uri: Uri, document?: TextDocument) {
+    /**
+     * 登録を際にTextDocument/Uri共通で必要な処理をまとめたもの。
+     * @param fileName Uri.toString()をしたもの。内部での管理キー。
+     * @param uri 登録をするファイルのUri
+     * @param document 登録をするファイルのTextDocument(Uriベースの場合は不要)
+     * @returns 登録したNako3DocumentExtを返す
+     */
+    private newDocument (fileName: string, uri: Uri, document?: TextDocument): Nako3DocumentExt {
         const doc = new Nako3DocumentExt(document || uri)
         this.docs.set(fileName, doc)
-        /*doc.nako3doc.addListener('changeNakoRuntime', e => {
-            logger.debug(`docs:onChangeNakoRuntime`)
-            this.fireChangeNakoRuntime(fileName, uri, e.nakoRuntime)
-        })
-        doc.nako3doc.addListener('refreshLink', async e => {
-            logger.debug(`docs:onRefreshLink`)
-            await this.refreshLink(doc, e.imports)
-        })*/
-        doc.nako3doc.onChangeNakoRuntime = (nakoRuntime:NakoRuntime) => {
-            logger.debug(`docs:onChangeNakoRuntime`)
-            this.fireChangeNakoRuntime(fileName, uri, nakoRuntime)
-        }
-        doc.nako3doc.onRefreshLink = async (imports) => {
-            logger.debug(`docs:onRefreshLink`)
-            await this.refreshLink(doc, imports)
-        }
         return doc
     }
 
-    fireChangeNakoRuntime (fileName: string, uri: Uri, nakoRuntime: NakoRuntime) {
-        logger.debug(`docs:fireChangeNakoRuntime(${fileName}:${nakoRuntime})`)
-        this.emit('changeNakoRuntime', { fileName, uri, nakoRuntime })
+    private fireChangeNakoRuntime (doc: Nako3DocumentExt, nakoRuntime:NakoRuntime) {
+        logger.debug(`docs:fireChangeNakoRuntime(${doc.uri.fsPath}:${nakoRuntime})`)
+        this.emit('changeNakoRuntime', { fileName: doc.uri.fsPath, uri: doc.uri, nakoRuntime })
     }
 
     closeAtDocument (document: TextDocument):void {
@@ -194,6 +199,10 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         nako3diagnostic.refreshDiagnostics()
     }
 
+    async updateText (doc: Nako3DocumentExt, document: Uri|TextDocument, canceltoken?: CancellationToken): Promise<boolean> {
+        return await doc.updateText(document, canceltoken)
+    }
+
     has (document: TextDocument|Uri): boolean {
         return this.docs.has(this.getFileName(document))
     }
@@ -210,7 +219,26 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         return doc instanceof Uri ? doc : doc.uri
     }
 
-    async refreshLink(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<void> {
+    updateNakoRuntime(doc: Nako3DocumentExt) {
+        const nakoRuntime = doc.nako3doc.moduleEnv.nakoRuntime
+        if (nakoRuntime !== doc.nakoRuntime) {
+            doc.nakoRuntime = nakoRuntime
+            this.fireChangeNakoRuntime(doc, nakoRuntime)
+        }
+    }
+
+    async analyze(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<void> {
+        logger.debug(`analyze:start:${doc.toString()}`)
+        await doc.nako3doc.tokenize(canceltoken)
+        this.updateNakoRuntime(doc)
+        await this.refreshLink(doc)
+        await doc.nako3doc.parse(canceltoken)
+        await doc.nako3doc.applyVarConst(canceltoken)
+        logger.debug(`analyze:end  :${doc.toString()}`)
+    }
+
+    async refreshLink(doc: Nako3DocumentExt): Promise<void> {
+        const imports = doc.nako3doc.importStatements
         const moduleEnv = doc.nako3doc.moduleEnv
         doc.errorInfos.clear()
         moduleEnv.pluginNames.length = 0
@@ -242,6 +270,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                         wasErrorReported: false
                     }
                     doc.link.imports.set(imp, info)
+                    logger.info(`imports: already resist plugin("${plugin}")`)
                     continue
                 }
             }
@@ -443,7 +472,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 if (!target.isTextDocument && (!isRemote || target.nako3doc.text === '')) {
                     await target.updateText(impUri)
                 }
-                await target.tokenize()
+                await this.analyze(target)
                 logger.info(`importNako3: success return(${impUri.toString()})`)
                 return target
             } else {
@@ -493,7 +522,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                         if (!target.isTextDocument) {
                             await target.updateText(impUri)
                         }
-                        await target.tokenize()
+                        await this.analyze(target)
                         logger.info(`importNako3: success return(${impUri.toString()})`)
                         return target
                     } catch (err) {

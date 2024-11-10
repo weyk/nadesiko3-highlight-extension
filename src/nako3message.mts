@@ -116,7 +116,9 @@ export const messages = new Map<string,string>([
     ['mismatchFunctionArgumentNumber', 'Mismatch function "{funcname}" declared arguments number {defargsnum} vs function call arguments number {realargsnnum}'],
     // RenameProvider
     ['cannnotRenameInPluginEntry', '"{name}" is entity of plugin, it cannot rename'],
-    ['cannnotRenameThis', 'This item cannnot rename']
+    ['cannnotRenameInRemoteEntry', '"{name}" is entity of remote file, it cannot rename'],
+    ['cannnotRenameThis', 'This item cannnot rename'],
+    ['unknwonWord', 'Unknown word "{value}".']
 ])
 
 export type MessageArgs = Record<string, string|number>
