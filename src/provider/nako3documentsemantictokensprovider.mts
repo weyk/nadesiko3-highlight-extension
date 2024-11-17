@@ -103,7 +103,9 @@ const hilightMapping: HighlightMap = {
     ':': 'operator',
     'def_func': 'keyword',
     '_eol': 'keyword',
-    '!': 'keyword'
+    '!': 'keyword',
+    '??': 'keyword',
+    '$': 'keyword'
 }
 
 const tokenTypes = ['function', 'variable', 'comment', 'string', 'number', 'keyword', 'operator', 'type', 'parameter', 'decorator']
@@ -157,7 +159,7 @@ export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticToke
     private getSemanticTokens (doc: Nako3DocumentExt): SemanticTokens {
         const tokens = doc.nako3doc.tokens
         const commentTokens = doc.nako3doc.commentTokens
-        const lengthLines = doc.nako3doc.lexerResult.lengthLines
+        const lengthLines = doc.nako3doc.lengthLines
         const symbols = this.computeSemanticToken(tokens, commentTokens, lengthLines, doc)
         return symbols
     }

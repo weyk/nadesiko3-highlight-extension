@@ -78,9 +78,10 @@
     "noKokomadeAtIf": "『もし』文で『ここまで』がありません。",
     "invlaidOptimizeOption": "実行速度優先文のオプション『{option}』は存在しません。",
     "invalidParamInRange": "範囲オブジェクトの指定エラー。『A…B』の書式で指定してください。",
-    "noRangeInSystemPlugin": "関数『範囲』が見つかりません。plugin_systemをシステムに追加してください。",
+    "noCommandInSystemPlugin": "関数『{command}』が見つかりません。plugin_systemをシステムに追加してください。",
     "errorInExpression": "計算式でエラー",
     "requireParentisCloseInCfunction": "C風関数『{funcName}』でカッコが閉じていません",
+    "suggestPrint": "『??(計算式)』で指定してください。",
     "suggestForEach": "『(変数名)で(配列)を反復』で指定してください。",
     "suggestSwitch": "『(値)で条件分岐』のように記述してください。",
     "switchFollowLF": "『条件分岐』の直後は改行してください。",
@@ -114,5 +115,6 @@
     "cannnotRenameInPluginEntry": "『{name}』はプラグインで定義されている名前のためRenameできません。",
     "cannnotRenameInRemoteEntry": "『{name}』はリモートのファイルで定義されている名前のためRenameできません。",
     "cannnotRenameThis": "この項目はRenameできません",
-    "unknwonWord": "不明な単語『{value}』があります。代入のない変数の可能性があります。"
+    "unknwonWord": "不明な単語『{value}』があります。代入のない変数の可能性があります。",
+    "noURI": "実行できませんでした。対象のURIが不明です。未保存の場合は１度保存してファイルパスを確定させてください。"
 }

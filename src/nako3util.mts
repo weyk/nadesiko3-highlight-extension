@@ -226,6 +226,15 @@ export function dumpScopIdList (scopeList: ScopeIdRange[], tokens : Token[]) {
     }
 }
 
+export function trimQuote (str: string): string {
+    if (str === '""' || str === "''") {
+        return ''
+    } else if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"'))) {
+        return str.substring(1, str.length - 1)
+    }
+    return str
+}
+
 export function setSerialId(): number {
     return SerialIdStart
 }

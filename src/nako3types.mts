@@ -2,7 +2,7 @@ import { Uri } from 'vscode'
 import { Nako3Range } from './nako3range.mjs'
 
 export type NakoRuntime = 'wnako'|'cnako'|'snako'|''
-export type DeclareOrigin = 'plugin'|'global'|'local'
+export type DeclareOrigin = 'plugin'|'global'|'local'|'system'
 export interface FunctionArg {
   varname: string
   attr: string[]
@@ -12,57 +12,74 @@ export interface FunctionArg {
 
 export type ScopeIdRange = [ string, number, number ]
 
-export interface DeclareFunction {
+export interface DeclareBase {
   name: string
   nameNormalized: string
+  activeDeclare: boolean
+  range: Nako3Range|null
+  origin: DeclareOrigin
+  hint?: string
+}
+
+export interface GlobalBase extends DeclareBase {
   modName: string
   uri?: Uri
+  isExport: boolean
+  isPrivate: boolean
+  isRemote: boolean
+}
+
+export interface LocalBase extends DeclareBase {
+  scopeId: string
+}
+
+export interface FunctionBase extends DeclareBase {
   type: 'func'
   args?: FunctionArg[]
   isMumei: boolean
   isPure: boolean
   isAsync: boolean
   isVariableJosi: boolean
-  isExport: boolean
-  isPrivate: boolean
-  hint?: string
-  range: Nako3Range|null
+}
+
+export interface VariableBase extends DeclareBase {
+  type: 'var'|'parameter'
+}
+
+export interface ConstantBase extends DeclareBase {
+  type: 'const'
+  value: string
+}
+
+export interface GlobalFunction extends GlobalBase, FunctionBase {
   scopeId: string|null
-  origin: DeclareOrigin
-  isRemote: boolean
 }
 
-export interface DeclareVariable {
-  name: string
-  nameNormalized: string
-  modName: string
-  uri?: Uri
-  type: 'var'|'const'
-  isExport: boolean
-  isPrivate: boolean
-  hint?: string
-  range: Nako3Range|null
-  origin: DeclareOrigin
-  isRemote: boolean
+export interface GlobalVariable extends GlobalBase, VariableBase {
+  type: 'var'
 }
 
-export interface LocalVariable {
-  name: string
-  type: string
-  scopeId: string
-  activeDeclare: boolean
-  range: Nako3Range|null
-  origin: DeclareOrigin
+export interface GlobalConstant extends GlobalBase, ConstantBase {
+  isColor?: boolean
 }
 
-export type DeclareThing = DeclareFunction | DeclareVariable
+export interface LocalVariable extends LocalBase, VariableBase {
+}
+
+export interface LocalConstant extends LocalBase, ConstantBase {
+}
+
+export type GlobalVarConst = GlobalVariable | GlobalConstant
+export type DeclareThing = GlobalFunction | GlobalVarConst
+
+export type LocalVarConst = LocalVariable | LocalConstant
 
 export type DeclareThings = Map<string, DeclareThing>
-export type DeclareFunctions = Map<string, DeclareFunction>
-export type DeclareVariables = Map<string, DeclareVariable>
-export type LocalVariables = Map<string, LocalVariable>
+export type DeclareFunctions = Map<string, GlobalFunction>
+export type DeclareVariables = Map<string, GlobalVariable>
+export type LocalVarConsts = Map<string, LocalVarConst>
 export type ExternThings = Map<string, DeclareThings>
-export type AllVariables = Map<string, LocalVariables>
+export type AllScopeVarConsts = Map<string, LocalVarConsts>
 
 export interface SourceMap {
     startLine: number

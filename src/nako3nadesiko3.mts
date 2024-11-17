@@ -209,14 +209,21 @@ class Nako3Nadesiko3 extends EventEmitter {
     }
 
     public async getWnako3Path(): Promise<string|null> {
+        const nako3release = await this.getReleaseFolder()
+        if (!nako3release) { return null }
+        const wnako3 = path.resolve(nako3release, path.join('wnako3.js'))
+        return wnako3
+    }
+
+    public async getReleaseFolder(): Promise<string|null> {
         let nako3folder:string = await this.getNako3Home()
         if (nako3folder === '') {
             showMessage('WARN', 'unknwonNadesiko3home', {})
             return null
         }
         logger.debug(`command:nadesiko3.exec:nako3folder=${nako3folder}`)
-        const wnako3 = path.resolve(nako3folder, path.join('release', 'wnako3.js'))
-        return wnako3
+        const nako3release = path.resolve(nako3folder, path.join('release'))
+        return nako3release
     }
 }
 

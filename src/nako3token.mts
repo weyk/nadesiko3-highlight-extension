@@ -1,5 +1,5 @@
 import { Uri } from 'vscode'
-import type { DeclareFunction, DeclareVariable, LocalVariable } from './nako3types.mjs'
+import type { GlobalFunction, GlobalVarConst, LocalVarConst } from './nako3types.mjs'
 import { Nako3Range } from './nako3range.mjs'
 
 export type Nako3TokenRawType = '?'
@@ -54,6 +54,8 @@ export type Nako3TokenRawType = '?'
 | '|'
 | '」'
 | '』'
+| '??' // 「表示」のエイリアス
+| '$' // プロパティアクセス
 | '{'
 | '}'
 | ':'
@@ -175,19 +177,19 @@ export interface Token {
 }
 
 export interface TokenDefFunc extends Token {
-  meta: DeclareFunction
+  meta: GlobalFunction
   endTokenIndex: number
 }
 
 export interface TokenCallFunc extends Token {
-  meta: DeclareFunction
+  meta: GlobalFunction
   isFuncPointer: boolean
 }
 
 export interface TokenRefFunc extends Token {
-  meta: DeclareFunction
+  meta: GlobalFunction
 }
 
 export interface TokenRefVar extends Token {
-  meta: DeclareVariable|LocalVariable
+  meta: GlobalVarConst|LocalVarConst
 }

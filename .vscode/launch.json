@@ -8,7 +8,7 @@
             "runtimeExecutable": "${execPath}",
             "preLaunchTask": "build",
             "args": [
-//                "--disable-extensions",
+                // "--disable-extensions",
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ]
         },

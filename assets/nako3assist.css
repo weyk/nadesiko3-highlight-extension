@@ -1,36 +1,41 @@
 body {
-    background-color: #ffffff;
+    background-color: white;
+    color: black;
 }
 
+.edit_div {
+    margin: 0.5em;
+    padding: 0;
+}
+  
 .edit_head {
     margin: 0;
+    padding: 0.3em;
+    font-size: 0.8em;
+    color: grey;
 }
 
-.info, .err {
-    font-size: 1em;
+.turtle_box {
+    border: 1px solid black;
+    text-align: center;
+}
+
+.result_div {
+    text-align: left;
 }
 
 .turtle_canvas {
     border: 1px solid silver;
-}
-
-.edit_head {
-    padding: 0.3em;
-}
-
-.edit_head {
-    font-size: 0.8em;
-    color: gray;
+    text-align: left;
 }
 
 .info, .err {
+    font-size: 1em;
     line-height: 1.5em;
-}
-
-.info, .err {
     border: 1px solid gray;
     padding: 8px;
 }
+
 .info {
     background-color: #f0fff0;
     margin-top: 0;
@@ -38,5 +43,8 @@ body {
 
 .err {
     background-color: #fff0f0;
+}
+
+.hidden {
     display: none;
 }

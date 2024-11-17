@@ -14,7 +14,7 @@ import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareFunction } from '../nako3types.mjs'
+import type { GlobalFunction } from '../nako3types.mjs'
 import type { Token, TokenCallFunc } from '../nako3token.mjs'
 
 export class Nako3HoverProvider implements HoverProvider {
@@ -52,28 +52,50 @@ export class Nako3HoverProvider implements HoverProvider {
         
         if (token !== null) {
             if (['sys_func','sys_var','sys_const'].includes(token.type)) {
-                const commandInfo = nako3plugin.getCommandInfo(token.value, doc.nako3doc.moduleEnv.pluginNames, doc.nako3doc.moduleEnv.nakoRuntime)
-                if (!commandInfo) {
-                    return null
-                }
-                let range = this.getRangeFromTokenContent(token, col)
-                if (range === null) {
-                    return null
-                }
-                let cmd:string
-                if (token.type === 'sys_var') {
-                    cmd = `変数 ${commandInfo.name}`
-                } else if (token.type === 'sys_const') {
-                    cmd = `定数 ${commandInfo.name}`
-                } else {
-                    const declfunc = commandInfo as DeclareFunction
-                    if (declfunc.args && declfunc.args.length > 0) {
-                        cmd = `命令 (${argsToString(declfunc.args)})${commandInfo.name}`
-                    } else {
-                        cmd = `命令 ${commandInfo.name}`
+                const origin = (token as TokenCallFunc).meta.origin
+                if (origin === 'plugin') {
+                    const commandInfo = nako3plugin.getCommandInfo(token.value, doc.nako3doc.moduleEnv.pluginNames, doc.nako3doc.moduleEnv.nakoRuntime)
+                    if (!commandInfo) {
+                        return null
                     }
+                    let range = this.getRangeFromTokenContent(token, col)
+                    if (range === null) {
+                        return null
+                    }
+                    let cmd:string
+                    if (token.type === 'sys_var') {
+                        cmd = `変数 ${commandInfo.name}`
+                    } else if (token.type === 'sys_const') {
+                        cmd = `定数 ${commandInfo.name}`
+                    } else {
+                        const declfunc = commandInfo as GlobalFunction
+                        if (declfunc.args && declfunc.args.length > 0) {
+                            cmd = `命令 (${argsToString(declfunc.args)})${commandInfo.name}`
+                        } else {
+                            cmd = `命令 ${commandInfo.name}`
+                        }
+                    }
+                    return new Hover([cmd, commandInfo.hint || ''], range)
+                } else if (origin === 'system') {
+                    const meta = (token as TokenCallFunc).meta
+                    let range = this.getRangeFromTokenContent(token, col)
+                    if (range === null) {
+                        return null
+                    }
+                    let cmd:string
+                    if (token.type === 'sys_var') {
+                        cmd = `システム変数 ${meta.name}`
+                    } else if (token.type === 'sys_const') {
+                        cmd = `システム定数 ${meta.name}`
+                    } else {
+                        if (meta.args && meta.args.length > 0) {
+                            cmd = `システム関数 (${argsToString(meta.args)})${meta.name}`
+                        } else {
+                            cmd = `システム関数 ${meta.name}`
+                        }
+                    }
+                    return new Hover([cmd, ''], range)
                 }
-                return new Hover([cmd, commandInfo.hint || ''], range)
             } else if (['user_func', 'user_var', 'user_const'].includes(token.type)) {
                 const meta = (token as TokenCallFunc).meta
                 if (!meta) {
@@ -85,9 +107,17 @@ export class Nako3HoverProvider implements HoverProvider {
                 }
                 let cmd:string
                 if (token.type === 'user_var') {
-                    cmd = `ユーザ変数 ${meta.name}`
+                    if (meta.scopeId !== 'global') {
+                        cmd = `ローカル変数 ${meta.name}`
+                    } else {                        
+                        cmd = `ユーザ変数 ${meta.name}`
+                    }
                 } else if (token.type === 'user_const') {
-                    cmd = `ユーザ定数 ${meta.name}`
+                    if (meta.scopeId !== 'global') {
+                        cmd = `ローカル定数 ${meta.name}`
+                    } else {                        
+                        cmd = `ユーザ定数 ${meta.name}`
+                    }
                 } else {
                     if (meta.args && meta.args.length > 0) {
                         cmd = `ユーザ関数 (${argsToString(meta.args)})${meta.name}`

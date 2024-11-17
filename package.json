@@ -124,6 +124,54 @@
                     "default": "",
                     "description": "%node.nodeBin.description%"
                 },
+                "nadesiko3Highlight.wnako.csp.enable": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%wnako.csp.enable.description%"
+                },
+                "nadesiko3Highlight.wnako.csp.useNonce": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%wnako.csp.useNonce.description%"
+                },
+                "nadesiko3Highlight.wnako.canvas.preset": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%wnako.canvas.preset.description%"
+                },
+                "nadesiko3Highlight.wnako.canvas.id": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "turtle_cv",
+                    "description": "%wnako.canvas.id.description%"
+                },
+                "nadesiko3Highlight.wnako.canvas.size.width": {
+                    "scope": "resource",
+                    "type": "number",
+                    "default": 640,
+                    "description": "%wnako.canvas.size.width.description%"
+                },
+                "nadesiko3Highlight.wnako.canvas.size.height": {
+                    "scope": "resource",
+                    "type": "number",
+                    "default": 480,
+                    "description": "%wnako.canvas.size.height.description%"
+                },
+                "nadesiko3Highlight.wnako.autoDrawStart": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%wnako.autoDrawStart.description%"
+                },
+                "nadesiko3Highlight.wnako.autoTurtleStart": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%wnako.autoTurtleStart.description%"
+                },
                 "nadesiko3Highlight.trace": {
                     "scope": "window",
                     "type": "string",

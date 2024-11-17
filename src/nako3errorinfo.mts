@@ -27,14 +27,17 @@ export interface ErrorInfoRaw {
 type ErrorInfo = ErrorInfoID | ErrorInfoRaw
 
 export class ErrorInfoManager {
-    problemsLimit: number
-    errorInfos: ErrorInfo[]
+    private problemsLimit: number
+    private errorInfos: ErrorInfo[]
 
     constructor () {
         this.errorInfos = []
         this.problemsLimit = 100
     }
 
+    setProblemsLimit (limit: number):void {
+        this.problemsLimit = limit
+    }
     clear ():void {
         this.errorInfos = []
     }

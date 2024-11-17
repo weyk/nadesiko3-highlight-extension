@@ -103,6 +103,8 @@ export const lexRules: LexRule[] = [
     { name: '(', group: '演算子', pattern: /^(\(|（)/ },
     { name: ')', group: '演算子', pattern: /^(\)|）)/, withJosi: true },
     { name: '|', group: '演算子', pattern: /^(\||｜)/ },
+    { name: '??', group: '命令', pattern: /^(\?\?|？？)/ }, // 「表示」のエイリアス #1745
+    { name: '$', group: '記号', pattern: /^[\$＄]/ }, // #1793 プロパティアクセス
     { name: '」', group: '記号', pattern: '」', withJosi: true },
     { name: '』', group: '記号', pattern: '』', withJosi: true },
     { name: '{', group: '記号', pattern: /^(\{|｛)/ },

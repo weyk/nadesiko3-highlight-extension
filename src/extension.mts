@@ -5,6 +5,7 @@ import { nadesiko3, TerminalExt } from './nako3nadesiko3.mjs'
 import { showMessage } from './nako3message.mjs'
 import { nako3extensionOption, configurationInitialize, configurationChanged } from './nako3option.mjs'
 import { initialize as pluginInitialize } from './nako3plugin_builtin.mjs'
+
 import { Nako3DocumentHighlightProvider } from './provider/nako3documenthighlightprovider.mjs'
 import { Nako3DocumentSemanticTokensProvider, legend } from './provider/nako3documentsemantictokensprovider.mjs'
 import { Nako3DocumentSymbolProvider } from './provider/nako3documentsymbolprovider.mjs'
@@ -12,6 +13,8 @@ import { Nako3HoverProvider } from './provider/nako3hoverprovider.mjs'
 import { Nako3DefinitionProvider } from './provider/nako3definitionprovider.mjs'
 import { Nako3ReferenceProvider } from './provider/nako3referenceprovider.mjs'
 import { Nako3RenameProvider } from './provider/nako3renameprovider.mjs'
+import { Nako3DocumentColorProvider } from './provider/nako3documentcolorprovider.mjs'
+
 import * as commands from './commands/index.mjs'
 import { CommandManager } from './nako3command.mjs'
 
@@ -62,26 +65,23 @@ export function activate(context: vscode.ExtensionContext):void {
             }
         }
     })
+
+    // extension開始時点で既に開かれているTextDocumentを登録する
     for (const document of vscode.workspace.textDocuments) {
-        // console.log(`  ${document.fileName}:${document.languageId}:${!document.isClosed}`)
         if (!document.isClosed && document.languageId === 'nadesiko3') {
             nako3docs.openFromDocument(document)
         }
     }
-    context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider(NAKO3_MODE, new Nako3DocumentSemanticTokensProvider(), legend))
-    context.subscriptions.push(vscode.languages.registerDocumentHighlightProvider(NAKO3_MODE, new Nako3DocumentHighlightProvider()))
-    context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(NAKO3_MODE, new Nako3DocumentSymbolProvider()))
-    context.subscriptions.push(vscode.languages.registerHoverProvider(NAKO3_MODE, new Nako3HoverProvider()))
-    context.subscriptions.push(vscode.languages.registerDefinitionProvider(NAKO3_MODE, new Nako3DefinitionProvider()))
-    context.subscriptions.push(vscode.languages.registerReferenceProvider(NAKO3_MODE, new Nako3ReferenceProvider()))
-    context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
 
+    // extension開始後に開かれたTextDocumentを登録する
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpenTextDocument  :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
             nako3docs.openFromDocument(e)
         }
     }))
+
+    // extension開始後に閉じられたTextDocumentを解除する
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(e => {
         // console.log(`onDidCloseTextDocument :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
@@ -98,7 +98,7 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(e => {
-        logger.log(`onDidSaveTextDocument:${e.languageId}:${e.fileName}`)
+        // logger.log(`onDidSaveTextDocument:${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
             const doc = nako3docs.get(e)
             if (doc) {
@@ -119,6 +119,16 @@ export function activate(context: vscode.ExtensionContext):void {
         //logger.log(`  ${e.opened[0].label}/${e.closed[0].label}/${e.changed[0].label}`)
         //console.log(e)
     //}))
+
+    context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider(NAKO3_MODE, new Nako3DocumentSemanticTokensProvider(), legend))
+    context.subscriptions.push(vscode.languages.registerDocumentHighlightProvider(NAKO3_MODE, new Nako3DocumentHighlightProvider()))
+    context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(NAKO3_MODE, new Nako3DocumentSymbolProvider()))
+    context.subscriptions.push(vscode.languages.registerHoverProvider(NAKO3_MODE, new Nako3HoverProvider()))
+    context.subscriptions.push(vscode.languages.registerDefinitionProvider(NAKO3_MODE, new Nako3DefinitionProvider()))
+    context.subscriptions.push(vscode.languages.registerReferenceProvider(NAKO3_MODE, new Nako3ReferenceProvider()))
+    context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
+    context.subscriptions.push(vscode.languages.registerColorProvider(NAKO3_MODE, new Nako3DocumentColorProvider()))
+
 	const commandManager = new CommandManager()
 	context.subscriptions.push(commandManager)
 	commandManager.register(new commands.Nako3Execute(context))

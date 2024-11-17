@@ -17,16 +17,14 @@ export class Nako3Tokenizer {
     // textから生成したtoken列。全てのトークンを含む。書き換えなし。
     private rawTokens: Token[]
     private lengthLines: number[]
-    errorInfos: ErrorInfoManager
     private procMap: ProcMap
     private line: number
     private col: number
     private moduleEnv: ModuleEnv
-    private link: ModuleLink
+    public errorInfos: ErrorInfoManager
 
-    constructor (moduleEnv: ModuleEnv, link: ModuleLink) {
+    constructor (moduleEnv: ModuleEnv) {
         this.moduleEnv = moduleEnv
-        this.link = link
         this.rawTokens = []
         this.errorInfos = new ErrorInfoManager()
         this.lengthLines = []
@@ -51,8 +49,10 @@ export class Nako3Tokenizer {
         this.errorInfos.clear()
         this.line = LINE_START
         this.col = COL_START
-        const tokens = this.tokenizeProc(text)
+        this.tokenizeProc(text)
         const lengthLines = this.lengthLines
+        const tokens = this.rawTokens
+        this.rawTokens = []
         this.lengthLines = []
         return {
             tokens,
@@ -61,14 +61,14 @@ export class Nako3Tokenizer {
     }
 
     setProblemsLimit (limit: number):void {
-        this.errorInfos.problemsLimit = limit
+        this.errorInfos.setProblemsLimit(limit)
     }
 
     /**
      * 渡されたtextをトークンに分解して自身の保存する。
      * @param text 分析する対象の文字列を渡す            ,;.
      */
-    private tokenizeProc (text: string): Token[] {
+    private tokenizeProc (text: string):void {
         let indent: Indent = {
             len: 0,
             text: '',
@@ -214,9 +214,7 @@ export class Nako3Tokenizer {
                 this.col = COL_START
             }
         }
-        const rawTokens = this.rawTokens
-        this.rawTokens = []
-        return rawTokens
+        return
     }    
 
     /**

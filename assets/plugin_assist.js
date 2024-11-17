@@ -4,18 +4,17 @@ function toHtml (s) {
 }
 
 const PluginAssist = {
+  'meta': {
+    type: 'const',
+    value: {
+      pluginName: 'plugin_assist', // プラグインの名前
+      description: 'なでしこ３ highlightからの起動支援用プラグイン',
+      pluginVersion: '0.1.2', // プラグインのバージョン
+      nakoRuntime: ['wnako'], // 対象ランタイム
+      nakoVersion: '3.6.1' // 最小要求なでしこバージョン
+    }
+  },
   // @プレビュー支援
-/*  '表示': { // @特定の要素(id=output_info)の中に追記する // ひょうじ
-    type: 'func',
-    josi: [['と', 'を']],
-    pure: true,
-    asyncFn: false,
-    fn: function (s, sys) {
-      console.log(s)
-      document.getElementById('nako3highlight_info').innerHTML += toHtml(s) + '<br>'
-    },
-    return_none: true
-  },*/
   '言': { // @alertにより表示する // いう
     type: 'func',
     josi: [['と', 'を']],

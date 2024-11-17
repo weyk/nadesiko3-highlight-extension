@@ -11,13 +11,13 @@ import { logger } from './logger.mjs'
 import type { NakoRuntime } from './nako3types.mjs'
 
 export class Nako3DocumentExt {
-    nako3doc: Nako3Document
-    uri: Uri
-    errorInfos: ErrorInfoManager
+    public nako3doc: Nako3Document
+    public uri: Uri
+    public errorInfos: ErrorInfoManager
     link: ModuleLink
-    isTextDocument: boolean
-    isDirty: boolean
-    cache: any
+    public isTextDocument: boolean
+    public isDirty: boolean
+    public cache: any
     nakoRuntime: NakoRuntime
 
     constructor (target: TextDocument|Uri) {
@@ -38,7 +38,7 @@ export class Nako3DocumentExt {
     }
 
     setProblemsLimit (limit: number) {
-        this.errorInfos.problemsLimit = limit
+        this.errorInfos.setProblemsLimit(limit)
     }
 
     async updateText (document: Uri|TextDocument, canceltoken?: CancellationToken): Promise<boolean> {

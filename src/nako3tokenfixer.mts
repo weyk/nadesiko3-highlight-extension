@@ -5,7 +5,7 @@ import { tararebaMap } from './nako3/nako_josi_list.mjs'
 import { trimOkurigana, filenameToModName } from './nako3util.mjs'
 import { logger } from './logger.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
-import type { DeclareFunction, FunctionArg } from './nako3types.mjs'
+import type { GlobalFunction, FunctionArg } from './nako3types.mjs'
 import type { Token, TokenDefFunc, TokenRefFunc, TokenType } from './nako3token.mjs'
 
 export interface ImportStatementInfo {
@@ -27,12 +27,12 @@ export class Nako3TokenFixer {
     // rawTokensから書き換えのあるトークン列。ただしコメントは除く。
     private tokens: Token[]
     private commentTokens: Token[]
-    public errorInfos: ErrorInfoManager
     private imports: ImportStatementInfo[]
     private moduleOption: ModuleOption
     private moduleEnv: ModuleEnv
+    public errorInfos: ErrorInfoManager
 
-    constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption, link: ModuleLink) {
+    constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
         this.moduleEnv = moduleEnv
         this.moduleOption = moduleOption
         this.errorInfos = new ErrorInfoManager()
@@ -42,7 +42,7 @@ export class Nako3TokenFixer {
     }
 
     public setProblemsLimit (limit: number):void {
-        this.errorInfos.problemsLimit = limit
+        this.errorInfos.setProblemsLimit(limit)
     }
 
     public fixTokens (rawTokens: Token[]): TokenFixerResult {
@@ -636,7 +636,7 @@ export class Nako3TokenFixer {
     private addUserFunction (name: string, args: FunctionArg[], isExport: boolean, isPrivate: boolean, isMumei: boolean, funcNameIndex: number|null, defTokenIndex: number):void {
         const nameTrimed = name.trim()
         const nameNormalized = trimOkurigana(nameTrimed)
-        const declFunction: DeclareFunction = {
+        const declFunction: GlobalFunction = {
             name: nameTrimed,
             nameNormalized: nameNormalized,
             modName: this.moduleEnv.modName,
@@ -652,7 +652,8 @@ export class Nako3TokenFixer {
             range: Nako3Range.fromToken(this.tokens[funcNameIndex ? funcNameIndex : defTokenIndex]),
             scopeId: null,
             origin: 'global',
-            isRemote: this.moduleEnv.isRemote
+            isRemote: this.moduleEnv.isRemote,
+            activeDeclare: true
         }
         if (nameTrimed.length > 0) {
             this.moduleEnv.declareThings.set(nameNormalized, declFunction)

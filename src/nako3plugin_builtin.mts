@@ -1,7 +1,8 @@
-import { argsFromString } from './nako3util.mjs'
+import { argsFromString, trimQuote } from './nako3util.mjs'
 import { nako3plugin, PluginInfo } from './nako3plugin.mjs'
+import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, DeclareFunction, DeclareVariable } from './nako3types.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVariable, GlobalConstant } from './nako3types.mjs'
 
 import commandjson from './nako3/command.json'
 
@@ -98,7 +99,7 @@ function importCommandJson (json: CmdJsonEntry):void {
                 const hint = entry[3]
                 let type:'func'|'var'|'const'
                 if (rawType === '関数') {
-                    const func: DeclareFunction = {
+                    const func: GlobalFunction = {
                         name: command,
                         nameNormalized: command,
                         modName: pluginName,
@@ -114,24 +115,40 @@ function importCommandJson (json: CmdJsonEntry):void {
                         range: null,
                         scopeId: null,
                         origin: 'plugin',
-                        isRemote: false
+                        isRemote: false,
+                        activeDeclare: true
                     }
                     commandEntry.set(command, func)
                 } else if (rawType === '定数' || rawType === '変数') {
                     type = rawType === '定数' ? 'const' : 'var'
-                    const varConst: DeclareVariable = {
+                    let isColor = type === 'const' && cssColor.isColorName(trimQuote(hint))
+                    const varConst = {
                         name: command,
                         nameNormalized: command,
                         modName: pluginName,
-                        type,
                         isExport: true,
                         isPrivate: false,
                         hint,
                         range: null,
-                        origin: 'plugin',
-                        isRemote: false
+                        origin: 'plugin' as 'plugin',
+                        isRemote: false,
+                        isColor,
+                        activeDeclare: true
                     }
-                    commandEntry.set(command, varConst)
+                    if (type === 'const') {
+                        const v: GlobalConstant = {
+                            type: 'const',
+                            value: hint,
+                            ...varConst
+                        }
+                        commandEntry.set(command, v)
+                    } else {
+                        const v: GlobalVariable = {
+                            type: 'var',
+                            ...varConst
+                        }
+                        commandEntry.set(command, v)
+                    }
                 } else {
                     logger.error(`nako3plugin: unknwon type(${rawType}) in ${plugin}`)
                 }

@@ -14,7 +14,7 @@ import { ModuleEnv } from '../nako3module.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import { DeclareFunction } from '../nako3types.mjs'
+import { GlobalFunction } from '../nako3types.mjs'
 import type { Token } from '../nako3token.mjs'
 
 const kokomadePeirsStatements = [
@@ -115,7 +115,7 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
             }
             let name = thing.nameNormalized
             let type:string
-            let func:DeclareFunction|null = null
+            let func:GlobalFunction|null = null
             switch (thing.type) {
             case 'const':
                 type = 'constant'
@@ -125,7 +125,7 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
                 break
             case 'func':
                 type = 'function'
-                func = thing as DeclareFunction
+                func = thing as GlobalFunction
                 if (func.isMumei) {
                     name = '<anonymous function>'
                 }
@@ -139,7 +139,7 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
             if (func) {
                 const scopeId = func.scopeId
                 if (scopeId) {
-                    const vars = moduleEnv.allVariables.get(scopeId)
+                    const vars = moduleEnv.allScopeVarConsts.get(scopeId)
                     if (vars) {
                         for (const [ varname, localvar ] of vars) {
                             if (localvar.range === null || localvar.type === 'parameter' || localvar.scopeId !== scopeId) {

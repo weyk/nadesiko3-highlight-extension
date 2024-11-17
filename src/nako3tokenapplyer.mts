@@ -5,28 +5,23 @@ import { trimOkurigana, getScopeId } from './nako3util.mjs'
 import { reservedGroup } from './nako3lexer_rule.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
-import type { DeclareFunction, DeclareVariable, LocalVariable, ScopeIdRange } from './nako3types.mjs'
+import type { GlobalFunction, GlobalVariable, GlobalConstant, GlobalVarConst,LocalVariable, ScopeIdRange } from './nako3types.mjs'
 import type { Token, TokenCallFunc, TokenRefVar } from './nako3token.mjs'
 
 export class Nako3TokenApplyer {
+    private moduleEnv: ModuleEnv
     public errorInfos: ErrorInfoManager
-    moduleOption: ModuleOption
-    moduleEnv: ModuleEnv
-    link: ModuleLink
 
-    constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption, link: ModuleLink) {
+    constructor (moduleEnv: ModuleEnv, ) {
         this.moduleEnv = moduleEnv
-        this.moduleOption = moduleOption
         this.errorInfos = new ErrorInfoManager()
-        this.link = link
     }
 
     public setProblemsLimit (limit: number):void {
-        this.errorInfos.problemsLimit = limit
+        this.errorInfos.setProblemsLimit(limit)
     }
 
     public applyFunction(tokens: Token[]) {
-        this.errorInfos.clear()
         for (const token of tokens) {
             let type = token.type
             let nextTokenToFuncPointer = false
@@ -35,7 +30,7 @@ export class Nako3TokenApplyer {
                 const tv = trimOkurigana(v)
                 const thing = this.moduleEnv.declareThings.get(tv)
                 if (thing && thing.type === 'func') {
-                    (token as TokenCallFunc).meta = thing as DeclareFunction
+                    (token as TokenCallFunc).meta = thing as GlobalFunction
                     if (nextTokenToFuncPointer) {
                         (token as TokenCallFunc).isFuncPointer = true
                     }
@@ -46,7 +41,7 @@ export class Nako3TokenApplyer {
                     for (const [ , things ] of this.moduleEnv.externalThings) {
                         const thing = things.get(tv)
                         if (thing && thing.type === 'func' && thing.isExport) {
-                            (token as TokenCallFunc).meta = thing as DeclareFunction
+                            (token as TokenCallFunc).meta = thing as GlobalFunction
                             if (nextTokenToFuncPointer) {
                                 (token as TokenCallFunc).isFuncPointer = true
                             }
@@ -69,7 +64,7 @@ export class Nako3TokenApplyer {
                             const commandInfo = nako3plugin.getCommandInfo(v, this.moduleEnv.pluginNames, this.moduleEnv.nakoRuntime)
                             if (commandInfo) {
                                 if (commandInfo.type === 'func') {
-                                    (token as TokenCallFunc).meta = commandInfo as DeclareFunction
+                                    (token as TokenCallFunc).meta = commandInfo as GlobalFunction
                                     if (nextTokenToFuncPointer) {
                                         (token as TokenCallFunc).isFuncPointer = true
                                     }
@@ -92,6 +87,7 @@ export class Nako3TokenApplyer {
     }
 
     applyVarConst(tokens: Token[], scopeIdList: ScopeIdRange[]) {
+        this.errorInfos.clear()
         let i = 0
         for (const token of tokens) {
             let type = token.type
@@ -109,28 +105,42 @@ export class Nako3TokenApplyer {
                         break
                     }
                     token.type = type;
-                    (token as TokenRefVar).meta = thing as DeclareVariable
+                    (token as TokenRefVar).meta = thing as GlobalVariable
                 }
                 if (type === 'word') {
                     const scopeId = getScopeId(i, scopeIdList)
-                    const vars = this.moduleEnv.allVariables.get(scopeId)
+                    const vars = this.moduleEnv.allScopeVarConsts.get(scopeId)
                     if (vars) {
                         const thing = vars.get(tv)
                         if (thing) {
-                            switch (thing.type) {
-                            case 'var':
-                                type = 'user_var'
-                                break
-                            case 'parameter':
-                                type = 'user_var'
-                                break
-                            case 'const':
-                                type = 'user_const'
-                                break
+                            if (thing.origin === 'system') {
+                                switch (thing.type) {
+                                case 'var':
+                                    type = 'sys_var'
+                                    break
+                                case 'const':
+                                    type = 'sys_const'
+                                    break
+                                }
+                                //console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
+                                token.type = type;
+                                (token as TokenRefVar).meta = thing as LocalVariable
+                            } else {
+                                switch (thing.type) {
+                                case 'var':
+                                    type = 'user_var'
+                                    break
+                                case 'parameter':
+                                    type = 'user_var'
+                                    break
+                                case 'const':
+                                    type = 'user_const'
+                                    break
+                                }
+                                //console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
+                                token.type = type;
+                                (token as TokenRefVar).meta = thing as LocalVariable
                             }
-                            //console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
-                            token.type = type;
-                            (token as TokenRefVar).meta = thing as LocalVariable
                         } else {
                             //console.log(`miss name:${scopeId}-${tv}`)
                         }
@@ -158,28 +168,29 @@ export class Nako3TokenApplyer {
                         const commandInfo = nako3plugin.getCommandInfo(v, this.moduleEnv.pluginNames, this.moduleEnv.nakoRuntime)
                         if (commandInfo) {
                             if (commandInfo.type === 'var') {
-                                (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                                (token as TokenRefVar).meta = commandInfo as GlobalVariable
                                 type = 'sys_var'
                             } else if (commandInfo.type === 'const') {
-                                (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                                (token as TokenRefVar).meta = commandInfo as GlobalConstant
                                 type = 'sys_const'
                             }
                             token.type = type
                         }
                         if (type === 'word') {
                             if (token.value === 'それ') {
-                                const declareSore: DeclareVariable = {
+                                const declareSore: GlobalVariable = {
                                     name: 'それ',
                                     nameNormalized: 'それ',
                                     type: 'var',
                                     modName: '',
                                     isExport: true,
                                     isPrivate: false,
-                                    origin: 'plugin',
+                                    origin: 'system',
                                     range: null,
-                                    isRemote: false
+                                    isRemote: false,
+                                    activeDeclare: true
                                 };
-                                (token as TokenRefVar).meta = commandInfo as DeclareVariable
+                                (token as TokenRefVar).meta = declareSore as GlobalVariable
                                 type = 'sys_var'
                                 token.type = type
                             }

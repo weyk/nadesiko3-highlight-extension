@@ -4,7 +4,7 @@ import { Nako3Range } from '../nako3range.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
 import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
-import type { SourceMap, DeclareFunction, LocalVariables, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
+import type { SourceMap, GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
 import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
 import type { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
 
@@ -28,26 +28,24 @@ export class NakoParserBase {
   public usedFuncs: Set<string>
   protected funcLevel: number
   protected usedAsyncFn: boolean
-  protected localvars: LocalVariables
+  protected localvars: LocalVarConsts
   public genMode: string
   protected arrayIndexFrom: number
   protected flagReverseArrayIndex: boolean
   protected flagCheckArrayInit: boolean
-  protected recentlyCalledFunc: DeclareFunction[]
+  protected recentlyCalledFunc: GlobalFunction[]
   protected isReadingCalc: boolean
   protected isModifiedNodes: boolean
   public errorInfos: ErrorInfoManager
   protected moduleEnv: ModuleEnv
   protected moduleOption: ModuleOption
-  protected link: ModuleLink
   protected currentIndentLevel: number
   protected indentLevelStack: IndentLevel[]
   protected scopeId: string
   protected scopeIdStack: [ string, number][]
-  public scopeList: ScopeIdRange[]
+  protected scopeList: ScopeIdRange[]
 
-  constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption, link: ModuleLink) {
-    this.link = link
+  constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
     this.stackList = [] // 関数定義の際にスタックが混乱しないように整理する
     this.tokens = []
     this.usedFuncs = new Set()
@@ -100,8 +98,7 @@ export class NakoParserBase {
   }
 
   setProblemsLimit (limit: number) {
-    logger.debug(`parser3:problem limit:${limit}`)
-    this.errorInfos.problemsLimit = limit
+    this.errorInfos.setProblemsLimit(limit)
   }
 
   init () {
@@ -120,7 +117,7 @@ export class NakoParserBase {
     this.scopeId = 'global'
     this.scopeIdStack = []
     this.scopeList.length = 0
-    this.moduleEnv.allVariables.clear()
+    this.moduleEnv.allScopeVarConsts.clear()
     logger.info(`parser:clear`)
   }
 
@@ -198,36 +195,37 @@ export class NakoParserBase {
     this.stack = this.stackList.pop()
   }
 
-  addLocalvars (vars: LocalVariable) {
+  addLocalvars (vars: LocalVarConst) {
     if (vars.type === 'parameter') {
       this.localvars.set(vars.name, Object.assign({}, { type: 'var' }, vars))
       
     } else {
       this.localvars.set(vars.name, vars)
     }
-    let scopedVars = this.moduleEnv.allVariables.get(vars.scopeId)
+    let scopedVars = this.moduleEnv.allScopeVarConsts.get(vars.scopeId)
     if (!scopedVars) {
       scopedVars = new Map()
-      this.moduleEnv.allVariables.set(vars.scopeId, scopedVars)
+      this.moduleEnv.allScopeVarConsts.set(vars.scopeId, scopedVars)
     }
     scopedVars.set(vars.name, vars)
   }
 
-  addGlobalvars (vars: DeclareThing, token: Token, activeDeclare: boolean) {
+  addGlobalvars (vars: GlobalVarConst, token: Token, activeDeclare: boolean) {
     this.moduleEnv.declareThings.set(vars.nameNormalized, vars)
-    let globalVars = this.moduleEnv.allVariables.get('global')
+    let globalVars = this.moduleEnv.allScopeVarConsts.get('global')
     if (!globalVars) {
       globalVars = new Map()
-      this.moduleEnv.allVariables.set('global', globalVars)
+      this.moduleEnv.allScopeVarConsts.set('global', globalVars)
     }
     globalVars.set(vars.nameNormalized, {
-      name: vars.nameNormalized,
+      name: vars.name,
+      nameNormalized: vars.nameNormalized,
       scopeId: 'global',
       type: vars.type,
       activeDeclare,
       range: Nako3Range.fromToken(token),
       origin: 'local'
-    })
+    } as LocalVarConst)
   }
 
   /** 変数名を探す
@@ -253,7 +251,7 @@ export class NakoParserBase {
       if (things) {
         const funcName = trimOkurigana(name.substring(index+2))
         gvar = things.get(funcName)
-        if (gvar) {
+        if (gvar && !gvar.isPrivate) {
           return {
             name: funcName,
             modName: mod,
@@ -275,17 +273,14 @@ export class NakoParserBase {
       }
     }
     // グローバル変数（モジュールを検索）？
-    for (const mod of this.modList) {
-      const things: DeclareThings|undefined = this.moduleEnv.externalThings.get(mod)
-      if (things) {
-        const funcObj: DeclareThing|undefined = things.get(name)
-        if (funcObj && funcObj.isExport === true) {
-          return {
-            name,
-            modName: mod,
-            scope: 'global',
-            info: funcObj
-          }
+    for (const [ mod, things ] of this.moduleEnv.externalThings) {
+      const funcObj: DeclareThing|undefined = things.get(name)
+      if (funcObj && funcObj.isExport === true) {
+        return {
+          name,
+          modName: mod,
+          scope: 'global',
+          info: funcObj
         }
       }
     }
@@ -475,7 +470,11 @@ export class NakoParserBase {
   }
 
   genDeclareSore(): LocalVariable {
-    return { name: 'それ', type: 'var', scopeId: this.scopeId, range: null, activeDeclare: true, origin: 'local' }
+    return { name: 'それ', nameNormalized: 'それ', type: 'var', scopeId: this.scopeId, range: null, activeDeclare: true, origin: 'system' }
+  }
+
+  getDeclareHikisu(): LocalConstant {
+    return {name: '引数', nameNormalized: '引数', activeDeclare: true, type: 'const', scopeId: this.scopeId, origin: 'system', range: null, value: ''}
   }
 
   skipToEol ():void {

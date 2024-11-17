@@ -8,7 +8,7 @@ import { filenameToModName, NewEmptyToken, trimOkurigana } from '../nako3util.mj
 import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareFunction, SourceMap, DeclareVariable, LocalVariable } from '../nako3types.mjs'
+import type { GlobalFunction, SourceMap, GlobalVariable, GlobalConstant, GlobalVarConst, LocalVariable } from '../nako3types.mjs'
 import type { Token, TokenDefFunc, TokenCallFunc } from '../nako3token.mjs'
 import type { NodeType, Ast, AstEol, AstBlocks, AstOperator, AstConst, AstLet, AstLetArray, AstIf, AstWhile, AstAtohantei, AstFor, AstForeach, AstSwitch, AstRepeatTimes, AstDefFunc, AstCallFunc, AstStrValue, AstDefVar, AstDefVarList } from './nako_ast.mjs'
 
@@ -108,7 +108,7 @@ export class NakoParser extends NakoParserBase {
     for (const f of this.recentlyCalledFunc) {
       descFunc += ' - '
       let no = 0
-      const args = (f as DeclareFunction).args
+      const args = (f as GlobalFunction).args
       if (args) {
         for (const arg of args) {
           const ch = String.fromCharCode(chA + no)
@@ -164,6 +164,9 @@ export class NakoParser extends NakoParserBase {
     }
     if (this.accept(['続ける'])) {
       return { type: 'continue', josi: '', ...this.fromSourceMap(map) }
+    }
+    if (this.check('??')) {
+      return this.yPrint()
     }
 
     if (this.moduleOption.isIndentSemantic) {
@@ -380,6 +383,7 @@ export class NakoParser extends NakoParserBase {
       // ローカル変数を生成
       const backupLocalvars = this.localvars
       this.localvars = new Map([['それ', this.genDeclareSore()]])
+      this.addLocalvars(this.getDeclareHikisu())
 
       if (multiline) {
         this.saveStack()
@@ -388,7 +392,8 @@ export class NakoParser extends NakoParserBase {
           if (!arg || !arg.varname) { continue }
           const fnName: string = arg.varname
           const localvar: LocalVariable = {
-            name: trimOkurigana(fnName),
+            name: fnName,
+            nameNormalized: trimOkurigana(fnName),
             type: 'parameter',
             scopeId: this.scopeId,
             activeDeclare: true,
@@ -796,9 +801,9 @@ export class NakoParser extends NakoParserBase {
       kara = kara || this.yNop()
       made = made || this.yNop()
     }
-    const meta = nako3plugin.getDeclare('plugin_system')?.get('範囲') as DeclareFunction|undefined
+    const meta = nako3plugin.getDeclare('plugin_system')?.get('範囲') as GlobalFunction|undefined
     if (!meta) {
-      this.errorInfos.addFromToken('ERROR', 'noRangeInSystemPlugin', {}, map)
+      this.errorInfos.addFromToken('ERROR', 'noCommandInSystemPlugin', { command: '範囲' }, map)
       return this.yNop()
     }
     return {
@@ -806,6 +811,40 @@ export class NakoParser extends NakoParserBase {
       name: '範囲',
       blocks: [kara, made],
       josi: made.josi,
+      meta,
+      asyncFn: false,
+      ...this.fromSourceMap(map)
+    }
+  }
+
+  /**
+   * 表示(関数)を返す 「??」のエイリアスで利用 (#1745)
+   * @returns {AstCallFunc | null}
+   */
+  yPrint (): AstCallFunc | null {
+    const map = this.peekSourceMap()
+    const t = this.get() // skip '??'
+    if (!t || t.value !== '??') {
+      this.errorInfos.addFromToken('ERROR', 'suggestPrint', {}, map)
+      this.skipToEol()
+      return this.yNop() as AstCallFunc
+    }
+     const arg: Ast|null = this.yGetArg()
+    if (!arg) {
+      this.errorInfos.addFromToken('ERROR', 'suggestPrint', {}, map)
+      this.skipToEol()
+      return this.yNop() as AstCallFunc
+    }
+    const meta = nako3plugin.getDeclare('plugin_system')?.get('表示') as GlobalFunction|undefined
+    if (!meta) {
+      this.errorInfos.addFromToken('ERROR', 'noCommandInSystemPlugin', { command: '表示' }, map)
+      return this.yNop() as any
+    }
+    return {
+      type: 'func',
+      name: '表示',
+      blocks: [arg],
+      josi: '',
       meta,
       asyncFn: false,
       ...this.fromSourceMap(map)
@@ -1391,7 +1430,8 @@ export class NakoParser extends NakoParserBase {
       if (!arg || !arg.varname) { continue }
       const fnName: string = arg.varname
       const localvar: LocalVariable = {
-        name: trimOkurigana(fnName),
+        name: fnName,
+        nameNormalized: trimOkurigana(fnName),
         type: 'parameter',
         scopeId: this.scopeId,
         activeDeclare: true,
@@ -1443,7 +1483,7 @@ export class NakoParser extends NakoParserBase {
       word = word || this.yNop()
     }
     // 配列への代入
-    if (word.type === '配列参照') {
+    if (word.type === 'ref_array') {
       const indexArray = word.index || []
       const blocks = [value, ...indexArray]
       return {
@@ -1524,7 +1564,7 @@ export class NakoParser extends NakoParserBase {
       value = { type: 'number', value: 1, josi: 'だけ', ...this.fromSourceMap(map) } as AstConst
     }
     const word = this.popStack(['を'])
-    if (!word || (word.type !== 'word' && word.type !== '配列参照')) {
+    if (!word || (word.type !== 'word' && word.type !== 'ref_array')) {
       this.errorInfos.addFromToken('ERROR', 'suggestIncDec', { type: action.type }, action)
     }
 
@@ -1772,6 +1812,34 @@ export class NakoParser extends NakoParserBase {
       }
     }
 
+    // プロパティ代入文
+    if (this.check2(['word', '$', ['word', 'string', 'sys_func', 'user_func'], 'eq'])) {
+      const word = this.peekDef()
+      if (this.accept(['word', '$', ['word', 'string', 'sys_func', 'user_func'], 'eq', this.yCalc])) {
+        const nameToken = this.getVarName(this.y[0])
+        const propToken = this.y[2]
+        const valueToken = this.y[4]
+        if (propToken.type === 'word') {
+          propToken.type = 'string'
+        } else if (propToken.type ===  'sys_func' || propToken.type ===  'user_func') {
+          delete (propToken as any).meta
+          propToken.type = 'string'
+        }
+        return {
+          type: 'let_prop',
+          name: (nameToken as AstStrValue).value,
+          index: [propToken],
+          blocks: [valueToken],
+          josi: '',
+          ...map,
+          end: this.peekSourceMap()
+        } as AstLet
+      }
+      this.errorInfos.addFromToken('ERROR', 'invalidLet', { noestr: this.nodeToStr(word, { depth: 1 }, false) }, word)
+      this.skipToEol()
+      return this.yNop() as any
+    }
+    
     // let_array ?
     if (this.check2(['word', '@'])) {
       const la = this.yLetArrayAt(map)
@@ -1818,19 +1886,39 @@ export class NakoParser extends NakoParserBase {
       }
       if (this.check(',')) { this.get() } // skip comma (ex) name1=val1, name2=val2
       if (this.funcLevel === 0) {
-        const decvar: DeclareVariable = {
-          name: (word as AstStrValue).value,
-          nameNormalized: trimOkurigana((word as AstStrValue).value),
-          modName: this.modName,
-          uri: this.moduleEnv.uri,
-          type: vtype.type === '定数' ? 'const' : 'var',
-          isExport,
-          isPrivate: false,
-          range: Nako3Range.fromToken(wordToken),
-          origin: 'global',
-          isRemote: this.moduleEnv.isRemote
+        if (vtype.type === '定数') {
+          const decvar: GlobalConstant = {
+            name: (word as AstStrValue).value,
+            nameNormalized: trimOkurigana((word as AstStrValue).value),
+            modName: this.modName,
+            uri: this.moduleEnv.uri,
+            type: 'const',
+            isExport,
+            isPrivate: false,
+            range: Nako3Range.fromToken(wordToken),
+            origin: 'global',
+            isRemote: this.moduleEnv.isRemote,
+            activeDeclare: true,
+            value: ''
+          }
+          this.addGlobalvars(decvar, wordToken, true)
+        } else {
+          const decvar: GlobalVariable = {
+            name: (word as AstStrValue).value,
+            nameNormalized: trimOkurigana((word as AstStrValue).value),
+            modName: this.modName,
+            uri: this.moduleEnv.uri,
+            type: 'var',
+            isExport,
+            isPrivate: false,
+            range: Nako3Range.fromToken(wordToken),
+            origin: 'global',
+            isRemote: this.moduleEnv.isRemote,
+            activeDeclare: true
+          }
+          this.addGlobalvars(decvar, wordToken, true)
+  
         }
-        this.addGlobalvars(decvar, wordToken, true)
       }
       return {
         type: 'def_local_var',
@@ -2498,7 +2586,7 @@ export class NakoParser extends NakoParserBase {
       // word[n] || word@n
       if (word.josi === '' && this.checkTypes(['[', '@'])) {
         const ast: Ast = {
-          type: '配列参照',
+          type: 'ref_array',
           name: word,
           index: [],
           josi: '',
@@ -2512,6 +2600,26 @@ export class NakoParser extends NakoParserBase {
         }
         return ast
       }
+
+      // word$prop
+      if (word.josi === '' && (this.check2(['$', ['word', 'string', 'sys_func', 'user_func']]))) {
+        this.get() // skip '$'
+        const prop = this.get() as Token
+        if (prop.type === 'word') {
+          prop.type = 'string'
+        } else if (prop.type ===  'sys_func' || prop.type ===  'user_func') {
+          delete (prop as any).meta
+          prop.type = 'string'
+        }
+        return {
+          type: 'ref_prop', // プロパティ参照
+          name: word,
+          index: [prop as Ast],
+          josi: prop.josi,
+          ...this.fromSourceMap(map)
+        }
+      }
+
       return word as any // Token to Ast
     }
     return null
@@ -2527,33 +2635,68 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'cannnotDeclareOtherModule', { name: gname }, word)        
         return word
       } else {
-        const defValue: DeclareVariable = {
-          name: gname,
-          nameNormalized: trimOkurigana(gname),
-          modName: this.modName,
-          uri: this.moduleEnv.uri,
-          type: typeName,
-          isExport,
-          isPrivate: false,
-          range: Nako3Range.fromToken(word as Token),
-          origin: 'global',
-          isRemote: this.moduleEnv.isRemote
+        if (typeName === 'const') {
+          const defValue: GlobalConstant = {
+            name: gname,
+            nameNormalized: trimOkurigana(gname),
+            modName: this.modName,
+            uri: this.moduleEnv.uri,
+            type: 'const',
+            isExport,
+            isPrivate: false,
+            range: Nako3Range.fromToken(word as Token),
+            origin: 'global',
+            isRemote: this.moduleEnv.isRemote,
+            activeDeclare: true,
+            value: ''
+          }
+          this.addGlobalvars(defValue, word as Token, isActiveDeclare)
+  
+        } else {
+          const defValue: GlobalVariable = {
+            name: gname,
+            nameNormalized: trimOkurigana(gname),
+            modName: this.modName,
+            uri: this.moduleEnv.uri,
+            type: 'var',
+            isExport,
+            isPrivate: false,
+            range: Nako3Range.fromToken(word as Token),
+            origin: 'global',
+            isRemote: this.moduleEnv.isRemote,
+            activeDeclare: true
+          }
+          this.addGlobalvars(defValue, word as Token, isActiveDeclare)
         }
-        this.addGlobalvars(defValue, word as Token, isActiveDeclare)
         const wordAst = word as AstStrValue
         wordAst.value = gname
         return word
       }
     } else {
       // local
-      this.addLocalvars({
-        name: trimOkurigana(gname),
-        type: typeName,
-        scopeId: this.scopeId,
-        activeDeclare: isActiveDeclare,
-        range: Nako3Range.fromToken(word as Token),
-        origin: 'local'
-      })
+      if (typeName === 'const') {
+        this.addLocalvars({
+          name: gname,
+          nameNormalized: trimOkurigana(gname),
+          type: 'const',
+          scopeId: this.scopeId,
+          activeDeclare: isActiveDeclare,
+          range: Nako3Range.fromToken(word as Token),
+          origin: 'local',
+          value: ''
+        })
+      } else {
+        this.addLocalvars({
+          name: gname,
+          nameNormalized: trimOkurigana(gname),
+          type: 'var',
+          scopeId: this.scopeId,
+          activeDeclare: isActiveDeclare,
+          range: Nako3Range.fromToken(word as Token),
+          origin: 'local'
+        })
+  
+      }
       return word
     }
   }
@@ -2606,6 +2749,9 @@ export class NakoParser extends NakoParserBase {
       
       // key : value
       if (this.accept([['word', 'sys_func', 'user_func'], ':', this.yCalc])) {
+        if (this.y[0].type === 'sys_func' || this.y[0].type === 'user_func') {
+          delete (this.y[0] as any).meta
+        }
         this.y[0].type = 'string' // キー名の文字列記号省略の場合
         a.push(this.y[0])
         a.push(this.y[2])
@@ -2619,6 +2765,9 @@ export class NakoParser extends NakoParserBase {
       else if (this.accept([['word', 'sys_func', 'user_func']])) {
         const key = this.y[0]
         const val = JSON.parse(JSON.stringify(key)) as Ast
+        if (key.type === 'sys_func' || key.type === 'user_func') {
+          delete (key as any).meta
+        }
         key.type = 'string' // キー名の文字列記号省略の場合
         a.push(key)
         a.push(val)
@@ -2786,7 +2935,7 @@ export class NakoParser extends NakoParserBase {
         }
       }
       // さらに、関数のリンクを調べる
-      const func = this.moduleEnv.declareThings.get(callNode.name) as DeclareFunction
+      const func = this.moduleEnv.declareThings.get(callNode.name) as GlobalFunction
       if (func && func.isAsync) {
         callNode.asyncFn = true
         this.isModifiedNodes = true

@@ -15,7 +15,7 @@ import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareThing, DeclareVariable, LocalVariable } from '../nako3types.mjs'
+import type { DeclareThing, GlobalVariable, LocalVariable, LocalConstant, LocalVarConst } from '../nako3types.mjs'
 import type { Token, TokenCallFunc, TokenRefVar, TokenRefFunc, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
 
 export class Nako3ReferenceProvider implements ReferenceProvider {
@@ -97,7 +97,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
         return range
     }
 
-    private async enumlateReferences (doc: Nako3DocumentExt, thing:DeclareThing|LocalVariable, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]> {
+    private async enumlateReferences (doc: Nako3DocumentExt, thing:DeclareThing|LocalVarConst, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]> {
         let results: Location[] = []
         if (thing.type === 'func') {
             // function never local
@@ -249,7 +249,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                     for (const token of doc.nako3doc.tokens) {
                         if (token.type === type) {
                             const vars =  token as TokenRefVar
-                            const meta = vars.meta as DeclareVariable
+                            const meta = vars.meta as GlobalVariable
                             if (meta.nameNormalized === thing.nameNormalized && (meta.uri ? meta.toString() : 'builtin') === uristr) {
                                 const loc = new Location(doc.uri, this.getRangeFromTokenContent(token))
                                 results.push(loc)
@@ -261,7 +261,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                     for (const token of doc.nako3doc.tokens) {
                         if (token.type === type) {
                             const vars =  token as TokenRefVar
-                            const meta = vars.meta as DeclareVariable
+                            const meta = vars.meta as GlobalVariable
                             if (meta.uri) {
                                 if (meta.nameNormalized === thing.nameNormalized && meta.uri.toString() === uristr) {
                                     if (thing.range && token.startLine === thing.range.startLine && token.startCol === thing.range.startCol && !context.includeDeclaration) {
@@ -287,7 +287,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
         return results
     }
 
-    private enumlateRefLocalVar (doc: Nako3DocumentExt, thing:LocalVariable, context: ReferenceContext, canceltoken: CancellationToken): Location[] {
+    private enumlateRefLocalVar (doc: Nako3DocumentExt, thing:LocalVarConst, context: ReferenceContext, canceltoken: CancellationToken): Location[] {
         const results: Location[] = []
         logger.info(`enumlateRefLocalVar: start`)
         let type: Nako3TokenTypeApply

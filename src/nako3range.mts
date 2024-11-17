@@ -1,4 +1,5 @@
 import type { Token } from './nako3token.mjs'
+
 export class Nako3Range {
     startLine: number
     startCol: number

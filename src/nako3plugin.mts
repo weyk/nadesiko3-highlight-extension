@@ -4,11 +4,12 @@ import fs from 'node:fs/promises'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
 import { ModuleLink } from './nako3module.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
-import { trimOkurigana } from './nako3util.mjs'
+import { trimOkurigana, trimQuote } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
+import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, DeclareFunction, DeclareVariable, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVarConst, GlobalVariable, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
 
 interface FileContent {
     filepath: string
@@ -424,24 +425,28 @@ class Nako3Plugin {
 
             // 変数・定数の定義を列挙して取り込む
             for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9]+):\{type:"(var|const)",value:([^}]*)\}/g)) {
-                let name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
-                let type = m[3].trim() as ('var'|'const')
-                let v = m[4].trim()
+                const name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
+                const type = m[3].trim() as ('var'|'const')
+                const v = m[4].trim()
                 if (['meta'].includes(name)) {
                     continue
                 }
-                const varible: DeclareVariable = {
+                let isColor = type === 'const' && cssColor.isColorName(trimQuote(v))
+                const varible: GlobalVarConst = {
                     name,
                     nameNormalized: name,
                     modName: '',
                     type,
                     isExport: true,
                     isPrivate: false,
+                    value: v,
                     hint: v,
                     range: null,
                     uri,
                     origin: 'plugin',
-                    isRemote
+                    isRemote,
+                    isColor,
+                    activeDeclare: true
                 }
                 commandEntry.set(name, varible)
             }
@@ -504,7 +509,7 @@ class Nako3Plugin {
                         })
                     }
                     info.args = args
-                    const func: DeclareFunction = {
+                    const func: GlobalFunction = {
                         name: info.name,
                         nameNormalized: info.name,
                         modName: '',
@@ -521,7 +526,8 @@ class Nako3Plugin {
                         scopeId: null,
                         uri,
                         origin: 'plugin',
-                        isRemote
+                        isRemote,
+                        activeDeclare: true
                     }
                     commandEntry.set(info.name, func)
                 } else {
@@ -608,19 +614,23 @@ class Nako3Plugin {
                     const name = trimOkurigana(r[2].trim())
                     const type = r[3].trim() as 'var'|'const'
                     const v = r[4].trim()
+                    let isColor = type === 'const' && cssColor.isColorName(trimQuote(v))
                     const yomi = r[6] != null ? r[6].trim() : ''
-                    const varible: DeclareVariable = {
+                    const varible: GlobalVarConst = {
                         name,
                         nameNormalized: name,
                         modName: '',
                         type,
                         isExport: true,
                         isPrivate: false,
+                        value: v,
                         hint: v,
                         range: { startLine: i, startCol: col, endLine: i, endCol: col + resLen, resEndCol: col + resLen },
                         uri,
                         origin: 'plugin',
-                        isRemote
+                        isRemote,
+                        isColor,
+                        activeDeclare: true
                     }
                     commandEntry.set(name, varible)
                     continue
@@ -713,7 +723,7 @@ class Nako3Plugin {
                         if (['初期化', '!クリア'].includes(info.name)) {
                             continue
                         }
-                        const func: DeclareFunction = {
+                        const func: GlobalFunction = {
                             name: info.name,
                             nameNormalized: info.name,
                             modName: '',
@@ -730,7 +740,8 @@ class Nako3Plugin {
                             scopeId: null,
                             uri,
                             origin: 'plugin',
-                            isRemote
+                            isRemote,
+                            activeDeclare: true
                         }
                         commandEntry.set(info.name, func)
                     } else {

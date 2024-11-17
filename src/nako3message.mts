@@ -81,9 +81,10 @@ export const messages = new Map<string,string>([
     ['noKokomadeAtIf', 'Require "ここまで" for "もし" statement'],
     ['invlaidOptimizeOption', 'Invalid option({option}) for "実行速度優先"'],
     ['invalidParamInRange', 'Invalid parameter for range operator("…")'],
-    ['noRangeInSystemPlugin', 'Not found "範囲" function in system plugin'],
+    ['noCommandInSystemPlugin', 'Not found "{command}" function in system plugin'],
     ['errorInExpression', 'Error in expression'],
     ['requireParentisCloseInCfunction', 'No close parentis for c-stype function'],
+    ['suggestPrint', 'Please "??(expression)'],
     ['suggestForEach', 'Please "(変数名)で(配列)を反復"'],
     ['suggestSwitch', 'Please "(値)で条件分岐"'],
     ['switchFollowLF', 'Require LF after "条件分岐" statement'],
@@ -118,7 +119,8 @@ export const messages = new Map<string,string>([
     ['cannnotRenameInPluginEntry', '"{name}" is entity of plugin, it cannot rename'],
     ['cannnotRenameInRemoteEntry', '"{name}" is entity of remote file, it cannot rename'],
     ['cannnotRenameThis', 'This item cannnot rename'],
-    ['unknwonWord', 'Unknown word "{value}".']
+    ['unknwonWord', 'Unknown word "{value}".'],
+    ['noURI', 'Cannnot execute, no uri.']
 ])
 
 export type MessageArgs = Record<string, string|number>

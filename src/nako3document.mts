@@ -1,6 +1,7 @@
 import { CancellationToken } from 'vscode'
 import { Nako3Tokenizer, TokenizeResult } from './nako3lexer.mjs'
 import { ImportStatementInfo, Nako3TokenFixer } from './nako3tokenfixer.mjs'
+import { Nako3Project } from './nako3project.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { Nako3TokenApplyer } from './nako3tokenapplyer.mjs'
 import { NakoParser } from './nako3/nako_parser3.mjs'
@@ -21,17 +22,15 @@ export class Nako3Document {
     parser: NakoParser
     filename: string
     errorInfos: ErrorInfoManager
-    public lexerResult: TokenizeResult
+    public lengthLines: number[]
     public tokens: Token[]
     public commentTokens: Token[]
     public importStatements: ImportStatementInfo[]
-    validRawToken: boolean
     validFixToken: boolean
     validNakoRuntime: boolean
     validApplyerFuncToken: boolean
     validAst: boolean
     validApplyerVarToken: boolean
-    rawTokenSerialId: number
     fixTokenSerialId: number
     applyerFuncTokenSerialId: number
     applyerVarTokenSerialId: number
@@ -39,29 +38,29 @@ export class Nako3Document {
     link: ModuleLink
     moduleEnv: ModuleEnv
     moduleOption: ModuleOption
+    project: Nako3Project|Map<string, Nako3Project>|null
  
     constructor(filename: string, link: ModuleLink) {
         this.moduleOption = new ModuleOption()
         this.moduleEnv = new ModuleEnv(filename, link)
+        this.project = null
         this.text = ''
         this.textVersion = null
-        this.lexer = new Nako3Tokenizer(this.moduleEnv, link)
-        this.fixer = new Nako3TokenFixer(this.moduleEnv, this.moduleOption, link)
-        this.applyer = new Nako3TokenApplyer(this.moduleEnv, this.moduleOption, link)
-        this.parser = new NakoParser(this.moduleEnv, this.moduleOption, link)
+        this.lexer = new Nako3Tokenizer(this.moduleEnv)
+        this.fixer = new Nako3TokenFixer(this.moduleEnv, this.moduleOption)
+        this.applyer = new Nako3TokenApplyer(this.moduleEnv)
+        this.parser = new NakoParser(this.moduleEnv, this.moduleOption)
         this.link = link
         this.filename = filename
         this.errorInfos = new ErrorInfoManager()
-        this.lexerResult = { tokens: [], lengthLines: [] }
+        this.lengthLines = []
         this.tokens = []
         this.commentTokens = []
         this.importStatements = []
-        this.rawTokenSerialId = setSerialId()
         this.fixTokenSerialId = setSerialId()
         this.applyerFuncTokenSerialId = setSerialId()
         this.astSerialId = setSerialId()
         this.applyerVarTokenSerialId = setSerialId()
-        this.validRawToken = false
         this.validFixToken = false
         this.validNakoRuntime = false
         this.validApplyerFuncToken = false
@@ -83,16 +82,15 @@ export class Nako3Document {
     }
 
     invalidate(): void {
-        this.validRawToken = false
         this.validFixToken = false
-        this.validApplyerFuncToken = false
         this.validNakoRuntime = false
+        this.validApplyerFuncToken = false
         this.validAst = false
         this.validApplyerVarToken = false
     }
 
     public setProblemsLimit (limit: number) {
-        this.errorInfos.problemsLimit = limit
+        this.errorInfos.setProblemsLimit(limit)
     }
 
     // 以下の３つのmethodにより解析を行う。
@@ -106,24 +104,20 @@ export class Nako3Document {
     // parseとapplyVarConstの間に以下の処置が必要
     //   変数のうちモジュールを跨るグローバル変数の確定(定義箇所を確定と参照の設定)
     //   明示的な宣言の無いローカル変数でグローバル変数にあるものを読み替え
-    async tokenize(canceltoken?: CancellationToken): Promise<void> {
+    tokenize(canceltoken?: CancellationToken):void {
         console.info(`doc:tokenize start:${this.filename}`)
         if (canceltoken && canceltoken.isCancellationRequested) {
             return
         }
-        // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
-        if (!this.validRawToken) {
-            this.lexerResult = this.lexer.tokenize(this.text)
+        if (!this.validFixToken) {
+            // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
+            const lexerResult = this.lexer.tokenize(this.text)
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return
             }
-            this.validRawToken = true
-            this.rawTokenSerialId = incSerialId(this.rawTokenSerialId)
-            this.validFixToken = false
-        }
-        // tokenFixerを使用してrawTokenからtokens/commentTokensを生成する
-        if (!this.validFixToken) {
-            const fixerResult = this.fixer.fixTokens(this.lexerResult.tokens)
+            // tokenFixerを使用してrawTokenからtokens/commentTokensを生成する
+            // moduleEnv.declareThingsにユーザ関数を登録し定義のあるトークンにmetaを登録する。
+            const fixerResult = this.fixer.fixTokens(lexerResult.tokens)
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return
             }
@@ -142,9 +136,6 @@ export class Nako3Document {
                     this.moduleEnv.nakoRuntime = runtimes[0] as NakoRuntime
                 }
             }
-            if (this.moduleEnv.nakoRuntime === '') {
-                this.moduleEnv.nakoRuntime = nako3extensionOption.defaultNakoRuntime
-            }
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return
             }
@@ -153,7 +144,7 @@ export class Nako3Document {
         }
     }
 
-    async parse(canceltoken?: CancellationToken): Promise<void> {
+    parse(canceltoken?: CancellationToken):void {
         if (!this.validApplyerFuncToken) {
             this.applyer.applyFunction(this.tokens)
             if (canceltoken && canceltoken.isCancellationRequested) {
@@ -163,10 +154,11 @@ export class Nako3Document {
             this.validApplyerFuncToken = true
             this.validAst = false
         }
-        if (!this.validAst) {
+        if (!this.validAst) {                                                     
             try {
                 this.parser.parse(this.tokens)
             } catch (err) {
+                console.error('cause excep                                                                                                                                                               4tion in parse.')
                 console.error(err)
             }
             if (canceltoken && canceltoken.isCancellationRequested) {
@@ -178,7 +170,7 @@ export class Nako3Document {
         }
     }
 
-    async applyVarConst(canceltoken?: CancellationToken): Promise<void> {
+    applyVarConst(canceltoken?: CancellationToken):void {
         if (!this.validApplyerVarToken) {
             this.moduleEnv.fixAlllVars()
             if (canceltoken && canceltoken.isCancellationRequested) {

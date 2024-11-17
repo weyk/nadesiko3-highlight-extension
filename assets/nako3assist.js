@@ -1,21 +1,16 @@
 (window => {
   const NAKO_SCRIPT_RE = /^(なでしこ|nako|nadesiko)3?$/
-  // 追加のデフォルトコード
-  const defCode =
-    '『#turtle_cv』へ描画開始。'
+  const NAKO_INIT_SCRIPT_RE = /^(なでしこ|nako|nadesiko)3?init$/
+  
+  const vscode = acquireVsCodeApi()
 
-  let displayId_info = 'nako3highlight_info'
-  let displayId_err = 'nako3highlight_err'
-
-  // なでしこの関数をカスタマイズ
-  /*navigator.nako3.addFunc('表示', [['と', 'を']], function (s) {
-    console.log(s)
-    document.getElementById(displayId).innerHTML += toHtml(s) + '<br>'
-  }, true)
-  */
+  const displayId_info = 'nako3highlight_info'
+  const displayId_err = 'nako3highlight_err'
+  const displayId_exception = 'nako3highlight_exception'
+  
   /**
    * ブラウザでtype="なでしこ"というスクリプトを得て実行する
- */
+   */
   async function runNakoScript (defCode) {
     // スクリプトタグの中身を得る
     let nakoScriptCount = 0
@@ -39,30 +34,82 @@
     }
   }
   
+  /**
+   * ブラウザでtype="nako3init"というスクリプトを得て文字列で返す
+   */
+  function getNako3initScript (defCode) {
+    let code = ''
+    // スクリプトタグの中身を得る
+    const scripts = document.querySelectorAll('script')
+    for (let i = 0; i < scripts.length; i++) {
+      const script = scripts[i]
+      if (script.type.match(NAKO_INIT_SCRIPT_RE)) {
+        code += script.text + "\n"
+      }
+    }
+    return code
+  }
+  
   // 簡易DOMアクセス関数など
   async function run () {
     document.getElementById(displayId_info).innerHTML = ''
     const logger = navigator.nako3.getLogger()
+    navigator.nako3.setFunc('ログ出力', [['に'], ['と', 'を']], function (l, s) {
+      if (!['stdout','error','warn','info','debug','trace'].includes(l)) { return }
+      const f = navigator.nako3.logger[l]
+      if (f) {
+        navigator.nako3.logger[l](s)
+      } else {
+        console.error(`level is valid, but function undefined`)        
+      }
+    })
     logger.addListener('stdout', (logData) => {
       if (logData.level === 'stdout') {
-        console.log(logData.browserConsole)
-        document.getElementById(displayId_info).innerHTML += logData.html + '<br>'
+        try {
+          vscode.postMessage({
+            command: 'log.stdout',
+            level: logData.level,
+            data: logData
+          })
+        } catch (err) {
+
+        }
+        const e = document.getElementById(displayId_info)
+        e.innerHTML += logData.html
       }
     })
     logger.addListener('info', (logData) => {
-      if (['warn', 'error'].includes(logData.level)) {
-        console.log(logData.browserConsole)
-        document.getElementById(displayId_err).innerHTML += logData.html + '<br>'
-        document.getElementById(displayId_err).style.display = 'block'
+      if (['info', 'warn', 'error'].includes(logData.level)) {
+        try {
+          vscode.postMessage({
+            command: 'log.info',
+            level: logData.level,
+            data: logData
+          })
+        } catch (err) {
+
+        }
+        const e = document.getElementById(displayId_err)
+        e.innerHTML += logData.html
+        e.classList.remove('hidden')
       }
     })
+    const defCode = getNako3initScript()
+    const e = document.getElementById(displayId_exception)
     try {
       console.log('defCode=', defCode)
       await runNakoScript(defCode)
-      document.getElementById(displayId_err).style.display = 'none'
-    } catch (e) {
-      document.getElementById(displayId_err).innerHTML = e.message.replace(/\n/g, '<br>\n')
-      document.getElementById(displayId_err).style.display = 'block'
+      e.classList.add('hidden')
+      e.innerText = ''
+    } catch (err) {
+      let msg
+      if (err.message) {
+        msg = err.message
+      } else {
+        msg = err
+      }
+      e.innerHTML = msg.replace(/\n/g, '<br>\n')
+      e.classList.remove('hidden')
     }
   }
 

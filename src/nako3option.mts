@@ -14,6 +14,15 @@ class Nako3ExtensionOption {
     defaultNakoRuntime: NakoRuntime
     useOperatorHint: boolean
     problemsLimit: number
+    // for execute wnako setting
+    enableCSP: boolean
+    enableNonceForScript: boolean
+    useCanvas: boolean
+    canvasW: number
+    canvasH: number
+    canvasId: string
+    autoDrawStart: boolean
+    autoTurtleStart: boolean
 
     constructor () {
         this.enablePluginFromRemote = true
@@ -22,6 +31,14 @@ class Nako3ExtensionOption {
         this.defaultNakoRuntime = ''
         this.useShebang = true
         this.problemsLimit = 100
+        this.enableCSP = true
+        this.enableNonceForScript = true
+        this.useCanvas = true
+        this.canvasW = 640
+        this.canvasH = 400
+        this.canvasId = 'turtle_cv'
+        this.autoDrawStart = true
+        this.autoTurtleStart = true
     }
 
     loadAll (conf: WorkspaceConfiguration) {
@@ -33,12 +50,20 @@ class Nako3ExtensionOption {
         this.loadEnablePluginFromRemote(conf)
         this.loadEnableNako3FromRemote(conf)
         this.loadNako3Folder(conf)
+        this.loadEnableCSP(conf)
+        this.loadEnableNonce(conf)
+        this.loadUseCanvas(conf)
+        this.loadCanvasId(conf)
+        this.loadCanvasW(conf)
+        this.loadCanvasH(conf)
+        this.loadAutoDrawStart(conf)
+        this.loadAutoTurtleStart(conf)
     }
 
     loadProbremsLimit (conf: WorkspaceConfiguration) {
-        const limit = conf.get('maxNumberOfProblems')
-        if (typeof limit === 'number') {
-            this.problemsLimit = limit
+        const v = conf.get('maxNumberOfProblems')
+        if (typeof v === 'number') {
+            this.problemsLimit = v
         } else {
             this.problemsLimit = 100
         }
@@ -63,47 +88,119 @@ class Nako3ExtensionOption {
     }
 
     loadUseShebang (conf: WorkspaceConfiguration) {
-        const useShebang = conf.get('runtimeUseShebang')
-        if (typeof useShebang === 'boolean') {
-            this.useShebang = useShebang
+        const v = conf.get('runtimeUseShebang')
+        if (typeof v === 'boolean') {
+            this.useShebang = v
         } else {
             this.useShebang = true
         }
     }
 
     loadUseOperatorHint (conf: WorkspaceConfiguration) {
-        const useOperatorHint = conf.get('useOperatorHint')
-        if (typeof useOperatorHint === 'boolean') {
-            this.useOperatorHint = useOperatorHint
+        const v = conf.get('useOperatorHint')
+        if (typeof v === 'boolean') {
+            this.useOperatorHint = v
         } else {
             this.useOperatorHint = true
         }
     }
 
     loadEnablePluginFromRemote (conf: WorkspaceConfiguration) {
-        const enablePluginFromRemote = conf.get('enablePluginFromRemote')
-        if (typeof enablePluginFromRemote === 'boolean') {
-            this.enablePluginFromRemote = enablePluginFromRemote
+        const v = conf.get('enablePluginFromRemote')
+        if (typeof v === 'boolean') {
+            this.enablePluginFromRemote = v
         } else {
             this.enablePluginFromRemote = true
         }
     }
 
     loadEnableNako3FromRemote (conf: WorkspaceConfiguration) {
-        const enableNako3FromRemote = conf.get('enableNako3FromRemote')
-        if (typeof enableNako3FromRemote === 'boolean') {
-            this.enableNako3FromRemote = enableNako3FromRemote
+        const v = conf.get('enableNako3FromRemote')
+        if (typeof v === 'boolean') {
+            this.enableNako3FromRemote = v
         } else {
             this.enableNako3FromRemote = true
         }
     }
 
     loadNako3Folder (conf: WorkspaceConfiguration) {
-        const nadesiko3folder = conf.get('nadesiko3.folder')
-        if (typeof nadesiko3folder === 'string') {
-            nadesiko3.setNadesiko3Folder(nadesiko3folder)
+        const v = conf.get('nadesiko3.folder')
+        if (typeof v === 'string') {
+            nadesiko3.setNadesiko3Folder(v)
         } else {
             nadesiko3.setNadesiko3Folder('')
+        }
+    }
+
+    loadEnableCSP (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.csp.enable')
+        if (typeof v === 'boolean') {
+            this.enableCSP = v
+        } else {
+            this.enableCSP = true
+        }
+    }
+
+    loadEnableNonce (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.csp.useNonce')
+        if (typeof v === 'boolean') {
+            this.enableNonceForScript = v
+        } else {
+            this.enableNonceForScript = true
+        }
+    }
+
+    loadUseCanvas (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.canvas.use')
+        if (typeof v === 'boolean') {
+            this.useCanvas = v
+        } else {
+            this.useCanvas = true
+        }
+    }
+
+    loadCanvasId (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.canvas.id')
+        if (typeof v === 'string') {
+            this.canvasId = v
+        } else {
+            this.canvasId = 'turtle_cv'
+        }
+    }
+
+    loadCanvasW (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.canvas.size.width')
+        if (typeof v === 'number') {
+            this.canvasW = v
+        } else {
+            this.canvasW = 640
+        }
+    }
+
+    loadCanvasH (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.canvas.size.height')
+        if (typeof v === 'number') {
+            this.canvasH = v
+        } else {
+            this.canvasH = 480
+        }
+    }
+
+    loadAutoDrawStart (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.autoDrawStart')
+        if (typeof v === 'boolean') {
+            this.autoDrawStart = v
+        } else {
+            this.autoDrawStart = true
+        }
+    }
+
+    loadAutoTurtleStart (conf: WorkspaceConfiguration) {
+        const v = conf.get('wnako.autoTurtleStart')
+        if (typeof v === 'boolean') {
+            this.autoTurtleStart = v
+        } else {
+            this.autoTurtleStart = true
         }
     }
 
@@ -161,6 +258,30 @@ export function configurationChanged (e: ConfigurationChangeEvent) {
     } else if (e.affectsConfiguration('nadesiko3Highlight.nadesiko3.folder')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadNako3Folder(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.csp.enable')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadEnableCSP(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.csp.useNonce')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadEnableNonce(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.canvas.use')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadUseCanvas(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.canvas.id')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadCanvasId(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.canvas.size.width')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadCanvasW(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.canvas.size.height')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadCanvasH(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.autoDrawStart')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadAutoDrawStart(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.autoTurtleStart')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadAutoTurtleStart(conf)
     } else if (e.affectsConfiguration('nadesiko3Highlight.trace')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadLogTrace(conf)

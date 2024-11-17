@@ -2,7 +2,7 @@
  * 抽象構文木( Abstract Syntax Tree )を定義したもの
  */
 import { Uri } from 'vscode'
-import type { DeclareFunction } from '../nako3types.mjs'
+import type { GlobalFunction } from '../nako3types.mjs'
 import type { Token } from '../nako3token.mjs'
 
 /** ASTのノードの種類を定義 */
@@ -31,6 +31,7 @@ export type NodeType = 'nop'
   | 'break'
   | 'def_test'
   | 'let'
+  | 'let_prop'
   | 'let_array'
   | 'json_array'
   | 'json_obj'
@@ -49,7 +50,8 @@ export type NodeType = 'nop'
   | 'renbun'
   | 'def_local_var'
   | 'def_local_varlist'
-  | '配列参照'
+  | 'ref_array'
+  | 'ref_prop' // プロパティ参照
   | 'require'
   | 'performance_monitor'
   | 'speed_mode'
@@ -174,12 +176,12 @@ export interface AstSwitch extends AstBlocks {
 export interface AstDefFunc extends AstBlocks {
   name: string;
   args: Ast[];
-  meta: DeclareFunction
+  meta: GlobalFunction
 }
 
 export interface AstCallFunc extends AstBlocks {
   name: string;
-  meta: DeclareFunction
+  meta: GlobalFunction
   asyncFn: boolean;
   // blocks[0] ... args[0]
   // blocks[1] ... args[1]
