@@ -45,6 +45,7 @@ export class Nako3CodeActionProvider implements vscode.CodeActionProvider {
 export function activate(context: vscode.ExtensionContext):void {
     configurationInitialize()
     logger.info(`workspace is ${vscode.workspace.name}`)
+    logger.info(`■ activate`)
 
     nadesiko3.setWorkspaceFolders(vscode.workspace.workspaceFolders)
     nako3diagnostic.setNako3Docs(nako3docs)
@@ -77,6 +78,7 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpenTextDocument  :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
+            logger.info(`■ workspace.onDidOpenTextDocument`)
             nako3docs.openFromDocument(e)
         }
     }))
@@ -85,12 +87,14 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(e => {
         // console.log(`onDidCloseTextDocument :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
+            logger.info(`■ workspace.onDidCloseTextDocument`)
             nako3docs.closeAtDocument(e)
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
         logger.log(`oonDidChangeTextDocument:${e.document.languageId}:${e.document.fileName}`)
         if (e.document.languageId === 'nadesiko3') {
+            logger.info(`■ workspace.onDidCloseTextDocument`)
             const doc = nako3docs.get(e.document)
             if (doc) {
                 doc.isDirty = true
@@ -98,7 +102,7 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(e => {
-        // logger.log(`onDidSaveTextDocument:${e.languageId}:${e.fileName}`)
+        logger.info(`■ workspace.onDidSaveTextDocument`)
         if (e.languageId === 'nadesiko3') {
             const doc = nako3docs.get(e)
             if (doc) {
@@ -107,6 +111,7 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders( e => {
+        logger.info(`■ workspace.onDidChangeWorkspaceFolders`)
         if (e.removed.length > 0) {
             nadesiko3.removeWorkspaceFolders(e.removed)
         }
@@ -161,6 +166,7 @@ export function activate(context: vscode.ExtensionContext):void {
 }
 
 export function deactivate() {
+    logger.info(`■ deactivate`)
     if (nako3diagnostic) {
         nako3diagnostic.dispose()
     }
@@ -171,6 +177,7 @@ export function deactivate() {
 }
 
 function updateNako3RunimeStatusBarItem(): void {
+    logger.info(`■ updateNako3RunimeStatusBarItem: ↓ start`)
     const editor = vscode.window.activeTextEditor
     let nakoRuntime:NakoRuntime = ''
     if (editor) {
@@ -185,4 +192,5 @@ function updateNako3RunimeStatusBarItem(): void {
     } else {
         nako3RuntimeStatusBarItem.hide()
     }
+    logger.info(`■ updateNako3RunimeStatusBarItem: ↑ end`)
 }

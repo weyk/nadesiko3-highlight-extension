@@ -9,7 +9,7 @@ import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, GlobalFunction, GlobalVarConst, GlobalVariable, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
 
 interface FileContent {
     filepath: string
@@ -168,6 +168,7 @@ class Nako3Plugin {
         logger.debug(`importFromFile:${pluginName}`)
         const f = await this.searchPlugin(pluginName, link)
         if (f.exists) {
+            logger.info(`importFromFile: exist file "${pluginName}", parse start `)
             const p = this.parsePlugin(f.text, f.uri, isRemote)
             if (p !== null && p.declare.size > 0) {
                 logger.info(`importFromFile:plugin set ${pluginName}`)
@@ -179,7 +180,11 @@ class Nako3Plugin {
                 }
                 this.plugins.set(f.uri.toString(), info)
                 return f.uri.toString()
+            } else {
+                logger.info(`importFromFile: parse failed in ${pluginName}`)
             }
+        } else {
+            logger.info(`importFromFile: not found ${pluginName}`)
         }
         return null
     }
@@ -201,7 +206,7 @@ class Nako3Plugin {
         return content
     }
 
-    async checkpluginFile(pathName:string): Promise<FileContent> {
+    private async checkpluginFile(pathName:string): Promise<FileContent> {
         // 拡張子付きならそのままファイル名として存在チェック
         if (/\.(js|mjs|cjs)$/.test(pathName)) {
             const content = await this.tryReadFile(pathName)
@@ -228,7 +233,7 @@ class Nako3Plugin {
         }
     }
 
-    async searchPlugin (plugin: string, link?: ModuleLink): Promise<FileContent> {
+    private async searchPlugin (plugin: string, link?: ModuleLink): Promise<FileContent> {
         const ngFileContent: FileContent = {
             filepath : plugin,
             uri: Uri.file(plugin),
@@ -251,10 +256,12 @@ class Nako3Plugin {
                         text: text
                     }
                 } else {
+                    logger.info(`searchPlugin: bad status "${response.status}" in fetch "${plugin}"`)
                     return ngFileContent
                 }
             } catch (err) {
                 // nop
+                logger.info(`searchPlugin: exception in fetch "${plugin}"`)
                 return ngFileContent
             }
         }
@@ -291,7 +298,7 @@ class Nako3Plugin {
                 return f
             }
         }
-        // 指定が特定の条件に合うときのみcnako3のラインタイムをチェック
+        // パスが特定の条件に合うときのみcnako3のラインタイムをチェック
         if (/^plugin_[a-z0-9_]+\.m?js/.test(plugin) && nako3home !== '') {
             // cnako3のラインタイムのsrc以下をチェック
             {
@@ -312,7 +319,7 @@ class Nako3Plugin {
                 }
             }
         }
-        // NAKO_LIB以下をチェック
+        // NAKO_LIB環境変数の下をチェック
         if (process.env.NAKO_LIB) {
             const fpath = path.join(process.env.NAKO_LIB, plugin)
             const f = await this.checkpluginFile(fpath)
@@ -321,6 +328,7 @@ class Nako3Plugin {
                 return f
             }
         }
+        // なでしこ3のhomeがあるならその下をチェック
         if (nako3home !== '') {
             {
                 const fpath = path.join(nako3home, 'node_modules', plugin)
@@ -365,7 +373,7 @@ class Nako3Plugin {
                 }
             }
         }
-        // NAKO_LIB以下をチェック
+        // NODE_PATH環境変数の下をチェック
         if (process.env.NODE_PATH) {
             const fpath = path.join(process.env.NODE_PATH, plugin)
             const f = await this.checkpluginFile(fpath)
@@ -377,7 +385,7 @@ class Nako3Plugin {
         return ngFileContent
     }
 
-    parsePlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
+    private parsePlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
         let result:PluginContent|null = null
         try {
             result = this.parseWelformedPlugin(text, uri, isRemote)
@@ -578,7 +586,7 @@ class Nako3Plugin {
                     r = /^\s*nakoRuntime:\s*(\[.*\])/.exec(line)
                     if (r && r.length > 1 && r[1] != null) {
                         try {
-                            meta.nakoRuntime = JSON.parse(r[1].trim()) as NakoRuntime[]
+                            meta.nakoRuntime = JSON.parse(r[1].trim().replaceAll("'",'"')) as NakoRuntime[]
                         } catch (err) {
                             logger.debug(`parseWenformedPlugin: cause error on parse nakoRuntime`)
                             console.log(err)

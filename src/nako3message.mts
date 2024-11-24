@@ -33,6 +33,7 @@ export const messages = new Map<string,string>([
     ['unsupportImportFromRemote', 'No support plugin from remote site : plugin {plugin}'],
     ['noSupport3rdPlugin', 'No support plugin information for 3rd party plugin {plugin}'],
     ['errorImport3rdPlugin', 'Cause error in 3rd party plugin(plugin:{plugin})'],
+    ['warnImport3rdPlugin', 'Command information has builtin, Cause error import plugin(plugin:{plugin})'],
     //
     ['documentIsDirty', 'document is dirty, Retry after save.'],
     ['unknownRuntime','Unknown nadesiko3 runtime. Retry write shebang line.'],

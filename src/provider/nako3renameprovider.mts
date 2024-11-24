@@ -16,7 +16,7 @@ import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareThing, GlobalFunction, GlobalVariable, LocalVarConst } from '../nako3types.mjs'
+import type { DeclareThing, GlobalFunction, GlobalVariable, GlobalVarConst, LocalVarConst } from '../nako3types.mjs'
 import type { Token, TokenCallFunc, TokenDefFunc, TokenRefVar, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
 
 interface PrepareRenameResult {
@@ -25,7 +25,7 @@ interface PrepareRenameResult {
 }
 export class Nako3RenameProvider implements RenameProvider {
     async prepareRename(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<null | PrepareRenameResult> {
-        logger.info('prepareRename: start')
+        logger.info(`■ RenameProvider: prepareRename`)
         let result: PrepareRenameResult |string = "Disallow rename"
         if (canceltoken.isCancellationRequested) {
             logger.debug(`prepareRename: canceled begining`)
@@ -62,7 +62,7 @@ export class Nako3RenameProvider implements RenameProvider {
     }
 
     async provideRenameEdits(document: TextDocument, position: Position, newName: string, canceltoken: CancellationToken): Promise<null | WorkspaceEdit> {
-        logger.info('provideRenameEdits: start')
+        logger.info(`■ RenameProvider: provideRenameEdits`)
         let result: WorkspaceEdit|null
         if (canceltoken.isCancellationRequested) {
             logger.debug(`provideRenameEdits: canceled begining`)
@@ -111,7 +111,7 @@ export class Nako3RenameProvider implements RenameProvider {
         if (['user_func', 'user_var', 'user_const','FUNCTION_NAME', 'FUNCTION_ARG_PARAMETER'].includes(token.type)) {
             const meta = (token as TokenCallFunc).meta
             if (meta.origin === 'global') {
-                workspaceEdit = await this.enumlateRenameGlobalVar((token as TokenRefVar).meta as GlobalVariable, newName, canceltoken)
+                workspaceEdit = await this.enumlateRenameGlobalVar((token as TokenRefVar).meta as GlobalVarConst, newName, canceltoken)
             } else if (meta.origin === 'local') {
                 workspaceEdit = this.enumlateRenameLocalVar(doc, (token as TokenRefVar).meta as LocalVarConst, newName, canceltoken)
             } else {
@@ -224,7 +224,7 @@ export class Nako3RenameProvider implements RenameProvider {
                         }
                     } else if (token.type === type) {
                         const vars =  token as TokenRefVar
-                        const meta = vars.meta as GlobalVariable
+                        const meta = vars.meta as GlobalVarConst
                         if (meta.uri) {
                             if (meta.nameNormalized === thing.nameNormalized && meta.uri.toString() === uristr) {
                                 workspaceEdit.replace(doc.uri, this.getRangeFromTokenContent(token), newName)

@@ -1,3 +1,8 @@
+## 0.2.0
+- Add document color support(no editable)
+- Can launch wnako file(no local import)
+- Update bundled command.json(3.6.67)
+
 ## 0.1.1
 - Delete "useParser" option, always use.
 

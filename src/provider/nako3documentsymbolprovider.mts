@@ -38,6 +38,7 @@ interface semanticStackInfo {
 
 export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
     async provideDocumentSymbols(document: TextDocument, canceltoken: CancellationToken): Promise<SymbolInformation[] | DocumentSymbol[]> {
+        logger.info(`■ DocumentSymbolProvider: provideDocumentSymbols`)
         let symbols: DocumentSymbol[] = []
         if (canceltoken.isCancellationRequested) {
             logger.debug(`provideDocumentSymbols: canceled begining`)
@@ -142,7 +143,14 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
                     const vars = moduleEnv.allScopeVarConsts.get(scopeId)
                     if (vars) {
                         for (const [ varname, localvar ] of vars) {
-                            if (localvar.range === null || localvar.type === 'parameter' || localvar.scopeId !== scopeId) {
+                            if (localvar.type === 'parameter') {
+                                continue
+                            }
+                            if (localvar.range === null || (localvar.scopeId !== scopeId && localvar.scopeId !== 'global')) {
+                                if (localvar.origin !== 'system') {
+                                    console.log(`computeDocumetSymbols2: illegal var`)
+                                    console.log(localvar)
+                                }
                                 continue
                             }
                             let type:string

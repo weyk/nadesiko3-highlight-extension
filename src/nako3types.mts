@@ -73,12 +73,18 @@ export type GlobalVarConst = GlobalVariable | GlobalConstant
 export type DeclareThing = GlobalFunction | GlobalVarConst
 
 export type LocalVarConst = LocalVariable | LocalConstant
-
+export interface ExternalInfo {
+  uri: Uri
+  filepath: string
+  things: DeclareThings
+  funcSid: number
+  allSid: number
+}
 export type DeclareThings = Map<string, DeclareThing>
 export type DeclareFunctions = Map<string, GlobalFunction>
 export type DeclareVariables = Map<string, GlobalVariable>
 export type LocalVarConsts = Map<string, LocalVarConst>
-export type ExternThings = Map<string, DeclareThings>
+export type ExternThings = Map<string, ExternalInfo>
 export type AllScopeVarConsts = Map<string, LocalVarConsts>
 
 export interface SourceMap {

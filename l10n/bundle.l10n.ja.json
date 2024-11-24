@@ -30,6 +30,7 @@
     "unsupportImportFromRemote": "リモートからの取り込みはNadesiko3 highlightでは未サポートです(プラグイン:{plugin})",
     "noSupport3rdPlugin": "サードパーティ製プラグインの命令はNadesiko3 highlightでは現時点未サポートです(プラグイン:{plugin})",
     "errorImport3rdPlugin": "サードパーティ製プラグインの取り込みに失敗しました(プラグイン:{plugin})",
+    "warnImport3rdPlugin": "命令の情報はbuitinにありますがプラグイン自体の取り込みは失敗しました(プラグイン:{plugin})",
     "documentIsDirty": "未保存の変更があります。保存後に再び試してみてください",
     "unknownRuntime": "実行環境(snako/cnako3/wnako3)が判別できません。先頭行にShebangを追記してください",
     "unsupportRuntimeOnLaunch": "wnako3の実行は現在未サポートです",

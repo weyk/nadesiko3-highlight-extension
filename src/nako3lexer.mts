@@ -91,6 +91,8 @@ export class Nako3Tokenizer {
             }
             let token: Token = {
                 type: '?',
+                fixType: '?',
+                parseType: '?',
                 group: '?',
                 uri: this.moduleEnv.uri,
                 startLine: this.line,
@@ -105,7 +107,6 @@ export class Nako3Tokenizer {
                 unit: '',
                 josi: '',
                 indent,
-                asWord: false
             }
             let hit: boolean = false
             let len: number
@@ -147,6 +148,19 @@ export class Nako3Tokenizer {
                             token.value = text.substring(0, token.len)
                         }
                         text = text.substring(token.len)
+                        if (rule.withCssUnit) {
+                            // CSSの単位なら自動的に文字列として認識させる #1811
+                            const cssUnit = lexRulesRE.cssUnitRE.exec(text)
+                            if (cssUnit !== null) {
+                                const cssUnitLen = cssUnit[0].length
+                                token.type = 'string'
+                                token.group = '文字列'
+                                token.len += cssUnitLen
+                                token.resEndCol += cssUnitLen
+                                token.value += text.substring(0, cssUnitLen)
+                                text = text.substring(cssUnitLen)
+                            }
+                        }
                         if (rule.withUnit) {
                             const r = lexRulesRE.unit.exec(text)
                             if (r !== null) {
@@ -261,6 +275,8 @@ export class Nako3Tokenizer {
         this.col += len
         const token: Token = {
             type: 'COMMENT_LINE',
+            fixType: 'COMMENT_LINE',
+            parseType: 'COMMENT_LINE',
             group: 'コメント',
             uri: this.moduleEnv.uri,
             startLine: this.line,
@@ -274,8 +290,7 @@ export class Nako3Tokenizer {
             len,
             text: text.substring(0, len),
             value: text.substring(startTagLen, len),
-            indent,
-            asWord: false
+            indent
         }
         this.rawTokens.push(token)
         return len
@@ -308,6 +323,8 @@ export class Nako3Tokenizer {
         this.col = endCol
         const token: Token = {
             type: 'COMMENT_BLOCK',
+            fixType: 'COMMENT_BLOCK',
+            parseType: 'COMMENT_BLOCK',
             group: 'コメント',
             uri: this.moduleEnv.uri,
             startLine,
@@ -321,8 +338,7 @@ export class Nako3Tokenizer {
             josi: '',
             text: text.substring(0, len),
             value: text.substring(startTag.length, len - (index >= 0 ? endTag.length : 0)),
-            indent,
-            asWord: false
+            indent
         }
         this.rawTokens.push(token)
         return len
@@ -363,6 +379,8 @@ export class Nako3Tokenizer {
                     lineCount = this.skipWithoutCrlf(stringpart)
                     const token: Token = {
                         type: type,
+                        fixType: type,
+                        parseType: type,
                         group :'文字列',
                         uri: this.moduleEnv.uri,
                         startLine,
@@ -376,8 +394,7 @@ export class Nako3Tokenizer {
                         josi: '',
                         text: str.substring(0, parenIndex),
                         value: str.substring(isFirstStringPart ? startTag.length : 0, parenIndex),
-                        indent,
-                        asWord: false
+                        indent
                     }
                     this.rawTokens.push(token)
                     str = str.substring(parenIndex)
@@ -390,6 +407,8 @@ export class Nako3Tokenizer {
                         // "{" mark
                         token = {
                             type: 'STRING_INJECT_START',
+                            fixType: 'STRING_INJECT_START',
+                            parseType: 'STRING_INJECT_START',
                             group: '記号',
                             uri: this.moduleEnv.uri,
                             startLine: this.line,
@@ -403,8 +422,7 @@ export class Nako3Tokenizer {
                             josi: '',
                             text: parenStartTag,
                             value: parenStartTag,
-                            indent,
-                            asWord: false
+                            indent
                         }
                         this.rawTokens.push(token)
                         this.col++
@@ -413,6 +431,8 @@ export class Nako3Tokenizer {
                         // "}" mark
                         token = {
                             type: 'STRING_INJECT_END',
+                            fixType: 'STRING_INJECT_END',
+                            parseType: 'STRING_INJECT_END',
                             group: '記号',
                             uri: this.moduleEnv.uri,
                             startLine: this.line,
@@ -426,8 +446,7 @@ export class Nako3Tokenizer {
                             josi: '',
                             text: parenEndTag,
                             value: parenEndTag,
-                            indent,
-                            asWord: false
+                            indent
                         }
                         this.rawTokens.push(token)
                         this.col++
@@ -479,6 +498,8 @@ export class Nako3Tokenizer {
         this.col = endCol
         const token: Token = {
             type: hasInject ? type: 'string',
+            fixType: hasInject ? type: 'string',
+            parseType: hasInject ? type: 'string',
             group: '文字列',
             uri: this.moduleEnv.uri,
             startLine,
@@ -493,8 +514,7 @@ export class Nako3Tokenizer {
             josiStartCol,
             text: text.substring(isFirstStringPart ? 0 : lastPartIndex, len),
             value: text.substring(isFirstStringPart ? startTag.length : lastPartIndex, resLen + lastPartIndex - (index >= 0 ? endTag.length : 0)),
-            indent,
-            asWord: false
+            indent
         }
         this.rawTokens.push(token)
         // console.log(`stringex: leave(col=${this.col})`)
@@ -626,6 +646,8 @@ export class Nako3Tokenizer {
         this.col += len
         const token: Token = {
             type: 'word',
+            fixType: 'word',
+            parseType: 'word',
             group: '単語',
             uri: this.moduleEnv.uri,
             startLine: this.line,
@@ -640,8 +662,7 @@ export class Nako3Tokenizer {
             unit: '',
             josi,
             josiStartCol,
-            indent,
-            asWord: false
+            indent
         }
         this.rawTokens.push(token)
         return len

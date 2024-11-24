@@ -14,7 +14,7 @@ import { logger } from '../logger.mjs'
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
     async provideDocumentHighlights(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<DocumentHighlight[]> {
-        // console.log(`provide document highlight:${document.fileName}`)
+        logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights`)
         let highlight: DocumentHighlight[]|null = []
         if (canceltoken.isCancellationRequested) {
             logger.debug(`provideDocumentHighlights: canceled begining`)

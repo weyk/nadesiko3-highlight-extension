@@ -26,6 +26,11 @@ interface ContentResources {
     cspSource: string
 }
 
+interface CombineNako3Info {
+    code: string
+    plugins: string[]
+}
+
 export class Nako3Execute implements Command {
 	public readonly id = 'nadesiko3highlight.nadesiko3.exec'
 	public readonly viewType = 'nadesiko3highlight.viewer'
@@ -48,7 +53,7 @@ export class Nako3Execute implements Command {
         if (!uri) {
             showMessage('INFO', 'noURI', {})
             return
-        }
+       }
         let nakoRuntime: NakoRuntime
         let document = workspace.textDocuments.find(f => f.uri.toString() === uri.toString())
         if (document && nako3docs.has(document)) {
@@ -94,7 +99,7 @@ export class Nako3Execute implements Command {
         }
         this.registerEvents()
     }
-    
+
     private async execOnTerminal(nakoRuntime: NakoRuntime, uri: Uri, text?: string) {
         if (text) {
             logger.log(`command:nadesiko3.exec:is dirty`)
@@ -276,12 +281,35 @@ ${nako3source}
     private registerEvents() {
 		this.context.subscriptions.push(
 			window.onDidCloseTerminal(async (e) => {
+                logger.info(`■ Nako3Execute: window.onDidCloseTerminal`)
                 await nadesiko3.terminalClose(e)
             })
 		)
     }
 
     public execute(uri: Uri) {
-		this.execNako3(uri)
+        logger.info(`■ Nako3Execute: execute`)
+   		this.execNako3(uri)
+    }
+}
+
+class Nako3Pack {
+
+    private async readFromUri (uri: Uri): Promise<string|null> {
+        let text: string
+        const uristr = uri.toString()
+        const document = workspace.textDocuments.find(d => d.uri.toString() === uristr)
+        if (document) {
+            text = document.getText()
+        } else {
+            try {
+                const bytes = await workspace.fs.readFile(uri)
+                text = bytes.toString()
+            } catch (err) {
+                // nop
+                return null
+            }
+        }
+        return text
     }
 }

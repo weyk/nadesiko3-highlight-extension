@@ -115,6 +115,7 @@ export const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticTokensProvider {
     async provideDocumentSemanticTokens(document: TextDocument, canceltoken: CancellationToken): Promise<SemanticTokens> {
+        logger.info(`■ DocumentSemanticTokensProvider: provideDocumentSemanticTokens`)
         const tokensBuilder = new SemanticTokensBuilder()
         let symbols: SemanticTokens =  tokensBuilder.build()
         if (canceltoken.isCancellationRequested) {

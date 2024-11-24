@@ -1,11 +1,11 @@
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
-import { ModuleEnv, ModuleOption, ModuleLink } from './nako3module.mjs'
+import { ModuleEnv, ModuleOption } from './nako3module.mjs'
 import { Nako3Range } from './nako3range.mjs'
 import { tararebaMap } from './nako3/nako_josi_list.mjs'
-import { trimOkurigana, filenameToModName } from './nako3util.mjs'
+import { trimOkurigana } from './nako3util.mjs'
 import { logger } from './logger.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
-import type { GlobalFunction, FunctionArg } from './nako3types.mjs'
+import type { GlobalFunction, FunctionArg, NakoRuntime } from './nako3types.mjs'
 import type { Token, TokenDefFunc, TokenRefFunc, TokenType } from './nako3token.mjs'
 
 export interface ImportStatementInfo {
@@ -20,6 +20,7 @@ export interface ImportStatementInfo {
 export interface TokenFixerResult {
     tokens: Token[]
     commentTokens: Token[]
+    nakoRuntime: NakoRuntime
     imports: ImportStatementInfo[]
 }
 
@@ -27,6 +28,7 @@ export class Nako3TokenFixer {
     // rawTokensから書き換えのあるトークン列。ただしコメントは除く。
     private tokens: Token[]
     private commentTokens: Token[]
+    private nakoRuntime: NakoRuntime
     private imports: ImportStatementInfo[]
     private moduleOption: ModuleOption
     private moduleEnv: ModuleEnv
@@ -37,8 +39,9 @@ export class Nako3TokenFixer {
         this.moduleOption = moduleOption
         this.errorInfos = new ErrorInfoManager()
         this.tokens = []
-        this.imports = []
         this.commentTokens = []
+        this.nakoRuntime = ''
+        this.imports = []
     }
 
     public setProblemsLimit (limit: number):void {
@@ -49,8 +52,8 @@ export class Nako3TokenFixer {
         this.errorInfos.clear()
         this.tokens = []
         this.commentTokens = []
+        this.nakoRuntime = ''
         this.moduleOption.reset()
-        this.moduleEnv.nakoRuntime = ''
         this.moduleEnv.declareThings.clear()
         this.imports = []
         let token:Token
@@ -75,12 +78,14 @@ export class Nako3TokenFixer {
                 if (isLine0Col0 && type === 'COMMENT_LINE') {
                     if (nako3extensionOption.useShebang && token.text.startsWith('#!')) {
                         if (token.text.includes('snako')) {
-                            this.moduleEnv.nakoRuntime = 'snako'
+                            this.nakoRuntime = 'snako'
                         } else if (token.text.includes('cnako')) {
-                            this.moduleEnv.nakoRuntime = 'cnako'
+                            this.nakoRuntime = 'cnako'
                         }
                     }
                 }
+                token.fixType = token.type
+                token.parseType = token.type
                 this.commentTokens.push(token)
             } else {
                 if (type === 'eol') {
@@ -91,6 +96,8 @@ export class Nako3TokenFixer {
                     }
                     topOfLine = false
                 }
+                token.fixType = token.type
+                token.parseType = token.type
                 this.tokens.push(token)
             }
         }
@@ -271,66 +278,16 @@ export class Nako3TokenFixer {
             pushToken(delayedToken)
         }
 
+        let lastToken: Token
         if (this.tokens.length > 0) {
-            const lastToken = this.tokens[this.tokens.length - 1]
-            this.tokens.push({
-                type: 'eol',
-                group: '区切',
-                len: 0,
-                lineCount: 0,
-                startLine: lastToken.endLine,
-                startCol: lastToken.endCol,
-                endLine: lastToken.endLine,
-                endCol: lastToken.endCol,
-                resEndCol: lastToken.endCol,
-                text: '---',
-                value: ';',
-                unit: '',
-                josi: '',
-                indent: { len: 0, level: 0, text: '' },
-                uri: lastToken.uri,
-                asWord: false
-            })
-            this.tokens.push({
-                type: 'eof',
-                group: '区切',
-                len: 0,
-                lineCount: 0,
-                startLine: lastToken.endLine,
-                startCol: lastToken.endCol,
-                endLine: lastToken.endLine,
-                endCol: lastToken.endCol,
-                resEndCol: lastToken.endCol,
-                text: '',
-                value: '',
-                unit: '',
-                josi: '',
-                indent: { len: 0, level: 0, text: '' },
-                uri: lastToken.uri,
-                asWord: false
-            })
+            lastToken = this.tokens[this.tokens.length - 1]
         } else {
-            this.tokens.push({
-                type: 'eol',
-                group: '区切',
-                len: 0,
-                lineCount: 0,
-                startLine: 0,
-                startCol: 0,
-                endLine: 0,
-                endCol: 0,
-                resEndCol: 0,
-                text: '---',
-                value: ';',
-                unit: '',
-                josi: '',
-                indent: { len: 0, level: 0, text: '' },
+            lastToken = {
+                type: '?',
+                fixType: '?',
+                parseType: '?',
+                group: '?',
                 uri: this.moduleEnv.uri,
-                asWord: false
-            })
-            this.tokens.push({
-                type: 'eof',
-                group: '区切',
                 len: 0,
                 lineCount: 0,
                 startLine: 0,
@@ -342,22 +299,63 @@ export class Nako3TokenFixer {
                 value: '',
                 unit: '',
                 josi: '',
-                indent: { len: 0, level: 0, text: '' },
-                uri: this.moduleEnv.uri,
-                asWord: false
-            })
+                indent:  { len: 0, level: 0, text: '' }
+            }
         }
+        this.tokens.push({
+            type: 'eol',
+            fixType: 'eol',
+            parseType: 'eol',
+            group: '区切',
+            len: 0,
+            lineCount: 0,
+            startLine: lastToken.endLine,
+            startCol: lastToken.endCol,
+            endLine: lastToken.endLine,
+            endCol: lastToken.endCol,
+            resEndCol: lastToken.endCol,
+            text: '---',
+            value: ';',
+            unit: '',
+            josi: '',
+            indent: { len: 0, level: 0, text: '' },
+            uri: lastToken.uri
+        })
+        this.tokens.push({
+            type: 'eof',
+            fixType: 'eof',
+            parseType: 'eof',
+            group: '区切',
+            len: 0,
+            lineCount: 0,
+            startLine: lastToken.endLine,
+            startCol: lastToken.endCol,
+            endLine: lastToken.endLine,
+            endCol: lastToken.endCol,
+            resEndCol: lastToken.endCol,
+            text: '',
+            value: '',
+            unit: '',
+            josi: '',
+            indent: { len: 0, level: 0, text: '' },
+            uri: lastToken.uri
+        })
         this.preprocess(preprocessIndex)
         this.enumlateFunction(functionIndex)
+        this.moduleEnv.updateFuncSid()
+        this.moduleEnv.updateAllSid()
         const tokens = this.tokens
         const commentTokens = this.commentTokens
+        const nakoRuntime = this.nakoRuntime
         const imports = this.imports
         this.tokens = []
         this.commentTokens = []
+        this.nakoRuntime = ''
         this.imports = []
         return {
             tokens,
             commentTokens,
+            nakoRuntime,
             imports
         }
     }
@@ -453,9 +451,15 @@ export class Nako3TokenFixer {
                 hit = true
             }
             if (hit) {
-                tokens[index].type = '!'
+                token = tokens[index]
+                token.type = '!'
+                token.fixType = token.type
+                token.parseType = token.type
                 if (targetToken) {
-                    targetToken.type = targetType
+                    token = targetToken
+                    token.type = targetType
+                    token.fixType = token.type
+                    token.parseType = token.type
                 }
                 if (!causeError) {
                     i++
@@ -482,7 +486,9 @@ export class Nako3TokenFixer {
                 token = this.tokens[j]
                 if (token.type === '(') {
                     token.type = 'FUNCTION_ARG_PARENTIS_START'
-                    j++
+                    token.fixType = token.type
+                    token.parseType = token.type
+                        j++
                 }
                 while (j <= i) {
                     let attr: string[] = []
@@ -492,22 +498,30 @@ export class Nako3TokenFixer {
                     let k = j
                     if (token.type === '{') {
                         token.type = 'FUNCTION_ARG_ATTR_START'
+                        token.fixType = token.type
+                        token.parseType = token.type
                         j++
                         token = this.tokens[j]
                         if (token.type === 'word') {
                             token.type = 'FUNCTION_ARG_ATTRIBUTE'
+                            token.fixType = token.type
+                            token.parseType = token.type
                             attr.push(token.value)
                             j++
                             token = this.tokens[j]
                         }
                         if (token.type === '}') {
                             token.type = 'FUNCTION_ARG_ATTR_END'
+                            token.fixType = token.type
+                            token.parseType = token.type
                             j++
                             token = this.tokens[j]
                         }
                     }
                     if (token.type === 'word') {
                         token.type = 'FUNCTION_ARG_PARAMETER'
+                        token.fixType = token.type
+                        token.parseType = token.type
                         varname = token.value
                         if (args.has(varname)) {
                             const arg = args.get(varname)
@@ -529,11 +543,15 @@ export class Nako3TokenFixer {
                     }
                     if (token.type === ',' || token.type === '|') {
                         token.type = 'FUNCTION_ARG_SEPARATOR'
+                        token.fixType = token.type
+                        token.parseType = token.type
                         j++
                         token = this.tokens[j]
                     }
                     if (token.type === ')') {
                         token.type = 'FUNCTION_ARG_PARENTIS_END'
+                        token.fixType = token.type
+                        token.parseType = token.type
                         j++
                         token = this.tokens[j]
                     }
@@ -563,10 +581,14 @@ export class Nako3TokenFixer {
             token = this.tokens[i]
             if (token.type === '*') {
                 token.type = 'def_func'
+                token.fixType = token.type
+                token.parseType = token.type
             }
             if (token.type === 'には') {
                 isMumei = true
                 token.type = 'def_func'
+                token.fixType = token.type
+                token.parseType = token.type
             }
             i++
             token = this.tokens[i]
@@ -576,12 +598,20 @@ export class Nako3TokenFixer {
                     //
                 }
                 if (this.tokens[i].type === '}') {
-                    this.tokens[j].type = 'FUNCTION_ATTR_PARENTIS_START'
+                    token = this.tokens[j]
+                    token.type = 'FUNCTION_ATTR_PARENTIS_START'
+                    token.fixType = token.type
+                    token.parseType = token.type
                     j++
-                    this.tokens[i].type = 'FUNCTION_ATTR_PARENTIS_END'
+                    token = this.tokens[j]
+                    token.type = 'FUNCTION_ATTR_PARENTIS_END'
+                    token.fixType = token.type
+                    token.parseType = token.type
                     for (;j < i;j++) {
                         token = this.tokens[j]
                         token.type = 'FUNCTION_ATTRIBUTE'
+                        token.fixType = token.type
+                        token.parseType = token.type
                         if (token.value === '非公開') {
                             isPrivate = true
                             isExport = false
@@ -605,6 +635,8 @@ export class Nako3TokenFixer {
             let funcNameIndex: number|null = null
             if (!isMumei && token.type === 'word') {
                 token.type = 'FUNCTION_NAME'
+                token.fixType = token.type
+                token.parseType = token.type
                 funcName = token.value
                 funcNameIndex = i
                 if (token.josi === 'とは') {

@@ -26,6 +26,7 @@ export class Nako3Document {
     public tokens: Token[]
     public commentTokens: Token[]
     public importStatements: ImportStatementInfo[]
+    public preNakoRuntime: NakoRuntime|NakoRuntime[]
     validFixToken: boolean
     validNakoRuntime: boolean
     validApplyerFuncToken: boolean
@@ -39,6 +40,7 @@ export class Nako3Document {
     moduleEnv: ModuleEnv
     moduleOption: ModuleOption
     project: Nako3Project|Map<string, Nako3Project>|null
+    onTextUpdated: (() => void)|null
  
     constructor(filename: string, link: ModuleLink) {
         this.moduleOption = new ModuleOption()
@@ -57,6 +59,7 @@ export class Nako3Document {
         this.tokens = []
         this.commentTokens = []
         this.importStatements = []
+        this.preNakoRuntime = ''
         this.fixTokenSerialId = setSerialId()
         this.applyerFuncTokenSerialId = setSerialId()
         this.astSerialId = setSerialId()
@@ -66,8 +69,10 @@ export class Nako3Document {
         this.validApplyerFuncToken = false
         this.validAst = false
         this.validApplyerVarToken = false
+        this.onTextUpdated =null
     }
 
+    // called by Nako3DocumentExt only.
     updateText (text: string, textVersion: number|null): boolean {
         if (textVersion === null || textVersion !== this.textVersion) {
             this.textVersion = textVersion
@@ -75,6 +80,9 @@ export class Nako3Document {
                 logger.info(`doc:text update:${this.filename}.`)
                 this.text = text
                 this.invalidate()
+                if (this.onTextUpdated) {
+                    this.onTextUpdated()
+                }
                 return true
             }
         }
@@ -93,62 +101,79 @@ export class Nako3Document {
         this.errorInfos.setProblemsLimit(limit)
     }
 
-    // 以下の３つのmethodにより解析を行う。
-    // tokenize     :テキストからトークンの生成とユーザ関数と取り込み情報の抽出
-    // parse        :システム関数、ユーザ関数をトークン列に反映。
-    //               トークン列とユーザ定義関数情報から各位置のスコープの確定と変数の抽出
+    // 以下の４つのmethodにより解析を行う。
+    // tokenize      :テキストからトークンの生成とユーザ関数と取り込み情報の抽出
+    // setNakoRuntime:shebangと取り込んだpluginからruntimeを判定する。
+    // parse         :システム関数、ユーザ関数をトークン列に反映。
+    //                トークン列とユーザ定義関数情報から各位置のスコープの確定と変数の抽出
     // applyVarConst:変数をトークン列に反映
-    // tokenizeとparseの間に以下の処置が必要
+    // 
+    // tokenizeとsetNakoRuntimeの間に以下の処置が必要
     //   取り込み情報からpluginの取り込みとpluginNamesへの反映
+    // setNakoRuntimeとparseの間に以下の処置が必要
     //   取り込み情報からnako3を取り込みし含まれるユーザ関数の情報を参照できるようにする
     // parseとapplyVarConstの間に以下の処置が必要
     //   変数のうちモジュールを跨るグローバル変数の確定(定義箇所を確定と参照の設定)
     //   明示的な宣言の無いローカル変数でグローバル変数にあるものを読み替え
-    tokenize(canceltoken?: CancellationToken):void {
+    tokenize(canceltoken?: CancellationToken): boolean {
         console.info(`doc:tokenize start:${this.filename}`)
         if (canceltoken && canceltoken.isCancellationRequested) {
-            return
+            return false
         }
-        if (!this.validFixToken) {
-            // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
-            const lexerResult = this.lexer.tokenize(this.text)
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return
-            }
-            // tokenFixerを使用してrawTokenからtokens/commentTokensを生成する
-            // moduleEnv.declareThingsにユーザ関数を登録し定義のあるトークンにmetaを登録する。
-            const fixerResult = this.fixer.fixTokens(lexerResult.tokens)
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return
-            }
-            this.tokens = fixerResult.tokens
-            this.commentTokens = fixerResult.commentTokens
-            this.importStatements= fixerResult.imports
-            this.fixTokenSerialId = incSerialId(this.fixTokenSerialId)
-            this.validFixToken = true
-            this.validNakoRuntime = false
+        if (this.validFixToken) {
+            return false
         }
-        if (!this.validNakoRuntime) {
-            this.errorInfos.clear()
-            if (this.moduleEnv.nakoRuntime === '') {
-                const runtimes = nako3plugin.getNakoRuntimeFromPlugin(this.importStatements, this.errorInfos)
-                if (runtimes.length > 0) {
-                    this.moduleEnv.nakoRuntime = runtimes[0] as NakoRuntime
-                }
-            }
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return
-            }
-            this.validNakoRuntime = true
-            this.validApplyerFuncToken = false
+        // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
+        const lexerResult = this.lexer.tokenize(this.text)
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return false
         }
+        // tokenFixerを使用してrawTokenからtokens/commentTokensを生成する
+        // moduleEnv.declareThingsにユーザ関数を登録し定義のあるトークンにmetaを登録する。
+        const fixerResult = this.fixer.fixTokens(lexerResult.tokens)
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return true
+        }
+        this.tokens = fixerResult.tokens
+        this.commentTokens = fixerResult.commentTokens
+        this.importStatements = fixerResult.imports
+        this.preNakoRuntime = fixerResult.nakoRuntime
+        this.fixTokenSerialId = incSerialId(this.fixTokenSerialId)
+        this.validFixToken = true
+        this.validNakoRuntime = false
+        return true
     }
 
-    parse(canceltoken?: CancellationToken):void {
+    setNakoRuntime (canceltoken?: CancellationToken):boolean {
+        console.info(`doc:setruntime start:${this.filename}`)
+        if (this.validNakoRuntime) {
+            return false
+        }
+        this.errorInfos.clear()
+        if (this.preNakoRuntime.length === 0) {
+            this.preNakoRuntime = nako3plugin.getNakoRuntimeFromPlugin(this.importStatements, this.errorInfos)
+        }
+        if (this.preNakoRuntime instanceof Array && this.preNakoRuntime.length > 0) {
+            this.moduleEnv.nakoRuntime = this.preNakoRuntime[0]
+        } else if (typeof this.preNakoRuntime === 'string' && this.preNakoRuntime !== '') {
+            this.moduleEnv.nakoRuntime = this.preNakoRuntime
+        } else {
+            this.moduleEnv.nakoRuntime = ''
+        }
+        this.validNakoRuntime = true
+        this.validApplyerFuncToken = false
+        return true
+   }
+
+    parse(canceltoken?: CancellationToken): boolean {
+        console.info(`doc:parse start:${this.filename}`)
+        if (this.validApplyerFuncToken && this.validAst) {
+            return false
+        }                                                     
         if (!this.validApplyerFuncToken) {
             this.applyer.applyFunction(this.tokens)
             if (canceltoken && canceltoken.isCancellationRequested) {
-                return
+                return true
             }
             this.applyerFuncTokenSerialId = incSerialId(this.applyerFuncTokenSerialId)
             this.validApplyerFuncToken = true
@@ -162,15 +187,17 @@ export class Nako3Document {
                 console.error(err)
             }
             if (canceltoken && canceltoken.isCancellationRequested) {
-                return
+                return true
             }
             this.astSerialId = incSerialId(this.astSerialId)
             this.validAst = true
             this.validApplyerVarToken = false
         }
+        return true
     }
 
     applyVarConst(canceltoken?: CancellationToken):void {
+        console.info(`doc:applyvarConst start:${this.filename}`)
         if (!this.validApplyerVarToken) {
             this.moduleEnv.fixAlllVars()
             if (canceltoken && canceltoken.isCancellationRequested) {
@@ -184,7 +211,6 @@ export class Nako3Document {
             this.applyerVarTokenSerialId = incSerialId(this.applyerVarTokenSerialId)                                                                    
             this.validApplyerVarToken = true
         }
-        console.info(`doc:tokenize end:${this.filename}`)
     }
 
     public getTokenByPosition(line: number, col: number): Token | null {

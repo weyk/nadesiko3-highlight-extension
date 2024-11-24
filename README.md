@@ -10,7 +10,10 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 - Hover(built-in function hint)
 - Definition(go to definition)
 - Reference(find all references)
+- Rename
+- Document Color(preppend color icon for system color const)
 - Launch snako/cnako3 program with shebang line
+- Launch wnako3 program without import local file
 
 ## Install
 

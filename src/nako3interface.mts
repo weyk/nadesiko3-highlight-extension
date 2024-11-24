@@ -9,14 +9,15 @@ import {
 import { EventEmitter } from 'node:events'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { Nako3Range } from './nako3range.mjs'
-import { ImportInfo } from './nako3module.mjs'
+import { ImportInfo, ImportPlugin } from './nako3module.mjs'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { nako3diagnostic } from './provider/nako3diagnotic.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime } from './nako3types.mjs'
+import type { NakoRuntime, ExternalInfo } from './nako3types.mjs'
 import type { Token } from './nako3token.mjs'
+import { filenameToModName } from './nako3util.mjs'
 
 interface DependNako3Info {
     uri: Uri
@@ -27,11 +28,12 @@ interface DependNako3Info {
 export class Nako3Documents extends EventEmitter implements Disposable {
     docs: Map<string, Nako3DocumentExt>
     fileWacther: FileSystemWatcher
+    private isAnyTextUpdated: boolean 
 
     constructor () {
         super()
-        // console.log('nako3documnets constructed')
         this.docs = new Map()
+        this.isAnyTextUpdated = false
         this.fileWacther = workspace.createFileSystemWatcher('{**/*.nako3,**/*.js,**/*.cjs,**/*.mjs}', true)
         this.fileWacther.onDidChange(async uri => {
             await this.fileOnDidChange(uri)
@@ -51,15 +53,15 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         if (/\.nako3$/.test(uri.fsPath)) {
             const doc = this.get(uri)
             if (doc) {
-                const uristr = uri.toString()
                 if (!doc.isTextDocument) {
                     await doc.updateText(uri)
                     await this.analyze(doc)
                 }
             }
-        } if (/\.(js|cja|mjs)$/.test(uri.fsPath)) {
-            if (nako3plugin.has(uri.toString())) {
-                nako3plugin.importFromFile(uri.toString())
+        } if (/\.(js|cjs|mjs)$/.test(uri.fsPath)) {
+            const uristr = uri.toString()
+            if (nako3plugin.has(uristr)) {
+                nako3plugin.importFromFile(uristr)
             }
         }
     }
@@ -78,7 +80,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 }
                 nako3diagnostic.markRefreshDiagnostics()
             }
-        } if (/\.(js|cja|mjs)$/.test(uri.fsPath)) {
+        } if (/\.(js|cjs|mjs)$/.test(uri.fsPath)) {
             if (nako3plugin.has(uristr)) {
                 nako3plugin.plugins.delete(uristr)
             }
@@ -141,6 +143,9 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     private newDocument (fileName: string, uri: Uri, document?: TextDocument): Nako3DocumentExt {
         const doc = new Nako3DocumentExt(document || uri)
         this.docs.set(fileName, doc)
+        doc.nako3doc.onTextUpdated = () => {
+            this.isAnyTextUpdated = true
+        }
         return doc
     }
 
@@ -161,15 +166,8 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 console.log(`document close: no close: import by other(${fileName})`)
                 return
             }
-            doc.link.importPlugins.clear()
-            doc.link.importNako3s.clear()
         }
-        for (const [ , doc ] of this.docs) {
-            if (doc.link.importBy.has(fileName)) {
-                doc.link.importBy.delete(fileName)
-            }
-        }
-        this.docs.delete(fileName)
+        this.trushDocument(fileName, doc)
         console.log(`document close: closed(${fileName})`)
         nako3diagnostic.refreshDiagnostics()
     }
@@ -189,6 +187,21 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 console.log(`document close: no close: import by other(${fileName})`)
                 return
             }
+        }
+        this.trushDocument(fileName, doc)
+        console.log(`document close: closed(${fileName})`)
+        nako3diagnostic.refreshDiagnostics()
+    }
+
+    /**
+     * クローズを際にTextDocument/Uri共通で必要な処理をまとめたもの。
+     * @param fileName Uri.toString()をしたもの。内部での管理キー。
+     * @param doc クローズするファイルのNako3DocumentExt(Uriベースの場合は不要)
+     * @returns 登録したNako3DocumentExtを返す
+     */
+    private trushDocument (fileName: string, doc?: Nako3DocumentExt):void {
+        if (doc) {
+            doc.nako3doc.onTextUpdated = null
             doc.link.importPlugins.clear()
             doc.link.importNako3s.clear()
         }
@@ -198,8 +211,6 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             }
         }
         this.docs.delete(fileName)
-        console.log(`document close: closed(${fileName})`)
-        nako3diagnostic.refreshDiagnostics()
     }
 
     async updateText (doc: Nako3DocumentExt, document: Uri|TextDocument, canceltoken?: CancellationToken): Promise<boolean> {
@@ -231,20 +242,29 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     async analyze(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<void> {
-        logger.debug(`analyze:start:${doc.uri.toString()}`)
+        logger.info(`interface:analyze:start:${doc.uri.toString()}`)
         doc.nako3doc.tokenize(canceltoken)
+        await this.refreshLink(doc)
+  
+        if (doc.nako3doc.preNakoRuntime instanceof Array && doc.nako3doc.preNakoRuntime.length > 0) {
+            doc.nako3doc.moduleEnv.nakoRuntime = doc.nako3doc.preNakoRuntime[0]
+        } else if (typeof doc.nako3doc.preNakoRuntime === 'string' && doc.nako3doc.preNakoRuntime !== '') {
+            doc.nako3doc.moduleEnv.nakoRuntime = doc.nako3doc.preNakoRuntime
+        } else {
+            doc.nako3doc.moduleEnv.nakoRuntime = ''
+        }
+
         if (doc.nako3doc.moduleEnv.nakoRuntime === '') {
             doc.nako3doc.moduleEnv.nakoRuntime = nako3extensionOption.defaultNakoRuntime
         }
         this.updateNakoRuntime(doc)
-        await this.refreshLink(doc)
         doc.nako3doc.parse(canceltoken)
         doc.nako3doc.applyVarConst(canceltoken)
-        logger.debug(`analyze:end  :${doc.uri.toString()}`)
+        logger.info(`interface:analyze:end  :${doc.uri.toString()}`)
     }
 
     async analyzeToSetNakoRuntime(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<void> {
-        logger.debug(`analyze:start:${doc.uri.toString()}`)
+        logger.info(`interface:analyze1:start:${doc.uri.toString()}`)
         doc.nako3doc.tokenize(canceltoken)
         if (doc.nako3doc.moduleEnv.nakoRuntime === '') {
             doc.nako3doc.moduleEnv.nakoRuntime = nako3extensionOption.defaultNakoRuntime
@@ -294,68 +314,70 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         let r: RegExpExecArray | null
         for (const importInfo of imports) {
             const imp = importInfo.value
+            const info : ImportPlugin = {
+                importKey: imp,
+                type: 'js',
+                pluginKey: imp,
+                existFile: false,
+                filepath: '',
+                hasCommandInfo: false,
+                startLine: importInfo.startLine,
+                startCol: importInfo.startCol,
+                endLine: importInfo.endLine,
+                endCol: importInfo.endCol,
+                wasErrorReported: false
+            }
             r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
             if (r && r.length > 1 && r[1] != null) {
-                const plugin = r[1]
-                logger.info(`imports:check js plugin with plugin name:${plugin}`)
+                const pluginName = r[1]
+                logger.info(`imports:check js plugin with plugin name:${pluginName}`)
                 // Nako3Pluginに既にあるかどうかを名前でチェック。
                 // 既にあるならそれをそのまま使う。
-                if (nako3plugin.has(plugin)) {
-                    moduleEnv.pluginNames.push(plugin)
-                    const info : ImportInfo = {
-                        importKey: imp,
-                        type: 'js',
-                        pluginKey: plugin,
-                        exists: true,
-                        startLine: importInfo.startLine,
-                        startCol: importInfo.startCol,
-                        endLine: importInfo.endLine,
-                        endCol: importInfo.endCol,
-                        wasErrorReported: false
-                    }
-                    doc.link.importPlugins.set(imp, info)
-                    logger.info(`imports: already resist plugin("${plugin}")`)
-                    continue
+                if (nako3plugin.has(pluginName)) {
+                    moduleEnv.pluginNames.push(pluginName)
+                    info.pluginKey = pluginName
+                    info.hasCommandInfo = true
+                    logger.info(`imports: already resist plugin("${pluginName}")`)
                 }
             }
             r = /[\\\/]?(([^\\\/]*)(\.(js|mjs|cjs))?)$/.exec(imp)
             if (r && r.length > 1 && r[1] != null) {
-                const plugin = r[1]
-                logger.info(`imports:add js plugin without plugin name:${plugin}`)
-                const info : ImportInfo = {
-                    importKey: imp,
-                    pluginKey: imp,
-                    type: 'js',
-                    exists: false,
-                    startLine: importInfo.startLine,
-                    startCol: importInfo.startCol,
-                    endLine: importInfo.endLine,
-                    endCol: importInfo.endCol,
-                    wasErrorReported: false
-                }
-                doc.link.importPlugins.set(imp, info)
+                const pluginFilename = r[1]
+                logger.info(`imports:add js plugin without plugin name:${pluginFilename}`)
                 let filepath = await nako3plugin.importFromFile(imp, doc.link, doc.errorInfos)
                 if (filepath !== null) {                                  
-                    info.exists = true
+                    info.existFile = true
+                    info.filepath = filepath
                     moduleEnv.pluginNames.push(filepath)
                     nako3plugin.registPluginMap(doc.link.filePath, imp, filepath)
-                    if (!nako3plugin.has(filepath)) {
-                        doc.errorInfos.add('WARN', 'noPluginInfo', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                        info.exists = false
+                    if (nako3plugin.has(filepath)) {
+                        if (!info.hasCommandInfo) {
+                            info.pluginKey = filepath
+                        }
+                        info.hasCommandInfo = true
+                    } else {
+                        doc.errorInfos.add('WARN', 'noPluginInfo', { plugin: pluginFilename }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
                         info.wasErrorReported = true
                     }
                 } else {
                     // this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                    doc.errorInfos.add('ERROR', 'errorImport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                    info.exists = false
+                    logger.info(`ImportPlugins: error import 3rd plugin "${pluginFilename}"`)
+                    if (info.hasCommandInfo) {
+                        doc.errorInfos.add('WARN', 'warnImport3rdPlugin', { plugin: pluginFilename }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                    } else {
+                        doc.errorInfos.add('ERROR', 'errorImport3rdPlugin', { plugin: pluginFilename }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                    }
                     info.wasErrorReported = true
-                    moduleEnv.pluginNames.push(plugin)
+                    info.filepath = pluginFilename
+                    moduleEnv.pluginNames.push(pluginFilename)
                 }
+                doc.link.importPlugins.set(imp, info)
             } else {
                 doc.errorInfos.add('WARN', 'unknownImport', { file: imp }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
             }
         }
     }
+
     async importNako3s(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<void> {
         doc.link.importNako3s.clear()
         const dependNako3UriList = this.getDependNako3UriList(doc, imports)
@@ -400,10 +422,11 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             tickCount++
         }
         if (exist) {
-            doc.nako3doc.validFixToken = false
-            // await doc.nako3doc.tokenize()
+            doc.nako3doc.validAst = false
+            doc.nako3doc.validApplyerFuncToken = false
+            doc.nako3doc.validApplyerVarToken = false
         }
-    }
+    }                                       
 
     private getDependNako3UriList(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): DependNako3Info[] {
         const dependUriList: DependNako3Info[] = []
@@ -485,7 +508,14 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     async importNako3(doc: Nako3DocumentExt, info: DependNako3Info): Promise<Nako3DocumentExt|null> {
         const bindDocument = (doc: Nako3DocumentExt, impUri: Uri, target: Nako3DocumentExt) => {
             if (!doc.nako3doc.moduleEnv.externalThings.has(impUri.toString())) {
-                doc.nako3doc.moduleEnv.externalThings.set(impUri.toString(), target.nako3doc.moduleEnv.declareThings)
+                const info: ExternalInfo = {
+                    uri: impUri,
+                    filepath: impUri.toString(),
+                    things: target.nako3doc.moduleEnv.declareThings,
+                    funcSid: target.nako3doc.moduleEnv.declareFuncSid,
+                    allSid: target.nako3doc.moduleEnv.declareAllSid
+                }
+                doc.nako3doc.moduleEnv.externalThings.set(impUri.toString(), info)
             }
             if (!target.nako3doc.link.importBy.has(doc.uri.toString())) {
                 target.nako3doc.link.importBy.add(doc.uri.toString())

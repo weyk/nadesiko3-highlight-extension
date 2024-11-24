@@ -157,6 +157,8 @@ export interface Indent {
 
 export interface Token {
     type: TokenType
+    fixType: TokenType
+    parseType: TokenType
     group: TokenGroup
     len: number
     startLine: number
@@ -173,7 +175,6 @@ export interface Token {
     josiStartCol?: number
     indent: Indent
     uri: Uri
-    asWord: boolean
 }
 
 export interface TokenDefFunc extends Token {
@@ -192,4 +193,8 @@ export interface TokenRefFunc extends Token {
 
 export interface TokenRefVar extends Token {
   meta: GlobalVarConst|LocalVarConst
+}
+
+export interface TokenRef extends Token {
+  meta?: GlobalFunction|GlobalVarConst|LocalVarConst
 }

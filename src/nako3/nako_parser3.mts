@@ -3,8 +3,8 @@
  */
 import { Nako3Range } from '../nako3range.mjs'
 import { opPriority, RenbunJosi, operatorList } from './nako_parser_const.mjs'
-import { NakoParserBase } from './nako_parser_base.mjs'
-import { filenameToModName, NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
+import { NakoParserBase, CHECK_WILDCARD } from './nako_parser_base.mjs'
+import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
 import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
@@ -32,14 +32,14 @@ export class NakoParser extends NakoParserBase {
 
     logger.log(`perser:startParser returned`)
 
-    // 関数毎に非同期処理が必要かどうかを判定する
-    /*this.isModifiedNodes = false
-    this._checkAsyncFn(result)
-    while (this.isModifiedNodes) {
-      this.isModifiedNodes = false
-      this._checkAsyncFn(result)
+    // parseの結果で変化したtypeをparseTypeにコピーする。
+    for (const token of this.tokens) {
+      token.parseType = token.type
     }
-    */
+
+    if (this.hasDeclareThingsUpdate) {
+      this.moduleEnv.updateAllSid()
+    }
 
     logger.info(`perser:parse end`)
     return result
@@ -80,7 +80,18 @@ export class NakoParser extends NakoParserBase {
       logger.log(`parser:sentenceLinst:sentence call`)
       const n: Ast|null = this.ySentence()
       logger.log(`parser:sentenceLinst:sentence returned`)
-      if (!n) { break }
+      if (!n) {
+        const c: Token|null = this.get()
+        if (c && c.type !== 'eof') {
+          logger.info(`構文解析でエラー。${this.nodeToStr(c, { depth: 1 }, true)}の使い方が間違っています。`, c)
+          if (c !== null) {
+            this.errorInfos.addFromToken('ERROR', 'errorParse', { nodestr: this.nodeToStr(c, { depth: 1 }, false) }, c)
+          }
+          this.skipToEol()
+          continue
+        }
+        break
+      }
       blocks.push(n)
     }
     if (blocks.length === 0) {
@@ -1554,8 +1565,6 @@ export class NakoParser extends NakoParserBase {
     if (this.check('繰返')) {
       this.pushStack({ type: 'word', value: action.value, josi: action.josi, ...this.fromSourceMap(map) })
       return this.yFor()
-    } else {
-      console.log(`check token:${this.peekDef().type}`)
     }
 
     // スタックから引数をポップ
@@ -1812,33 +1821,41 @@ export class NakoParser extends NakoParserBase {
       }
     }
 
-    // プロパティ代入文
-    if (this.check2(['word', '$', ['word', 'string', 'sys_func', 'user_func'], 'eq'])) {
-      const word = this.peekDef()
-      if (this.accept(['word', '$', ['word', 'string', 'sys_func', 'user_func'], 'eq', this.yCalc])) {
-        const nameToken = this.getVarName(this.y[0])
-        const propToken = this.y[2]
-        const valueToken = this.y[4]
+    // オブジェクトプロパティ構文 代入文 (#1793)
+    if (this.check3(['word'], ['$', ['word', 'string', 'sys_func', 'user_func']], ['eq'], false, 3)) {
+      const propList = []
+      const word = this.getVarName(this.get() as Token)
+      for (;;) {
+        const flag = this.peek()
+        if (flag === null || flag.type !== '$') { break }
+        this.get() // skip $
+        const propToken = this.get() as Token
         if (propToken.type === 'word') {
           propToken.type = 'string'
-        } else if (propToken.type ===  'sys_func' || propToken.type ===  'user_func') {
+        } else if (propToken.type ===  'sys_func' || propToken.type === 'user_func') {
           delete (propToken as any).meta
           propToken.type = 'string'
         }
-        return {
-          type: 'let_prop',
-          name: (nameToken as AstStrValue).value,
-          index: [propToken],
-          blocks: [valueToken],
-          josi: '',
-          ...map,
-          end: this.peekSourceMap()
-        } as AstLet
+        propList.push(propToken as Ast) // property
       }
-      this.errorInfos.addFromToken('ERROR', 'invalidLet', { noestr: this.nodeToStr(word, { depth: 1 }, false) }, word)
-      this.skipToEol()
-      return this.yNop() as any
+      this.get() // skip eq
+      const valueToken = this.yCalc() // calc
+      if (valueToken === null) {
+        this.errorInfos.addFromToken('ERROR', 'invalidLet', { noestr: this.nodeToStr(word, { depth: 1 }, false) }, word)
+        this.skipToEol()
+        return this.yNop() as any
+      }
+      return {
+        type: 'let_prop',
+        name: (word as AstStrValue).value,
+        index: propList,
+        blocks: [valueToken],
+        josi: '',
+        ...map,
+        end: this.peekSourceMap()
+      } as AstLet
     }
+    // オブジェクトプロパティ構文 ここまで
     
     // let_array ?
     if (this.check2(['word', '@'])) {
@@ -1901,7 +1918,7 @@ export class NakoParser extends NakoParserBase {
             activeDeclare: true,
             value: ''
           }
-          this.addGlobalvars(decvar, wordToken, true)
+          this.addGlobalvars(decvar, wordToken)
         } else {
           const decvar: GlobalVariable = {
             name: (word as AstStrValue).value,
@@ -1916,7 +1933,7 @@ export class NakoParser extends NakoParserBase {
             isRemote: this.moduleEnv.isRemote,
             activeDeclare: true
           }
-          this.addGlobalvars(decvar, wordToken, true)
+          this.addGlobalvars(decvar, wordToken)
   
         }
       }
@@ -2601,21 +2618,27 @@ export class NakoParser extends NakoParserBase {
         return ast
       }
 
-      // word$prop
+      // オブジェクトプロパティ構文(参照) word$prop (#1793)
       if (word.josi === '' && (this.check2(['$', ['word', 'string', 'sys_func', 'user_func']]))) {
-        this.get() // skip '$'
-        const prop = this.get() as Token
-        if (prop.type === 'word') {
-          prop.type = 'string'
-        } else if (prop.type ===  'sys_func' || prop.type ===  'user_func') {
-          delete (prop as any).meta
-          prop.type = 'string'
+        const propList: Ast[] = []
+        let josi = ''
+        while (this.check('$')) {
+          this.get() // skip '$'
+          const prop = this.get() as Token
+          if (prop.type === 'word') {
+            prop.type = 'string'
+          } else if (prop.type ===  'sys_func' || prop.type ===  'user_func') {
+            delete (prop as any).meta
+            prop.type = 'string'
+          }
+          propList.push(prop as Ast)
+          josi = prop.josi
         }
         return {
           type: 'ref_prop', // プロパティ参照
           name: word,
-          index: [prop as Ast],
-          josi: prop.josi,
+          index: propList,
+          josi: josi,
           ...this.fromSourceMap(map)
         }
       }
@@ -2647,10 +2670,10 @@ export class NakoParser extends NakoParserBase {
             range: Nako3Range.fromToken(word as Token),
             origin: 'global',
             isRemote: this.moduleEnv.isRemote,
-            activeDeclare: true,
+            activeDeclare: isActiveDeclare,
             value: ''
           }
-          this.addGlobalvars(defValue, word as Token, isActiveDeclare)
+          this.addGlobalvars(defValue, word as Token)
   
         } else {
           const defValue: GlobalVariable = {
@@ -2664,9 +2687,9 @@ export class NakoParser extends NakoParserBase {
             range: Nako3Range.fromToken(word as Token),
             origin: 'global',
             isRemote: this.moduleEnv.isRemote,
-            activeDeclare: true
+            activeDeclare: isActiveDeclare
           }
-          this.addGlobalvars(defValue, word as Token, isActiveDeclare)
+          this.addGlobalvars(defValue, word as Token)
         }
         const wordAst = word as AstStrValue
         wordAst.value = gname

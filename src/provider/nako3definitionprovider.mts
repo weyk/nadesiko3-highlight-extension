@@ -18,6 +18,7 @@ import type { TokenCallFunc, TokenRefVar } from '../nako3token.mjs'
 
 export class Nako3DefinitionProvider implements DefinitionProvider {
     async provideDefinition(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<Definition | DefinitionLink[] | null> {
+        logger.info(`■ DefinitionProvier: provideDefinition`)
         let definition: Definition|DefinitionLink[]|null = null
         if (canceltoken.isCancellationRequested) {
             logger.debug(`provideDefinition: canceled begining`)

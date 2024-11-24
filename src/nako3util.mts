@@ -180,6 +180,8 @@ export function argsFromString(argstr: string): FunctionArg[] {
 export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent: number = -1, startLine: number = 0, uri: Uri|null = null): Token {
     return {
       type,
+      fixType: type,
+      parseType: type,
       group,
       value,
       indent: {
@@ -197,8 +199,7 @@ export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', va
       uri: uri === null ? Uri.parse('main.nako3') : uri,
       josi: '',
       text: '',
-      unit: '',
-      asWord: false
+      unit: ''
     }
 }
 

@@ -1,4 +1,4 @@
-import { ModuleLink, ModuleEnv, ModuleOption } from '../nako3module.mjs'
+import { ModuleEnv, ModuleOption } from '../nako3module.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
@@ -14,6 +14,10 @@ interface IndentLevel {
 }
 
 /**
+ * check2/check3でワイルドカードトークンとして使用する。全てのトークンにマッチする。
+ */
+export const CHECK_WILDCARD = 1
+/**
  * なでしこの構文解析のためのユーティリティクラス
  */
 export class NakoParserBase {
@@ -22,6 +26,7 @@ export class NakoParserBase {
   protected stack: any[]
   protected index: number
   protected y: any[]
+  protected c: number
   public modName: string
   public namespaceStack: string[]
   public modList: string[]
@@ -44,6 +49,7 @@ export class NakoParserBase {
   protected scopeId: string
   protected scopeIdStack: [ string, number][]
   protected scopeList: ScopeIdRange[]
+  protected hasDeclareThingsUpdate: boolean
 
   constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
     this.stackList = [] // 関数定義の際にスタックが混乱しないように整理する
@@ -56,6 +62,8 @@ export class NakoParserBase {
      * @type {import('./nako3.mjs').Ast[]}
      */
     this.y = []
+    // ループ対応トークン出現チェック(check3関数)でループ回数を設定する
+    this.c = 0
     /** モジュル名 @type {string} */
     this.modName = 'inline'
     this.namespaceStack = []
@@ -94,6 +102,8 @@ export class NakoParserBase {
     this.scopeId = 'global'
     this.scopeIdStack = []
     this.scopeList = moduleEnv.scopeIdList
+    this.hasDeclareThingsUpdate = false
+
     this.init()
   }
 
@@ -117,8 +127,8 @@ export class NakoParserBase {
     this.scopeId = 'global'
     this.scopeIdStack = []
     this.scopeList.length = 0
+    this.hasDeclareThingsUpdate = false
     this.moduleEnv.allScopeVarConsts.clear()
-    logger.info(`parser:clear`)
   }
 
   indentPush (tag: string):void {
@@ -197,21 +207,22 @@ export class NakoParserBase {
 
   addLocalvars (vars: LocalVarConst) {
     if (vars.type === 'parameter') {
-      this.localvars.set(vars.name, Object.assign({}, { type: 'var' }, vars))
+      this.localvars.set(vars.nameNormalized, Object.assign({}, { type: 'var' }, vars))
       
     } else {
-      this.localvars.set(vars.name, vars)
+      this.localvars.set(vars.nameNormalized, vars)
     }
     let scopedVars = this.moduleEnv.allScopeVarConsts.get(vars.scopeId)
     if (!scopedVars) {
       scopedVars = new Map()
       this.moduleEnv.allScopeVarConsts.set(vars.scopeId, scopedVars)
     }
-    scopedVars.set(vars.name, vars)
+    scopedVars.set(vars.nameNormalized, vars)
   }
 
-  addGlobalvars (vars: GlobalVarConst, token: Token, activeDeclare: boolean) {
+  addGlobalvars (vars: GlobalVarConst, token: Token) {
     this.moduleEnv.declareThings.set(vars.nameNormalized, vars)
+    this.hasDeclareThingsUpdate = true
     let globalVars = this.moduleEnv.allScopeVarConsts.get('global')
     if (!globalVars) {
       globalVars = new Map()
@@ -222,7 +233,7 @@ export class NakoParserBase {
       nameNormalized: vars.nameNormalized,
       scopeId: 'global',
       type: vars.type,
-      activeDeclare,
+      activeDeclare: vars.activeDeclare,
       range: Nako3Range.fromToken(token),
       origin: 'local'
     } as LocalVarConst)
@@ -234,10 +245,11 @@ export class NakoParserBase {
    */
   findVar (name: string): any {
     // ローカル変数？
-    const lvar = this.localvars.get(name)
+    const trimedName = trimOkurigana(name)
+    const lvar = this.localvars.get(trimedName)
     if (lvar) {
       return {
-        name,
+        name: trimedName,
         scope: 'local',
         info: lvar
       }
@@ -247,10 +259,10 @@ export class NakoParserBase {
     if (name.indexOf('__') >= 0) {
       const index = name.lastIndexOf('__')
       const mod =  name.substring(0, index)
-      const things = this.moduleEnv.externalThings.get(mod)
-      if (things) {
+      const info = this.moduleEnv.externalThings.get(mod)
+      if (info) {
         const funcName = trimOkurigana(name.substring(index+2))
-        gvar = things.get(funcName)
+        gvar = info.things.get(funcName)
         if (gvar && !gvar.isPrivate) {
           return {
             name: funcName,
@@ -263,24 +275,24 @@ export class NakoParserBase {
     }
     // グローバル変数（自身）？
     const gnameSelf = `${name}`
-    gvar = this.moduleEnv.declareThings.get(name)
+    gvar = this.moduleEnv.declareThings.get(trimedName)
     if (gvar) {
       return {
-        name,
+        name: trimedName,
         modName: this.modName,
         scope: 'global',
         info: gvar
       }
     }
     // グローバル変数（モジュールを検索）？
-    for (const [ mod, things ] of this.moduleEnv.externalThings) {
-      const funcObj: DeclareThing|undefined = things.get(name)
-      if (funcObj && funcObj.isExport === true) {
+    for (const [ mod, info ] of this.moduleEnv.externalThings) {
+      const thing: DeclareThing|undefined = info.things.get(trimedName)
+      if (thing && thing.isExport === true) {
         return {
-          name,
+          name: trimedName,
           modName: mod,
           scope: 'global',
-          info: funcObj
+          info: thing
         }
       }
     }
@@ -288,7 +300,7 @@ export class NakoParserBase {
     const svar = nako3plugin.getCommandInfo(name, this.moduleEnv.pluginNames, this.moduleEnv.nakoRuntime)
     if (svar) {
       return {
-        name,
+        name: svar.nameNormalized,
         scope: 'system',
         info: svar
       }
@@ -331,7 +343,7 @@ export class NakoParserBase {
     for (let i = 0; i < a.length; i++) {
       const idx = i + this.index
       if (this.tokens.length <= idx) { return false }
-      if (a[i] === '*') { continue } // ワイルドカード(どんなタイプも許容)
+      if (a[i] === CHECK_WILDCARD) { continue } // ワイルドカード(どんなタイプも許容)
       const t = this.tokens[idx]
       if (a[i] instanceof Array) {
         if (a[i].indexOf(t.type) < 0) { return false }
@@ -340,6 +352,37 @@ export class NakoParserBase {
       if (t.type !== a[i]) { return false }
     }
     return true
+  }
+
+  /**
+   * カーソル位置以降にある単語の型を確かめる １つのループを含む2単語以上に対応
+   * @param pre [単語1の型, 単語2の型, ... ] ループ前のトークン列
+   * @param loop [単語1の型, 単語2の型, ... ] ループするトークン列
+   * @param post [単語1の型, 単語2の型, ... ] ループ後のトークン列
+   * @param allowLoopZero boolean ループ部分の０回を許容するならtrueを指定する。既定はfalse
+   * @param loopLimit number ループ部分の回数上限を指定する。既定はMAX_VALUE
+   */
+  check3 (pre: any[], loop: any[], post: any[], allowLoopZero?: boolean, loopLimit?: number): boolean {
+    const tmpIndex = this.index
+    this.c = 0
+    const fail = () => {
+      this.index = tmpIndex
+      return false
+    }
+    const success = () => {
+      this.index = tmpIndex
+      return true
+    }
+    if (!this.check2(pre)) { return fail() }
+    this.index += pre.length
+    if (loopLimit === undefined) { loopLimit = Number.MAX_VALUE }
+    while (this.c < loopLimit && this.check2(loop)) {
+      this.index += loop.length
+      this.c++
+    }
+    if (allowLoopZero !== true && this.c === 0) { return fail() }
+    if (!this.check2(post)) { return fail() }
+    return success()
   }
 
   /**

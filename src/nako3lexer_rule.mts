@@ -11,7 +11,10 @@ export const lexRulesRE = {
     allHiragana: /^[ぁ-ん]+$/,
     ijoIka: /^.+(以上|以下|超|未満)$/,
     andOr: /^(かつ|または)/,
+    // 数値の後の単位は自動的に省略されるルール (#994)
     unit: /^(円|ドル|元|歩|㎡|坪|度|℃|°|個|つ|本|冊|才|歳|匹|枚|皿|セット|羽|人|件|行|列|機|品|m|ｍ|mm|cm|ｃｍ|km|ｋｍ|g|ｇ|kg|ｋｇ|t|ｔ|px|ｐｘ|dot|ｄｏｔ|pt|ｐｔ|em|ｅｍ|b|ｂ|mb|ｍｂ|kb|ｋｂ|gb|ｇｂ)/,
+    // CSSの単位であれば自動的に文字列に変換するルール (#1811)
+    cssUnitRE: /^(px|em|ex|rem|vw|vh|vmin|vmax)/,
     space: /^( |　|\t|・|⎿|└)+/
 }
 
@@ -24,6 +27,7 @@ interface LexRule {
     isFirstCol?: boolean
     withJosi?: boolean
     withUnit?: boolean
+    withCssUnit?: boolean
     withToten?: boolean
     value?: string
 } 
@@ -45,9 +49,9 @@ export const lexRules: LexRule[] = [
     { name: 'number', group: '数値', pattern: /^0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*/, withJosi: true, withUnit: true},
     { name: 'number', group: '数値', pattern: /^0[oO][0-7]+(_[0-7]+)*/, withJosi: true, withUnit: true},
     { name: 'number', group: '数値', pattern: /^0[bB][0-1]+(_[0-1]+)*/, withJosi: true, withUnit: true},
-    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'number', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
-    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true},
+    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*\.(\d+(_\d+)*)?([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true, withCssUnit: true},
+    { name: 'number', group: '数値', pattern: /^\.\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true, withCssUnit: true},
+    { name: 'number', group: '数値', pattern: /^\d+(_\d+)*([eE][+|-]?\d+(_\d+)*)?/, withJosi: true, withUnit: true, withCssUnit: true},
     { name: 'number', group: '数値', pattern: /^０[ｘＸ][０-９ａ-ｆＡ-Ｆ]+([_＿][０-９ａ-ｆＡ-Ｆ]+)*/, withJosi: true, withUnit: true},
     { name: 'number', group: '数値', pattern: /^０[ｏＯ][０-７]+([_＿][０-７]+)*/, withJosi: true, withUnit: true},
     { name: 'number', group: '数値', pattern: /^０[ｂＢ][０１]+([_＿][０１]+)*/, withJosi: true, withUnit: true},
@@ -104,7 +108,7 @@ export const lexRules: LexRule[] = [
     { name: ')', group: '演算子', pattern: /^(\)|）)/, withJosi: true },
     { name: '|', group: '演算子', pattern: /^(\||｜)/ },
     { name: '??', group: '命令', pattern: /^(\?\?|？？)/ }, // 「表示」のエイリアス #1745
-    { name: '$', group: '記号', pattern: /^[\$＄]/ }, // #1793 プロパティアクセス
+    { name: '$', group: '記号', pattern: /^[\$\.＄．]/ }, // #1793 プロパティアクセス
     { name: '」', group: '記号', pattern: '」', withJosi: true },
     { name: '』', group: '記号', pattern: '』', withJosi: true },
     { name: '{', group: '記号', pattern: /^(\{|｛)/ },

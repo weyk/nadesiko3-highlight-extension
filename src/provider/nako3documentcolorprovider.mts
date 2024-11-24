@@ -16,12 +16,13 @@ import { cssColor } from '../csscolor.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
 import type { Token, TokenRefVar } from '../nako3token.mjs'
-import type { GlobalVariable, GlobalConstant } from '../nako3types.mjs'
+import type { GlobalConstant } from '../nako3types.mjs'
 
 type ColorPresentationsContext = { readonly document: TextDocument; readonly range: Range }
 
 export class Nako3DocumentColorProvider implements DocumentColorProvider {
     async provideDocumentColors(document: TextDocument, canceltoken: CancellationToken): Promise<ColorInformation[]|undefined> {
+        logger.info(`■ DocumentColorProvider: provideDocumentColors`)
         let colors: ColorInformation[] = []
         if (canceltoken.isCancellationRequested) {
             logger.debug(`provideDocumentColors: canceled begining`)

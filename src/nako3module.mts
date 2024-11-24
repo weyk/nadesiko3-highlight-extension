@@ -1,6 +1,7 @@
 import { Uri } from 'vscode'
 import { filenameToModName } from './nako3util.mjs'
 import { logger } from './logger.mjs'
+import { setSerialId, incSerialId } from './nako3util.mjs'
 import type { NakoRuntime, DeclareThings, ExternThings as ExternalThings, AllScopeVarConsts, ScopeIdRange }  from './nako3types.mjs'
 
 export interface ImportInfo {
@@ -19,7 +20,9 @@ export interface ImportPlugin {
     importKey: string
     type: 'js'
     pluginKey: string
-    exists: boolean
+    existFile: boolean
+    filepath: string
+    hasCommandInfo: boolean
     wasErrorReported: boolean
     startLine: number
     startCol: number
@@ -28,12 +31,13 @@ export interface ImportPlugin {
 }
 
 type ImportInfos = Map<string, ImportInfo>
+type ImportPlugins = Map<string, ImportPlugin>
 
 export class ModuleLink {
     uri: Uri
     filePath: string
     mainFilepath: string
-    importPlugins: ImportInfos
+    importPlugins: ImportPlugins
     importNako3s: ImportInfos
     importBy: Set<string>
 
@@ -92,6 +96,8 @@ export class ModuleEnv {
     pluginNames: string[]
     nakoRuntime: NakoRuntime
     scopeIdList: ScopeIdRange[]
+    declareFuncSid: number
+    declareAllSid: number
 
     constructor (filename: string, link: ModuleLink) {
         this.filename = filename
@@ -104,6 +110,16 @@ export class ModuleEnv {
         this.allScopeVarConsts = new Map()
         this.nakoRuntime = ''
         this.scopeIdList = []
+        this.declareFuncSid = setSerialId()
+        this.declareAllSid = setSerialId()
+    }
+
+    updateFuncSid ():void {
+        this.declareFuncSid = incSerialId(this.declareFuncSid)
+    }
+
+    updateAllSid ():void {
+        this.declareAllSid = incSerialId(this.declareAllSid)
     }
 
     fixAlllVars () {
@@ -133,12 +149,12 @@ export class ModuleEnv {
                 if (thing.activeDeclare) {
                     continue
                 }
-                for (const [ uristr, exthings ] of this.externalThings) {
+                for (const [ uristr, exinfo ] of this.externalThings) {
                     if (uristr === this.uri.toString()) {
                         continue
                     }
                     // グローバルに同名の変数・定数が存在するならローカルは消す
-                    const v = exthings.get(thing.name)
+                    const v = exinfo.things.get(thing.name)
                     if (v) {
                         let isExtern = false
                         if (v.activeDeclare) {
