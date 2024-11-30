@@ -36,6 +36,7 @@ export class Nako3Tokenizer {
             cbString: this.parseString,
             cbStringEx: this.parseString,
             cbWord: this.parseWord,
+            cbWordEx: this.parseWordEx
         }
     }
 
@@ -656,6 +657,83 @@ export class Nako3Tokenizer {
             endCol: this.col,
             resEndCol: startCol + resLen,
             lineCount: 0,
+            len,
+            text: text.substring(0, len),
+            value: res,
+            unit: '',
+            josi,
+            josiStartCol,
+            indent
+        }
+        this.rawTokens.push(token)
+        return len
+    }
+
+
+    /**
+     * 単語のトークンを切り出す。tokenizeProcの下請け。
+     * @param text 単語のトークンを切り出すテキスト。先頭位置が単語の先頭
+     * @param indent 単語のある行の持つインデントの情報
+     * @param opts 開始タグ、終了タグ、種類の配列。
+     * @returns トークンの切り出しによって処理済みとなった文字数
+     */
+    private parseWordEx (text: string, indent: Indent, opts: SubProcOptArgs): number {
+        const startLine = this.line
+        const startCol = this.col
+        const startTag = opts[0]!
+        const endTag = opts[1]!
+        const type = opts[2]!
+        const index = text.indexOf(endTag, startTag.length)
+        let len = index >= 0 ? index + endTag.length : startTag.length
+        let str = text.substring(0, len)
+        let lineCount = this.skipWithoutCrlf (str)
+        let endCol = this.col
+        let josiStartCol:number|undefined
+        let josi = ''
+        const resEndCol = endCol
+        const resLen = len
+        const r = josiRE.exec(text.substring(len))
+        if (r) {
+            josiStartCol = endCol
+            josi = r[0].replace(/^\s+/, '')
+            len += r[0].length
+            endCol += r[0].length
+            if (text.charAt(len) === ',' || text.charAt(len) === '，' || text.charAt(len) === '、') {
+                len += 1
+                endCol += 1
+            }
+        }
+        let res = convert(text.substring(startTag.length, resLen - endTag.length))
+          // 「もの」構文 #1614
+        if (josi.startsWith('もの')) {
+            josi = josi.substring(2)
+        }
+        // 助詞「こと」「である」「です」などは「＊＊すること」のように使うので削除 #936 #939 #974
+        if (removeJosiMap[josi]) {
+            josi = ''
+            josiStartCol = undefined
+        }
+        // 助詞だけの語句の場合
+        if (res === '' && josi !== '') {
+            res = josi
+            josi = ''
+        }
+        if (lineCount > 0) {
+            throw new Error('変数名に改行を含めることはできません。')
+        }
+        this.col = endCol
+        const token: Token = {
+            type: type,
+            fixType: type,
+            parseType: type,
+            group: '単語',
+            uri: this.moduleEnv.uri,
+            startLine,
+            startCol,
+            endLine: this.line,
+            endCol,
+            resEndCol,
+            lineCount,
             len,
             text: text.substring(0, len),
             value: res,

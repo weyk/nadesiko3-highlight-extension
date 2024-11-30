@@ -149,7 +149,6 @@ export class Nako3RenameProvider implements RenameProvider {
                     range: this.getRangeFromTokenContent(token),
                     placeholder: token.value
                 }
-                console.log(token)
                 return result
             } else {
                 return getMessageWithArgs('cannnotRenameThis', {})

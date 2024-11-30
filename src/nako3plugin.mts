@@ -2,19 +2,28 @@ import { Uri } from 'vscode'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
-import { ModuleLink } from './nako3module.mjs'
-import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { ModuleLink, LinkPlugin } from './nako3module.mjs'
+import { ErrorInfoManager, ErrorInfoSubset } from './nako3errorinfo.mjs'
+import { Nako3Range } from './nako3range.mjs'
 import { trimOkurigana, trimQuote } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
 import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
+import type { Token } from './nako3token.mjs'
+
+type LocationType = '?'|'remote'|'workspace'|'editor'|'fs'|'builtin'
+
+type ContentKey = number|string
 
 interface FileContent {
     filepath: string
     uri: Uri
+    location: LocationType
+    contentKey: ContentKey
     exists: boolean
+    changed: boolean
     text: string
 }
 
@@ -38,9 +47,60 @@ interface PluginContent {
 export interface PluginInfo {
     pluginName: string
     nakoRuntime: NakoRuntime[]
-    isBuiltin: boolean
     declare: DeclareThings
+    location: LocationType
+    contentKey: ContentKey
+    uri: Uri|null
 }
+
+interface ImportResult {
+    importKey: string
+    pluginKey: string
+    existFile: boolean
+    hasCommandInfo: boolean
+    filepath: string
+    contentKey: string|number|null
+    errorInfos: ErrorInfoSubset[]
+}
+
+export interface PluginImportResult {
+    pluginName: string
+    changed: boolean
+    errorInfos?: ErrorInfoSubset[]
+    plugin?: PluginInfo
+}
+
+const suggestWords: Map<string, NakoRuntime[]> = new Map([
+    ['デスクトップ', ['cnako']],
+    ['マイドキュメント', ['cnako']],
+    ['母艦', ['cnako']],
+    ['コマンドライン', ['cnako']],
+    ['母艦パス', ['cnako']],
+    ['読', ['cnako']],
+    ['バイナリ読', ['cnako']],
+    ['SJISファイル読', ['cnako']],
+    ['起動待機', ['cnako']],
+    ['起動', ['cnako']],
+    ['起動時', ['cnako']],
+    ['ファイル列挙', ['cnako']],
+    ['全ファイル列挙', ['cnako']],
+    ['フォルダ存在', ['cnako']],
+    ['ファイルコピー', ['cnako']],
+    ['ファイルコピー時', ['cnako']],
+    ['ファイル移動', ['cnako']],
+    ['ファイル移動時', ['cnako']],
+    ['フォルダ作成', ['cnako']],
+    ['ファイル名抽出', ['cnako']],
+    ['パス抽出', ['cnako']],
+    ['描画開始', ['wnako']],
+    ['DOM要素作成', ['wnako']],
+    ['DOM要素取得', ['wnako']],
+    ['DOM要素全取得', ['wnako']],
+    ['マウスクリック時', ['wnako']],
+    ['フォーム作成', ['wnako']],
+    ['ラベル作成', ['wnako']],
+    ['ボタン作成', ['wnako']]
+])
 
 class Nako3Plugin {
     plugins: Map<string, PluginInfo>
@@ -82,6 +142,10 @@ class Nako3Plugin {
 
     getNakoRuntimes (plugin: string): NakoRuntime[]|undefined {
         return this.plugins.get(plugin)?.nakoRuntime 
+    }
+
+    getNakoRuntimesFromWord (cmd: string): NakoRuntime[]|undefined {
+        return suggestWords.get(cmd)
     }
 
     getNakoRuntimeFromPlugin(imports: ImportStatementInfo[], errorInfos: ErrorInfoManager): NakoRuntime[] {
@@ -130,6 +194,45 @@ class Nako3Plugin {
         return nakoRuntimes
     }
 
+    getNakoRuntimeFromToken(tokens: Token[], errorInfos: ErrorInfoManager): NakoRuntime[] {
+        let nakoRuntimes: NakoRuntime[] = []
+        let runtimeWork: NakoRuntime[]|'invalid' = []
+        for (const token of tokens) {
+            if (['word', 'sys_func'].includes(token.fixType)) {
+                const tv = trimOkurigana(token.value)
+                const runtimes = this.getNakoRuntimesFromWord(tv)
+                if (runtimes && runtimes.length > 0) {
+                    if (runtimeWork.length === 0) {
+                        runtimeWork = runtimes
+                    } else if (runtimeWork === 'invalid' || runtimeWork.join(',') === runtimes.join(',')) {
+                        // nop
+                    } else {
+                        const r2: NakoRuntime[] = []
+                        for (const r of runtimes) {
+                            if (runtimeWork.includes(r)) {
+                                r2.push(r)
+                            }
+                        }
+                        if (r2.length === 0) {
+                            runtimeWork = 'invalid'
+                        } else {
+                            runtimeWork = r2
+                        }
+                    }
+                }
+            }
+        }
+        if (runtimeWork === 'invalid') {
+            // errorInfos.add('WARN', 'conflictNakoRuntime', {}, 0, 0, 0, 0)
+            nakoRuntimes = []
+        } else if (runtimeWork.length === 0) {
+            nakoRuntimes = []
+        } else {
+            nakoRuntimes = runtimeWork
+        }
+        return nakoRuntimes
+    }
+
     getCommandInfo (command: string, pluginNames: string[], nakoRuntime?: NakoRuntime): DeclareThing|null {
         const tv = trimOkurigana(command)
         const searchList = [...pluginNames]
@@ -148,38 +251,168 @@ class Nako3Plugin {
         return null
     }
 
-    async importFromFile (pluginName: string, link?: ModuleLink, errorInfos?: ErrorInfoManager): Promise<string|null> {
+    async import (imp: string, baseFilepath: string): Promise<ImportResult> {
+        let r: RegExpExecArray|null
+        const result : ImportResult = {
+            importKey: imp,
+            pluginKey: imp,
+            existFile: false,
+            hasCommandInfo: false,
+            filepath: '',
+            contentKey: null,
+            errorInfos: []
+        }
+        r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
+        if (r && r.length > 1 && r[1] != null) {
+            const pluginName = r[1]
+            logger.info(`imports:check js plugin with plugin name:${pluginName}`)
+            // Nako3Pluginに既にあるかどうかを名前でチェック。
+            // 既にあるならそれをそのまま使う。
+            if (nako3plugin.has(pluginName)) {
+                result.pluginKey = pluginName
+                result.hasCommandInfo = true
+                logger.info(`imports: already resist plugin("${pluginName}")`)
+            }
+        }
+        r = /[\\\/]?(([^\\\/]*)(\.(js|mjs|cjs))?)$/.exec(imp)
+        if (r && r.length > 1 && r[1] != null) {
+            const pluginFilename = r[1]
+            logger.info(`imports:add js plugin without plugin name:${pluginFilename}`)
+            let impresult = await nako3plugin.importFromFile(imp, baseFilepath)
+            if (impresult !== null) {
+                if (impresult.errorInfos && impresult.errorInfos.length > 0) {
+                    result.errorInfos.push(...impresult.errorInfos)
+                } else {
+                    if (impresult.changed && impresult.plugin) {
+                        const pinfo = impresult.plugin
+                        result.existFile = true
+                        result.filepath = impresult.pluginName
+                        result.contentKey = pinfo.contentKey
+                        nako3plugin.plugins.set(result.filepath,  pinfo!)
+                        if (nako3plugin.has(result.filepath)) {
+                            if (!result.hasCommandInfo) {
+                                result.pluginKey = result.filepath
+                            }
+                            result.hasCommandInfo = true
+                        } else {
+                            const importError: ErrorInfoSubset = {
+                                level: 'WARN',
+                                messageId: 'noPluginInfo',
+                                args: {
+                                 plugin: pluginFilename
+                                }
+                            }
+                            result.errorInfos.push(importError)
+                        }
+                    } else {
+                        logger.info(`ImportPlugins: no changed plugin "${pluginFilename}"`)
+                        result.existFile = true
+                        result.filepath = impresult.pluginName
+                        result.hasCommandInfo = true
+                        const pluginInfo = nako3plugin.plugins.get(result.filepath)
+                        result.contentKey = pluginInfo?.contentKey || null
+                    }
+                }
+            } else {
+                // this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                logger.info(`ImportPlugins: error import 3rd plugin "${pluginFilename}"`)
+                if (result.hasCommandInfo) {
+                    const importError: ErrorInfoSubset = {
+                        level: 'WARN',
+                        messageId: 'warnImport3rdPlugin',
+                        args: {
+                            plugin: pluginFilename
+                        }
+                    }
+                    result.errorInfos.push(importError)
+                } else {
+                    const importError: ErrorInfoSubset = {
+                        level: 'ERROR',
+                        messageId: 'errorImport3rdPlugin',
+                        args: {
+                            plugin: pluginFilename
+                        }
+                    }
+                    result.errorInfos.push(importError)
+                }
+                result.filepath = pluginFilename
+            }
+        } else {
+            const importError: ErrorInfoSubset = {
+                level: 'WARN',
+                messageId: 'unknownImport',
+                args: {
+                    file: imp
+                }
+            }
+            result.errorInfos.push(importError)
+        }
+        return result
+    }
+
+    async importFromFile (pluginName: string, baseFilepath?: string): Promise<PluginImportResult|null> {
         let isRemote = false
         if (pluginName.startsWith('http://') || pluginName.startsWith('https://')) {
             // absolute uri
             isRemote = true
             if (!nako3extensionOption.enableNako3FromRemote) {
-                errorInfos?.add('WARN','disabledImportFromRemotePlugin', { plugin: pluginName }, 0,0,0,0)
-                return null
+                const importError: ErrorInfoSubset = {
+                    level: 'WARN',
+                    messageId: 'disabledImportFromRemotePlugin',
+                    args: {
+                      plugin: pluginName
+                    }
+                }
+                const result: PluginImportResult = {
+                    pluginName,
+                    changed: false,
+                    errorInfos: [importError]
+                }
+                return result               
             }
             let pluginInfo = this.plugins.get(pluginName)
             if (pluginInfo) {
                 logger.info(`importFromFile: absolute url and hit cache:${pluginName}`)
-                return pluginName                
+                const result: PluginImportResult = {
+                    pluginName,
+                    changed: false,
+                    plugin: pluginInfo
+                }
+                return result               
             } else {
                 logger.info(`importFromFile: absolute url and not hit cache:${pluginName}`)
             }
         }
         logger.debug(`importFromFile:${pluginName}`)
-        const f = await this.searchPlugin(pluginName, link)
-        if (f.exists) {
-            logger.info(`importFromFile: exist file "${pluginName}", parse start `)
+        const f = await this.searchPlugin(pluginName, baseFilepath)
+        if (f && f.exists) {
+            logger.info(`importFromFile: exist file "${pluginName}"`)
+            if (!f.changed) {
+                logger.info(`importFromFile: no changed "${pluginName}"`)
+                const result: PluginImportResult = {
+                    pluginName: f.filepath,
+                    changed: false,
+                }
+                return result
+            }
+            logger.info(`importFromFile: parse start "${pluginName}"`)
             const p = this.parsePlugin(f.text, f.uri, isRemote)
             if (p !== null && p.declare.size > 0) {
                 logger.info(`importFromFile:plugin set ${pluginName}`)
                 const info: PluginInfo = {
                     pluginName: p.meta.pluginName || pluginName,
-                    isBuiltin: false,
+                    location: f.location,
+                    contentKey: f.contentKey,
+                    uri: f.uri,
                     nakoRuntime: p.meta.nakoRuntime,
                     declare: p.declare
                 }
-                this.plugins.set(f.uri.toString(), info)
-                return f.uri.toString()
+                const result: PluginImportResult = {
+                    pluginName: info.pluginName,
+                    changed: true,
+                    plugin: info
+                }
+                return result
             } else {
                 logger.info(`importFromFile: parse failed in ${pluginName}`)
             }
@@ -189,111 +422,166 @@ class Nako3Plugin {
         return null
     }
 
-    private async tryReadFile(filepath: string): Promise<FileContent> {
+    private async tryReadFile(filepath: string, plugin?: PluginInfo): Promise<FileContent|null> {
         const content:FileContent = {
             filepath: filepath,
+            location: 'fs',
+            contentKey: '',
             uri: Uri.file(filepath),
             text: '',
+            changed: true,
             exists: false
         }
         try {
+            let f = await fs.lstat(filepath)
+            if (!f.isFile) {
+                return null
+            }
+            content.contentKey = f.mtimeMs
+            content.exists = true
+            if (plugin) {
+                if (typeof plugin.contentKey === 'number') {
+                    if (f.mtimeMs === plugin.contentKey) {
+                        content.changed = false
+                        return content
+                    }  
+                }
+            }
             const text = await fs.readFile(filepath, { encoding: 'utf-8' })
             content.text = text
-            content.exists = true
         } catch (err) {
             // nop
+            return null
         }
         return content
     }
 
-    private async checkpluginFile(pathName:string): Promise<FileContent> {
+    private async tryReadPluginFile(filepath: string): Promise<FileContent|null> {
+        const plugin = this.plugins.get(filepath)
+        return await this.tryReadFile(filepath, plugin)
+    }
+
+    private async tryReadPluginFileFromRemote(pluginUrl: string): Promise<FileContent|null> {
+        const plugin = this.plugins.get(pluginUrl)
+        try {
+            const headers = new Headers()
+            if (plugin && typeof plugin.contentKey === 'string' && plugin.contentKey.length > 2) {
+                const type = plugin.contentKey.substring(0,1)
+                const v = plugin.contentKey.slice(2)
+                if (type === 'E') {
+                    headers.set('If-None-Match', v)
+                } else if (type === 'L') {
+                    headers.set('If-Modified-Since', v)
+                }
+            }
+            const reqOpts = {
+                headers
+            }
+            const request = new Request(pluginUrl, reqOpts)
+
+            const response = await fetch(request)
+
+            if (response.status === 304) {
+                logger.info(`searchPlugin:find at url`)
+                return {
+                    filepath: pluginUrl,
+                    uri: Uri.parse(pluginUrl),
+                    location: 'remote',
+                    contentKey: plugin!.contentKey,
+                    changed: true,
+                    exists: true,
+                    text: ''
+                }
+            } else if (response.status === 200) {
+                const text = await response.text()
+                let contentKey = ''
+                if (response.headers.has('ETag')) {
+                    contentKey = `E:${response.headers.has('ETag')}`
+                } else if (response.headers.has('Last-Modified')) {
+                    contentKey = `L:${response.headers.has('Last-Modified')}`
+                }
+                logger.info(`searchPlugin:find at url`)
+                return {
+                    filepath: pluginUrl,
+                    uri: Uri.parse(pluginUrl),
+                    location: 'remote',
+                    contentKey,
+                    changed: true,
+                    exists: true,
+                    text: text
+                }
+            } else {
+                logger.info(`searchPlugin: bad status "${response.status}" in fetch "${pluginUrl}"`)
+                return null
+            }
+        } catch (err) {
+            // nop
+            logger.info(`searchPlugin: exception in fetch "${pluginUrl}"`)
+            return null
+        }
+    }
+
+    private async checkPluginFile(pathName: string): Promise<FileContent|null> {
         // 拡張子付きならそのままファイル名として存在チェック
         if (/\.(js|mjs|cjs)$/.test(pathName)) {
-            const content = await this.tryReadFile(pathName)
-            if (content.exists) {
+            const content = await this.tryReadPluginFile(pathName)
+            if (content) {
                 return content
             }
         }
         // ディレクトリと仮定してpackage.jsonがあるかチェック
         const jsonFile = path.join(pathName, 'package.json')
         const jsonContent = await this.tryReadFile(jsonFile)
-        if (jsonContent.exists) {
+        if (jsonContent) {
             // package.jsonがありmainがあるならファイル名として読んでみる
             const jsonJson = JSON.parse(jsonContent.text)
             if (jsonJson.main) {
                 const mainFile = path.join(pathName, jsonJson.main)
-                const mainContent = await this.tryReadFile(mainFile)
-                if (mainContent.exists) {
+                const mainContent = await this.tryReadPluginFile(mainFile)
+                if (mainContent) {
                     return mainContent
                 }
             }
         }
-        return {
-            filepath: pathName, uri: Uri.file(pathName), text: '', exists: false
-        }
+        return null
     }
 
-    private async searchPlugin (plugin: string, link?: ModuleLink): Promise<FileContent> {
-        const ngFileContent: FileContent = {
-            filepath : plugin,
-            uri: Uri.file(plugin),
-            exists: false,
-            text: ""
-        }
+    private async searchPlugin (plugin: string, baseFilepath?: string): Promise<FileContent|null> {
         const nako3home = await nadesiko3.getNako3Home()
         logger.debug(`searchPlugin:home:${nako3home}`)
         // HTTPによるURL
         if (plugin.startsWith('https://') || plugin.startsWith('http://')) {
-            try {
-                const response = await fetch(plugin)
-                if (response.status === 200) {
-                    const text = await response.text()
-                    logger.info(`searchPlugin:find at url`)
-                    return {
-                        filepath: plugin,
-                        uri: Uri.parse(plugin),
-                        exists: true,
-                        text: text
-                    }
-                } else {
-                    logger.info(`searchPlugin: bad status "${response.status}" in fetch "${plugin}"`)
-                    return ngFileContent
-                }
-            } catch (err) {
-                // nop
-                logger.info(`searchPlugin: exception in fetch "${plugin}"`)
-                return ngFileContent
-            }
+            return await this.tryReadPluginFileFromRemote(plugin)
         }
         // ローカルのフルパス指定
         if (plugin.startsWith('/') || /[A-Za-z]:\\/.test(plugin) || plugin.startsWith('file:/')) {
             logger.debug(`searchPath:check local absulute path`)
-            const f = await this.checkpluginFile(plugin)
-            if (f.exists) {
+            const f = await this.checkPluginFile(plugin)
+            if (f) {
                 logger.info(`searchPlugin:find at absolute path`)
                 return f
             } else {
-                return ngFileContent
+                return null
             }
         }
         // 相対パス
-        if (link && (plugin.startsWith('./') || plugin.startsWith('../'))) {
+        if (baseFilepath && (plugin.startsWith('./') || plugin.startsWith('../'))) {
             logger.debug(`searchPath:check local relative path`)
-            const fpath = path.join(path.resolve(path.dirname(link.uri.fsPath), plugin))
-            const f = await this.checkpluginFile(fpath)
-            if (f.exists) {
+            const fpath = path.join(path.resolve(path.dirname(baseFilepath), plugin))
+            const f = await this.checkPluginFile(fpath)
+            if (f) {
                 logger.info(`searchPlugin:find at sourve relative path`)
                 return f
             } else {
-                return ngFileContent
+                return null
             }
         }
         // スキーマ・絶対パス・相対パスのいずれでもない場合
         // nako3ファイルと同じ場所をチェック(./と同じ)
-        if (link) {
-            const fpath = path.join(path.resolve(path.dirname(link.uri.fsPath), plugin))
-            const f = await this.checkpluginFile(fpath)
-            if (f.exists) {
+        if (baseFilepath) {
+            const fpath = path.join(path.resolve(path.dirname(baseFilepath), plugin))
+            const f = await this.checkPluginFile(fpath)
+            if (f) {
                 logger.info(`searchPlugin:find at sourve relative path`)
                 return f
             }
@@ -303,8 +591,8 @@ class Nako3Plugin {
             // cnako3のラインタイムのsrc以下をチェック
             {
                 const fpath = path.join(nako3home, 'src', plugin)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/src`)
                     return f
                 }
@@ -312,8 +600,8 @@ class Nako3Plugin {
             // cnako3のラインタイムのcore/src以下をチェック
             {
                 const fpath = path.join(nako3home, 'core', 'src', plugin)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/core/src`)
                     return f
                 }
@@ -322,8 +610,8 @@ class Nako3Plugin {
         // NAKO_LIB環境変数の下をチェック
         if (process.env.NAKO_LIB) {
             const fpath = path.join(process.env.NAKO_LIB, plugin)
-            const f = await this.checkpluginFile(fpath)
-            if (f.exists) {
+            const f = await this.checkPluginFile(fpath)
+            if (f) {
                 logger.info(`searchPlugin:find at NAKO_LIB`)
                 return f
             }
@@ -333,8 +621,8 @@ class Nako3Plugin {
             {
                 const fpath = path.join(nako3home, 'node_modules', plugin)
                 logger.debug(`searchPlugin:check(${fpath})`)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/node_modules`)
                     return f
                 }
@@ -342,32 +630,32 @@ class Nako3Plugin {
             {
                 const fpath = path.join(nako3home, '..', plugin)
                 logger.debug(`searchPlugin:check(${fpath})`)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/..`)
                     return f
                 }
             }
             {
                 const fpath = path.join(nako3home, plugin)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3`)
                     return f
                 }
             }
             {
                 const fpath = path.join(nako3home, 'node_modules', 'nadesiko3core', 'src', plugin)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
                     return f
                 }
             }
             {
                 const fpath = path.join(nako3home, 'node_modules', 'nadesiko3core', 'src', plugin)
-                const f = await this.checkpluginFile(fpath)
-                if (f.exists) {
+                const f = await this.checkPluginFile(fpath)
+                if (f) {
                     logger.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
                     return f
                 }
@@ -376,13 +664,13 @@ class Nako3Plugin {
         // NODE_PATH環境変数の下をチェック
         if (process.env.NODE_PATH) {
             const fpath = path.join(process.env.NODE_PATH, plugin)
-            const f = await this.checkpluginFile(fpath)
-            if (f.exists) {
+            const f = await this.checkPluginFile(fpath)
+            if (f) {
                 logger.info(`searchPlugin:find at NODE_PATH`)
                 return f
             }
         }
-        return ngFileContent
+        return null
     }
 
     private parsePlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
@@ -633,7 +921,7 @@ class Nako3Plugin {
                         isPrivate: false,
                         value: v,
                         hint: v,
-                        range: { startLine: i, startCol: col, endLine: i, endCol: col + resLen, resEndCol: col + resLen },
+                        range: new Nako3Range(i, col, i, col + resLen, col + resLen),
                         uri,
                         origin: 'plugin',
                         isRemote,

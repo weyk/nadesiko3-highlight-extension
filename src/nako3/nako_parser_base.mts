@@ -11,6 +11,7 @@ import type { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_
 interface IndentLevel {
   level: number
   tag: string
+  indentSemantic: boolean
 }
 
 /**
@@ -45,6 +46,7 @@ export class NakoParserBase {
   protected moduleEnv: ModuleEnv
   protected moduleOption: ModuleOption
   protected currentIndentLevel: number
+  protected currentIndentSemantic: boolean
   protected indentLevelStack: IndentLevel[]
   protected scopeId: string
   protected scopeIdStack: [ string, number][]
@@ -97,11 +99,17 @@ export class NakoParserBase {
     this.errorInfos = new ErrorInfoManager()
     this.moduleEnv = moduleEnv
     this.moduleOption = moduleOption
+
+    // インデント構文のためのインデントレベルを管理する。
     this.currentIndentLevel = 0
+    this.currentIndentSemantic = false
     this.indentLevelStack = []
+    // 現在のスコープを管理する。
+    // global以外はユーザ関数か無名関数の内部となる。
     this.scopeId = 'global'
     this.scopeIdStack = []
     this.scopeList = moduleEnv.scopeIdList
+
     this.hasDeclareThingsUpdate = false
 
     this.init()
@@ -121,24 +129,31 @@ export class NakoParserBase {
     this.stack = [] // 計算用のスタック ... 直接は操作せず、pushStack() popStack() を介して使う
     this.y = [] // accept()で解析済みのトークンを配列で得るときに使う
     this.currentIndentLevel = 0
+    this.currentIndentSemantic = this.moduleOption.isIndentSemantic
     this.indentLevelStack = []
     this.genMode = 'sync' // #637, #1056
     this.errorInfos.clear()
-    this.scopeId = 'global'
+    this.scopeId = 'global'                                                                                                                         
     this.scopeIdStack = []
     this.scopeList.length = 0
     this.hasDeclareThingsUpdate = false
     this.moduleEnv.allScopeVarConsts.clear()
   }
 
-  indentPush (tag: string):void {
-    this.indentLevelStack.push({
+  indentPush (tag: string,):void {
+    logger.debug(`indentPush: ${tag}`)
+    if (this.currentIndentSemantic ) {
+      console.log(`indentPush: push indentSmentic = true`)
+    }
+  this.indentLevelStack.push({
       level: this.currentIndentLevel,
-      tag
+      tag,
+      indentSemantic: this.currentIndentSemantic
     })
   }
 
   indentPop (tags?: string[]):void {
+    logger.debug(`indentPop : ${tags?.join(',')}`)
     const indentLevel = this.indentLevelStack.pop()
     if (indentLevel) {
       if (tags) {
@@ -147,8 +162,14 @@ export class NakoParserBase {
         } 
       }
       this.currentIndentLevel = indentLevel.level
+      this.currentIndentSemantic = indentLevel.indentSemantic
+      if (this.currentIndentSemantic ) {
+        console.log(`indentPop : change indentSmentic to true`)
+      }
     } else {
+      logger.info(`indentPop: stack over pop`)
       this.currentIndentLevel = 0
+      this.currentIndentSemantic = this.moduleOption.isIndentSemantic
     }
   }
 
@@ -207,8 +228,7 @@ export class NakoParserBase {
 
   addLocalvars (vars: LocalVarConst) {
     if (vars.type === 'parameter') {
-      this.localvars.set(vars.nameNormalized, Object.assign({}, { type: 'var' }, vars))
-      
+      this.localvars.set(vars.nameNormalized, Object.assign({}, vars, { type: 'var' }))
     } else {
       this.localvars.set(vars.nameNormalized, vars)
     }

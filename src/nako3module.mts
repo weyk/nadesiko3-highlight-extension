@@ -16,28 +16,25 @@ export interface ImportInfo {
     endCol: number
 }
 
-export interface ImportPlugin {
+export interface LinkPlugin {
     importKey: string
     type: 'js'
     pluginKey: string
     existFile: boolean
     filepath: string
+    contentKey: null|string|number
     hasCommandInfo: boolean
     wasErrorReported: boolean
-    startLine: number
-    startCol: number
-    endLine: number
-    endCol: number
 }
 
 type ImportInfos = Map<string, ImportInfo>
-type ImportPlugins = Map<string, ImportPlugin>
+type LinkPlugins = Map<string, LinkPlugin>
 
 export class ModuleLink {
     uri: Uri
     filePath: string
     mainFilepath: string
-    importPlugins: ImportPlugins
+    importPlugins: LinkPlugins
     importNako3s: ImportInfos
     importBy: Set<string>
 

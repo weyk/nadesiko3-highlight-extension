@@ -253,7 +253,7 @@ export class Nako3TokenFixer {
                         token.value = '_\n'
                         token.type = '_eol'
                         delayedToken = null
-                    } else if (delayedToken.type === 'エラー' && token.type === 'ならば' && delayedToken.josi === '' && delayedToken.endCol === token.startCol) {
+                    } else if ((delayedToken.type === 'word' && delayedToken.value === 'エラー' && delayedToken.josi === '' && delayedToken.endCol === token.startCol) && ((token.type === 'word' || token.type === 'ならば') && token.value === 'ならば')) {
                         token.startLine = delayedToken.startLine
                         token.startCol = delayedToken.startCol
                         token.len = token.endCol - delayedToken.startCol
@@ -603,10 +603,6 @@ export class Nako3TokenFixer {
                     token.fixType = token.type
                     token.parseType = token.type
                     j++
-                    token = this.tokens[j]
-                    token.type = 'FUNCTION_ATTR_PARENTIS_END'
-                    token.fixType = token.type
-                    token.parseType = token.type
                     for (;j < i;j++) {
                         token = this.tokens[j]
                         token.type = 'FUNCTION_ATTRIBUTE'
@@ -620,6 +616,10 @@ export class Nako3TokenFixer {
                             isPrivate = false
                         }
                     }
+                    token = this.tokens[j]
+                    token.type = 'FUNCTION_ATTR_PARENTIS_END'
+                    token.fixType = token.type
+                    token.parseType = token.type
                     i++
                 }
             }

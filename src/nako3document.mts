@@ -121,6 +121,7 @@ export class Nako3Document {
             return false
         }
         if (this.validFixToken) {
+            console.info(`doc:tokineze skip :${this.filename}`)
             return false
         }
         // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
@@ -144,30 +145,10 @@ export class Nako3Document {
         return true
     }
 
-    setNakoRuntime (canceltoken?: CancellationToken):boolean {
-        console.info(`doc:setruntime start:${this.filename}`)
-        if (this.validNakoRuntime) {
-            return false
-        }
-        this.errorInfos.clear()
-        if (this.preNakoRuntime.length === 0) {
-            this.preNakoRuntime = nako3plugin.getNakoRuntimeFromPlugin(this.importStatements, this.errorInfos)
-        }
-        if (this.preNakoRuntime instanceof Array && this.preNakoRuntime.length > 0) {
-            this.moduleEnv.nakoRuntime = this.preNakoRuntime[0]
-        } else if (typeof this.preNakoRuntime === 'string' && this.preNakoRuntime !== '') {
-            this.moduleEnv.nakoRuntime = this.preNakoRuntime
-        } else {
-            this.moduleEnv.nakoRuntime = ''
-        }
-        this.validNakoRuntime = true
-        this.validApplyerFuncToken = false
-        return true
-   }
-
     parse(canceltoken?: CancellationToken): boolean {
         console.info(`doc:parse start:${this.filename}`)
         if (this.validApplyerFuncToken && this.validAst) {
+            console.info(`doc:parse skip :${this.filename}`)
             return false
         }                                                     
         if (!this.validApplyerFuncToken) {
@@ -183,7 +164,7 @@ export class Nako3Document {
             try {
                 this.parser.parse(this.tokens)
             } catch (err) {
-                console.error('cause excep                                                                                                                                                               4tion in parse.')
+                console.error('cause exception in parse.')
                 console.error(err)
             }
             if (canceltoken && canceltoken.isCancellationRequested) {
@@ -196,21 +177,25 @@ export class Nako3Document {
         return true
     }
 
-    applyVarConst(canceltoken?: CancellationToken):void {
+    applyVarConst(canceltoken?: CancellationToken): boolean {
         console.info(`doc:applyvarConst start:${this.filename}`)
-        if (!this.validApplyerVarToken) {
-            this.moduleEnv.fixAlllVars()
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return
-            }
-            // dumpScopIdList (this.moduleEnv.scopeIdList, this.tokens)
-            this.applyer.applyVarConst(this.tokens, this.moduleEnv.scopeIdList)
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return
-            }
-            this.applyerVarTokenSerialId = incSerialId(this.applyerVarTokenSerialId)                                                                    
-            this.validApplyerVarToken = true
+        if (this.validApplyerVarToken) {
+            console.info(`doc:applyvarConst skip :${this.filename}`)
+            return false
         }
+            
+        this.moduleEnv.fixAlllVars()
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return true
+        }
+        // dumpScopIdList (this.moduleEnv.scopeIdList, this.tokens)
+        this.applyer.applyVarConst(this.tokens, this.moduleEnv.scopeIdList)
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return true
+        }
+        this.applyerVarTokenSerialId = incSerialId(this.applyerVarTokenSerialId)                                                                    
+        this.validApplyerVarToken = true
+        return true
     }
 
     public getTokenByPosition(line: number, col: number): Token | null {

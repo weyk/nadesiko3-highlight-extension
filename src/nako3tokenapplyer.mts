@@ -5,8 +5,8 @@ import { trimOkurigana, getScopeId } from './nako3util.mjs'
 import { reservedGroup } from './nako3lexer_rule.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
-import type { GlobalFunction, GlobalVariable, GlobalConstant, GlobalVarConst,LocalVariable, ScopeIdRange } from './nako3types.mjs'
-import type { Token, TokenCallFunc, TokenRefVar } from './nako3token.mjs'
+import type { GlobalFunction, GlobalVariable, GlobalConstant, LocalVariable, ScopeIdRange } from './nako3types.mjs'
+import type { Token, TokenCallFunc, TokenRefVar, TokenRef } from './nako3token.mjs'
 
 export class Nako3TokenApplyer {
     private moduleEnv: ModuleEnv
@@ -95,17 +95,21 @@ export class Nako3TokenApplyer {
             let type = token.parseType
             if (type === 'word') {
                 const v = token.value
+                const isWrite = (token as TokenRef).isWrite ? true : false
                 const tv = trimOkurigana(v)
                 // 自モジュールのグローバルな変数・定数をチェックする
                 const thing = this.moduleEnv.declareThings.get(tv)
                 if (thing) {
+                    const tokenRefVar = (token as TokenRefVar)
                     switch (thing.type) {
                     case 'var':
-                        (token as TokenRefVar).meta = thing as GlobalVariable
+                        tokenRefVar.meta = thing as GlobalVariable
+                        tokenRefVar.isWrite = isWrite
                         type = 'user_var'
                         break
                     case 'const':
-                        (token as TokenRefVar).meta = thing as GlobalConstant
+                        tokenRefVar.meta = thing as GlobalConstant
+                        tokenRefVar.isWrite = isWrite
                         type = 'user_const'
                         break
                     }
@@ -117,6 +121,7 @@ export class Nako3TokenApplyer {
                     if (vars) {
                         const thing = vars.get(tv)
                         if (thing) {
+                            const tokenRefVar = (token as TokenRefVar)
                             if (thing.origin === 'system') {
                                 switch (thing.type) {
                                 case 'var':
@@ -126,8 +131,9 @@ export class Nako3TokenApplyer {
                                     type = 'sys_const'
                                     break
                                 }
-                                //console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
-                                (token as TokenRefVar).meta = thing as LocalVariable
+                                // console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
+                                tokenRefVar.meta = thing as LocalVariable
+                                tokenRefVar.isWrite = isWrite
                             } else {
                                 switch (thing.type) {
                                 case 'var':
@@ -140,8 +146,9 @@ export class Nako3TokenApplyer {
                                     type = 'user_const'
                                     break
                                 }
-                                //console.log(`hit:${scopeId}-${thing.name}-${thing.type}`)
-                                (token as TokenRefVar).meta = thing as LocalVariable
+                                // console.log(`hit:${scopeId}-${thing.name}-${thing.type}:${token.parseType}`)
+                                tokenRefVar.meta = thing as LocalVariable
+                                tokenRefVar.isWrite = isWrite
                             }
                         } else {
                             //console.log(`miss name:${scopeId}-${tv}`)
@@ -154,13 +161,16 @@ export class Nako3TokenApplyer {
                         for (const [ , info ] of this.moduleEnv.externalThings) {
                             const thing = info.things.get(tv)
                             if (thing) {
+                                const tokenRefVar = (token as TokenRefVar)
                                 switch (thing.type) {
                                 case 'var':
-                                    (token as TokenRefVar).meta = thing as GlobalVariable
+                                    tokenRefVar.meta = thing as GlobalVariable
+                                    tokenRefVar.isWrite = isWrite
                                     type = 'user_var'
                                     break
                                 case 'const':
-                                    (token as TokenRefVar).meta = thing as GlobalConstant
+                                    tokenRefVar.meta = thing as GlobalConstant
+                                    tokenRefVar.isWrite = isWrite
                                     type = 'user_const'
                                     break
                                 }
@@ -171,17 +181,21 @@ export class Nako3TokenApplyer {
                             // 取り込んでいるPluginに定義されている変数と定数をチェックする
                             const commandInfo = nako3plugin.getCommandInfo(v, this.moduleEnv.pluginNames, this.moduleEnv.nakoRuntime)
                             if (commandInfo) {
+                                const tokenRefVar = (token as TokenRefVar)
                                 if (commandInfo.type === 'var') {
-                                    (token as TokenRefVar).meta = commandInfo as GlobalVariable
+                                    tokenRefVar.meta = commandInfo as GlobalVariable
+                                    tokenRefVar.isWrite = isWrite
                                     type = 'sys_var'
                                 } else if (commandInfo.type === 'const') {
-                                    (token as TokenRefVar).meta = commandInfo as GlobalConstant
+                                    tokenRefVar.meta = commandInfo as GlobalConstant
+                                    tokenRefVar.isWrite = isWrite
                                     type = 'sys_const'
                                 }
                             }
                             if (type === 'word') {
                                 // システム内で都特別扱いしている名称の変数・定数をチェックする
                                 if (token.value === 'それ') {
+                                    const tokenRefVar = (token as TokenRefVar)
                                     const declareSore: GlobalVariable = {
                                         name: 'それ',
                                         nameNormalized: 'それ',
@@ -193,8 +207,9 @@ export class Nako3TokenApplyer {
                                         range: null,
                                         isRemote: false,
                                         activeDeclare: true
-                                    };
-                                    (token as TokenRefVar).meta = declareSore
+                                    }
+                                    tokenRefVar.meta = declareSore
+                                    tokenRefVar.isWrite = isWrite
                                     type = 'sys_var'
                                 }
                                 if (type === 'word') {
@@ -204,6 +219,24 @@ export class Nako3TokenApplyer {
                                     this.errorInfos.addFromToken('ERROR', 'unknwonWord', { value: token.value }, token)
                                 }
                             }
+                        }
+                    }
+                }
+            } else if (type === 'FUNCTION_ARG_PARAMETER') {
+                // 自モジュールのローカルな変数・定数をチェックする
+                const v = token.value
+                const isWrite = (token as TokenRef).isWrite ? true : false
+                const tv = trimOkurigana(v)
+                const scopeId = getScopeId(i, scopeIdList)
+                const vars = this.moduleEnv.allScopeVarConsts.get(scopeId)
+                if (vars) {
+                    const thing = vars.get(tv)
+                    if (thing) {
+                        const tokenRefVar = (token as TokenRefVar)
+                        if (thing.origin === 'local' && thing.type === 'parameter') {
+                            // console.log(`hit:${scopeId}-${thing.name}-${thing.type}:${token.parseType}`)
+                            tokenRefVar.meta = thing as LocalVariable
+                            tokenRefVar.isWrite = isWrite
                         }
                     }
                 }

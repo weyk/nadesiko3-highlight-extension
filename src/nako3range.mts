@@ -7,22 +7,26 @@ export class Nako3Range {
     endCol: number
     resEndCol: number
 
-    constructor () {
-        this.startLine = 0
-        this.startCol = 0
-        this.endLine = 0
-        this.endCol = 0
-        this.resEndCol = 0
+    constructor (startLine: number, startCol: number, endLine: number, endCol: number, resEndCol: number) {
+        this.startLine = startLine
+        this.startCol = startCol
+        this.endLine = endLine
+        this.endCol = endCol
+        this.resEndCol = resEndCol
     }
 
     static fromToken (token: Token): Nako3Range {
-        const range = new Nako3Range()
-        range.startLine = token.startLine
-        range.startCol = token.startCol
-        range.endLine = token.endLine
-        range.endCol = token.endCol
-        range.resEndCol = token.resEndCol
+        const range = new Nako3Range(token.startLine, token.startCol, token.endLine, token.endCol, token.resEndCol)
         return range
+    }
+
+    equals (target: Nako3Range): boolean {
+        if (this.startLine !== target.startLine) { return false }
+        if (this.startCol !== target.startCol) { return false }
+        if (this.endLine !== target.endLine) { return false }
+        if (this.endCol !== target.endCol) { return false }
+        if (this.resEndCol !== target.resEndCol) { return false }
+        return true
     }
 }
   

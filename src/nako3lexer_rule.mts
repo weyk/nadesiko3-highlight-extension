@@ -1,6 +1,6 @@
 import type { Indent, TokenType, Nako3TokenTypeReserve, TokenGroup } from './nako3token.mjs'
 
-export type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'
+export type ProcMapKey = 'cbCommentBlock'|'cbCommentLine'|'cbString'|'cbStringEx'|'cbWord'|'cbWordEx'
 export type SubProcOptArgs = [] | [string, string] | [string, string, TokenType]
 export type SubProc = (text: string, indent: Indent, opts: SubProcOptArgs) => number
 export type ProcMap = { [K in ProcMapKey]: SubProc }
@@ -92,6 +92,7 @@ export const lexRules: LexRule[] = [
     { name: 'lt', group: '演算子', pattern: /^(<|＜)/ },
     { name: 'and', group: '演算子', pattern: /^(かつ|&&|＆＆|and\s)/ },
     { name: 'or', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\||｜｜)/ },
+    { name: 'word', group: '記号', pattern: /^[\$＄][\{｛].+?[\}｝]/, proc: 'cbWordEx',  procArgs: ['${', '}', 'word'], withJosi: true }, // 特別名前トークン(#1836)(#672)
     { name: '@', group: '記号', pattern: /^(@|＠)/ },
     { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
     { name: '-', group: '演算子', pattern: /^(-|−|－)/ },
@@ -118,7 +119,7 @@ export const lexRules: LexRule[] = [
     { name: 'eol', group: '記号', pattern: /^(。|;|；)/ },
     { name: 'word', group: '単語', pattern: /^[\uD800-\uDBFF][\uDC00-\uDFFF][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
     { name: 'word', group: '単語', pattern: /^[\u1F60-\u1F6F][_a-zA-Z0-9ａ-ｚＡ-Ｚ０-９]*/, withJosi: true },
-    { name: 'word', group: '単語', pattern: /^《.+?》/, withJosi: true },
+    { name: 'word', group: '単語', pattern: /^《.+?》/, proc: 'cbWordEx',  procArgs: ['《', '》', 'word'], withJosi: true },
     { name: 'word', group: '単語', pattern: /^[_a-zA-Zａ-ｚＡ-Ｚ\u3005\u4E00-\u9FCFぁ-んァ-ヶ\u2460-\u24FF\u2776-\u277F\u3251-\u32BF]/, proc: 'cbWord' },
 ]
 

@@ -2,6 +2,7 @@ import { Nako3TokenTypeReserve } from '../nako3token.mjs'
 /** 予約語 */
 const reserved: Map<string, Nako3TokenTypeReserve> = new Map([
   ['もし', 'もし'],
+  ['ならば', 'ならば'],
   ['回', '回'],
   ['回繰返', '回'], // (#924)
   ['間', '間'],
@@ -27,6 +28,7 @@ const reserved: Map<string, Nako3TokenTypeReserve> = new Map([
   ['変数', '変数'],
   ['定数', '定数'],
   ['エラー監視', 'エラー監視'], // 例外処理:エラーならばと対
+  ['エラーならば', 'エラーならば'],
   ['エラー', 'エラー'],
   ['それ', 'word'],
   ['そう', 'word'], // 「それ」のエイリアス

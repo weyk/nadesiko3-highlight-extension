@@ -14,27 +14,7 @@ import { ModuleEnv } from '../nako3module.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import { GlobalFunction } from '../nako3types.mjs'
-import type { Token } from '../nako3token.mjs'
-
-const kokomadePeirsStatements = [
-    '回', '間', '繰返', '増繰返', '減繰返', '後判定', '反復', '実行速度優先', 'パフォーマンスモニタ適用', '条件分岐', '条件分岐-違えば'
-]
-
-interface Nako3SymbolInfo {
-    name: string | null
-    type: string
-    token: Token
-    level: number
-}
-
-interface semanticStackInfo {
-    statement: string
-    tokenIndex: number
-    sameLine: string
-    canChigaeba: boolean
-    hasBody: boolean
-}
+import type { GlobalFunction } from '../nako3types.mjs'
 
 export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
     async provideDocumentSymbols(document: TextDocument, canceltoken: CancellationToken): Promise<SymbolInformation[] | DocumentSymbol[]> {

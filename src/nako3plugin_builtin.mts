@@ -85,7 +85,9 @@ function importCommandJson (json: CmdJsonEntry):void {
         const nakoRuntime = pluginRuntimes.get(pluginName)
         const pluginInfo: PluginInfo = {
             pluginName: pluginName,
-            isBuiltin: true,
+            location: 'builtin',
+            uri: null,
+            contentKey: '',
             nakoRuntime: nakoRuntime != null ? nakoRuntime.split(',') as NakoRuntime[] : [],
             declare: new Map()
         }

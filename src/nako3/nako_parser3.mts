@@ -9,7 +9,7 @@ import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
 import type { GlobalFunction, SourceMap, GlobalVariable, GlobalConstant, GlobalVarConst, LocalVariable } from '../nako3types.mjs'
-import type { Token, TokenDefFunc, TokenCallFunc } from '../nako3token.mjs'
+import type { Token, TokenDefFunc, TokenCallFunc, TokenRef, StatementLink, LinkMain, LinkRef, TokenLink } from '../nako3token.mjs'
 import type { NodeType, Ast, AstEol, AstBlocks, AstOperator, AstConst, AstLet, AstLetArray, AstIf, AstWhile, AstAtohantei, AstFor, AstForeach, AstSwitch, AstRepeatTimes, AstDefFunc, AstCallFunc, AstStrValue, AstDefVar, AstDefVarList } from './nako_ast.mjs'
 
 /**
@@ -180,7 +180,7 @@ export class NakoParser extends NakoParserBase {
       return this.yPrint()
     }
 
-    if (this.moduleOption.isIndentSemantic) {
+    if (this.currentIndentSemantic) {
       if (this.check('ここまで')) {
         const token = this.get()!
         this.errorInfos.addFromToken('ERROR', 'cannnotKokomade', {}, token)
@@ -223,9 +223,10 @@ export class NakoParser extends NakoParserBase {
       if (nextToken && nextToken.type === 'ならば') {
         const map = this.peekSourceMap()
         const cond = c1
-        this.get() // skip ならば
+        const narabaIndex = this.getIndex()
+        const naraba = this.getCur() // 'ならば'
         // もし文の条件として関数呼び出しがある場合
-        return this.yIfThen(cond, map)
+        return this.yIfThen(cond, naraba, [ narabaIndex, narabaIndex ], map)
       } else if (RenbunJosi.indexOf(c1.josi || '') >= 0) { // 連文をblockとして接続する(もし構文などのため)
         if (this.stack.length >= 1) { // スタックの余剰をチェック
           const reportOpts = this.makeStackBalanceReport()
@@ -290,7 +291,7 @@ export class NakoParser extends NakoParserBase {
     if (this.check('ここから')) { this.get() }
     while (!this.isEOF()) {
       if (this.checkTypes(['違えば', 'ここまで', 'エラー', 'エラーならば'])) { break }
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const peektoken = this.peek()
         if (peektoken !== null && peektoken.type !== 'eol' && peektoken.indent.level <= this.currentIndentLevel) {
           break
@@ -342,6 +343,7 @@ export class NakoParser extends NakoParserBase {
     const defToken: Token|null = this.get() // 'def_func' or 'def_test'
     if (!defToken) { return null }
     const def = defToken as TokenDefFunc
+    let statementCount = 1 // def_funcのトークンの分があるので1
 
     let isExport: boolean = def.meta.isExport
     if (this.check('FUNCTION_ATTR_PARENTIS_START')) {
@@ -377,17 +379,31 @@ export class NakoParser extends NakoParserBase {
       defArgs = this.yDefFuncReadArgs() || []
     }
 
-    if (this.check('とは')) { this.get() }
+    let tohaIndex : number|undefined = undefined
+    if (this.check('とは')) {
+      tohaIndex = this.getIndex()
+      statementCount++
+      this.get()
+    }
     let block: Ast = this.yNop()
     let multiline = false
     let asyncFn = false
-    if (this.check('ここから')) { multiline = true }
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    if (this.check(':')) {
+      this.get()
+      multiline = true
+      indentSemantic = true
+    }
+    let kokokaraIndex : number|undefined = undefined
+    if (this.check('ここから')) {
+      kokokaraIndex = this.getIndex()
+      this.getCur()
+      statementCount++
+      multiline = true
+    }
     if (this.check('eol')) { multiline = true }
+    let kokomadeIndex : number|undefined = undefined
     try {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentLevelStack.push({level: this.currentIndentLevel, tag: '関数'})
-        this.currentIndentLevel = def.indent.level
-      }
       this.funcLevel++
       this.usedAsyncFn = false
       def.meta.scopeId = this.pushScopeId(def, defTokenIndex)
@@ -398,6 +414,9 @@ export class NakoParser extends NakoParserBase {
 
       if (multiline) {
         this.saveStack()
+        this.indentPush('関数')
+        this.currentIndentLevel = def.indent.level
+        this.currentIndentSemantic = indentSemantic
         // 関数の引数をローカル変数として登録する
         for (const arg of def.meta.args!) {
           if (!arg || !arg.varname) { continue }
@@ -414,18 +433,20 @@ export class NakoParser extends NakoParserBase {
           this.addLocalvars(localvar)
         }
         block = this.yBlock()
-        if (this.moduleOption.isIndentSemantic) {
+        if (this.currentIndentSemantic) {
           const level = this.peek()?.indent.level
           if (level !== undefined && level <= this.currentIndentLevel) {
-            this.indentPop()
           }
         } else {
           if (this.check('ここまで')) {
-            this.get()
+            kokomadeIndex = this.getIndex()
+            statementCount++
+            this.getCur()
           } else {
             this.errorInfos.addFromToken('ERROR', 'noKokomadeAtFunc', {}, def)
           }
         }
+        this.indentPop(['関数'])
         this.loadStack()
       } else {
         this.saveStack()
@@ -443,6 +464,23 @@ export class NakoParser extends NakoParserBase {
       this.errorInfos.addFromToken('ERROR', 'exceptionInFuncDef', { nodestr: this.nodeToStr(funcName, { depth: 0, typeName: '関数' }, false), msg: err?.message }, def)
     }
 
+    if (statementCount > 1) {
+      const linkMain : LinkMain = { type: '関数', childTokenIndex: [defTokenIndex]};
+      (defToken as TokenLink).link = linkMain
+      if (tohaIndex !== undefined) {
+        linkMain.childTokenIndex.push(tohaIndex);
+        (this.tokens[tohaIndex] as TokenLink).link = { mainTokenIndex: defTokenIndex }
+      }
+      if (kokokaraIndex !== undefined) {
+        linkMain.childTokenIndex.push(kokokaraIndex);
+        (this.tokens[kokokaraIndex] as TokenLink).link = { mainTokenIndex: defTokenIndex }
+      }
+      if (kokomadeIndex !== undefined) {
+        linkMain.childTokenIndex.push(kokomadeIndex);
+        (this.tokens[kokomadeIndex] as TokenLink).link = { mainTokenIndex: defTokenIndex }
+      }
+    }
+
     return {
       type,
       name: funcName?.value || 'noname',
@@ -457,7 +495,7 @@ export class NakoParser extends NakoParserBase {
   }
 
   /** 「もし」文の条件を取得 */
-  yIFCond (): Ast {
+  yIFCond (): [ Ast, Token|null, number|undefined ] {
     const map = this.peekSourceMap()
     let a: Ast | null = this.yGetArg()
     if (!a) {
@@ -465,15 +503,16 @@ export class NakoParser extends NakoParserBase {
       a = this.yNop()
     }
     // console.log('@@yIFCond=', a)
+    let narabaIndex : number | undefined = undefined
     // チェック : Aならば
     if (a.josi === 'ならば') {
       logger.error('parer:ifCond:nawaba was josi')
-      return a
+      return [ a, null, undefined ]
     }
     if (a.josi === 'でなければ') {
       logger.error('parer:ifCond:denakereba was josi')
       a = { type: 'not', operator: 'not', blocks:[a], josi: '', ...this.fromSourceMap(map) } as AstOperator
-      return a
+      return [ a, null, undefined ]
     }
     // チェック : AがBならば --- 「関数B(A)」のとき
     if ((a.josi !== '') && (this.checkTypes(['user_func', 'sys_func']))) {
@@ -493,21 +532,24 @@ export class NakoParser extends NakoParserBase {
           this.errorInfos.addFromToken('ERROR', 'complicatedIfCond', { nodestr }, map)
           b = this.yNop()
         }
-        let naraba:any = { 'value': 'ならば' }
+        let naraba:any = undefined
         if (b.josi === 'ならば' || b.josi === 'でなければ') {
           logger.error('parer:ifCond:nawaba/denakereba was josi')
-          naraba.value = b.josi
+          naraba =  { 'value': b.josi }
         } else if (this.check('ならば')) {
-          naraba = this.get()
+          narabaIndex = this.getIndex()
+          naraba = this.get() || { 'value': 'ならば' }
         }
-        return {
-          type: 'op',
-          operator: (naraba.value === 'でなければ') ? 'noteq' : 'eq',
-          blocks: [a, b],
-          josi: '',
-          ...this.fromSourceMap(map)
-        } as AstOperator
-        // this.index = tmpI
+        if (naraba) {
+          return [ {
+            type: 'op',
+            operator: (naraba.value === 'でなければ') ? 'noteq' : 'eq',
+            blocks: [a, b],
+            josi: '',
+            ...this.fromSourceMap(map)
+          } as AstOperator, naraba, narabaIndex ]
+        }
+        this.index = tmpI
       }
     // もし文で追加の関数呼び出しがある場合
     if (!this.check('ならば')) {
@@ -521,6 +563,7 @@ export class NakoParser extends NakoParserBase {
         'もし文で『ならば』がないか、条件が複雑過ぎます。' + this.nodeToStr(this.peek(), { depth: 1 }, false) + 'の直前に『ならば』を書いてください。', smap)
         this.errorInfos.addFromToken('ERROR', 'complicatedIfCondOrNoNaraba', { nodestr: this.nodeToStr(this.peek(), { depth: 1 }, false) }, smap)
     }
+    narabaIndex = this.getIndex()
     const naraba = this.get()
     // 否定形のチェック
     if (naraba && naraba.value === 'でなければ') {
@@ -536,7 +579,7 @@ export class NakoParser extends NakoParserBase {
       this.errorInfos.addFromToken('ERROR', 'invalidConditionAtIf', { nodestr: this.nodeToStr(this.peek(), { depth: 1 }, false) }, map)
       a = this.yNop()
     }
-    return a
+    return [ a, naraba, narabaIndex ]
   }
 
   /** もし文
@@ -545,76 +588,134 @@ export class NakoParser extends NakoParserBase {
     const map = this.peekSourceMap()
     // 「もし」があれば「もし」文である
     if (!this.check('もし')) { return null }
-    const mosi:Token|null = this.get() // skip もし
-    if (mosi == null) { return null }
+    const mosiIndex = this.getIndex()
+    const mosi:Token = this.getCur() // もし
     while (this.check(',')) { this.get() } // skip comma
     // 「もし」文の条件を取得
     let expr: Ast | null = null
+    let naraba : Token | null = null
+    let narabaIndex : number | undefined = undefined
     try {
-      expr = this.yIFCond()
+      [ expr, naraba, narabaIndex ] = this.yIFCond()
     } catch (err: any) {
       this.errorInfos.addFromToken('ERROR', 'exceptionInIfCond', { msg: err?.message }, mosi)
       expr = this.yNop()
     }
-    return this.yIfThen(expr, map)
+    return this.yIfThen(expr, naraba || mosi, [ mosiIndex, narabaIndex ], map)
   }
 
   /** 「もし」文の「もし」以降の判定 ... 「もし」がなくても条件分岐は動くようになっている
    * @returns {AstIf | null}
   */
-  yIfThen (expr: Ast, map: SourceMap): AstIf | null {
+  yIfThen (expr: Ast, naraba: Token, linkInfo: [ number, number | undefined ], map: SourceMap): AstIf | null {
     // 「もし」文の 真偽のブロックを取得
-    let trueBlock: Ast = this.yNop()
+   let trueBlock: Ast = this.yNop()
     let falseBlock: Ast = this.yNop()
-    let tanbun = false
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    let hasKokomade = false
+    let mainIndex = linkInfo[0]
+    let narabaIndex = linkInfo[1]
+
+    let statementCount = 1 // 代表トークンは必ずあるので初期値は1
+    if (narabaIndex !== undefined && mainIndex !== narabaIndex) {
+      // 代表トークンが「ならば」と別にあるなら１つカウントアップ
+      statementCount++
+    }
 
     // True Block
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
+    }
+    while (this.check(',')) { this.get() } // skip comma
     if (this.check('eol')) {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('ならば')
-      }
+      this.indentPush('ならば')
+      this.currentIndentLevel = naraba.indent.level
+      this.currentIndentSemantic = indentSemantic
       trueBlock = this.yBlock()
+      if (this.currentIndentSemantic) {
+        const level = this.peek()?.indent.level
+        if (level !== undefined && level <= this.currentIndentLevel) {
+        }
+      } else {
+        if (this.check('ここまで')) {
+          hasKokomade = true
+        } else if (this.check('違えば')) {
+          // nop
+        } else {
+          this.errorInfos.addFromToken('ERROR', 'noKokomadeAtIf', {}, map)
+        }
+      }
+      this.indentPop(['ならば'])
     } else {
       const block: Ast|null = this.ySentence()
       if (block) { trueBlock = block }
-      tanbun = true
     }
 
     // skip EOL
     while (this.check('eol')) { this.get() }
 
+    let chigaebaIndex : number | undefined = undefined
     // False Block
     if (this.check('違えば')) {
-      const chigaeba = this.get() // skip 違えば
+      let indentSemantic = this.moduleOption.isIndentSemantic
+      chigaebaIndex = this.getIndex()
+      statementCount++
+      const chigaeba = this.getCur() // skip 違えば
+      if (this.check(':')) {
+        this.get()
+        indentSemantic = true
+      }
       while (this.check(',')) { this.get() }
       if (this.check('eol')) {
-        if (this.moduleOption.isIndentSemantic) {
-          this.indentPush('違えば')
-        }
+        this.indentPush('違えば')
+        this.currentIndentLevel = chigaeba!.indent.level
+        this.currentIndentSemantic = indentSemantic
         falseBlock = this.yBlock()
+        if (this.currentIndentSemantic) {
+          const level = this.peek()?.indent.level
+          if (level !== undefined && level <= this.currentIndentLevel) {
+          }
+        } else {
+          if (this.check('ここまで')) {
+            hasKokomade = true
+          } else {
+            this.errorInfos.addFromToken('ERROR', 'noKokomadeAtIf', {}, map)
+          }
+        }
+        this.indentPop(['違えば'])
       } else {
         const block: Ast|null = this.ySentence() 
         if (block) { falseBlock = block }
-        tanbun = true
       }
     }
 
-    if (tanbun === false) {
-      if (this.moduleOption.isIndentSemantic) {
-        const level = this.peek()?.indent.level
-        if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
-        } else {
-          this.errorInfos.addFromToken('ERROR', 'noKokomadeAtIf', {}, map)
-        }
-      } else {
-        if (this.check('ここまで')) {
-          this.get()
-        } else {
-          this.errorInfos.addFromToken('ERROR', 'noKokomadeAtIf', {}, map)
-        }
+    let kokomadeIndex : number | undefined = undefined
+    if (hasKokomade) {
+      if (this.check('ここまで')) {
+        kokomadeIndex = this.getIndex()
+        statementCount++
+        this.getCur()
       }
     }
+
+    if (statementCount > 1) {
+      const linkMain : LinkMain = { type: 'もし', childTokenIndex: [mainIndex]};
+      (this.tokens[mainIndex] as TokenLink).link = linkMain
+      if (narabaIndex !== undefined && narabaIndex !== mainIndex) {
+        linkMain.childTokenIndex.push(narabaIndex);
+        (this.tokens[narabaIndex] as TokenLink).link = { mainTokenIndex: mainIndex }
+      }
+      if (chigaebaIndex !== undefined) {
+        linkMain.childTokenIndex.push(chigaebaIndex);
+        (this.tokens[chigaebaIndex] as TokenLink).link = { mainTokenIndex: mainIndex }
+      }
+      if (kokomadeIndex !== undefined) {
+        linkMain.childTokenIndex.push(kokomadeIndex);
+        (this.tokens[kokomadeIndex] as TokenLink).link = { mainTokenIndex: mainIndex }
+      }
+    }
+
     return {
       type: 'if',
       blocks: [expr, trueBlock, falseBlock],
@@ -629,6 +730,7 @@ export class NakoParser extends NakoParserBase {
       return null
     }
     const optionNode: Token|null = this.get()
+    const speedIndex = this.getIndex()
     const speed = this.getCur()
     let indentBase = speed
     let val = ''
@@ -654,8 +756,16 @@ export class NakoParser extends NakoParserBase {
       }
     }
 
+    let indentSemantic = this.moduleOption.isIndentSemantic
     let multiline = false
+    if (this.check(':')) {
+      this.get()
+      multiline = true
+      indentSemantic = true
+    }
+    let kokokaraIndex: number|undefined = undefined
     if (this.check('ここから')) {
+      kokokaraIndex = this.getIndex()
       indentBase = this.getCur()
       multiline = true
     } else if (this.check('eol')) {
@@ -664,21 +774,32 @@ export class NakoParser extends NakoParserBase {
 
     let block: Ast = this.yNop()
     if (multiline) {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('実行速度優先')
-        this.currentIndentLevel = indentBase.indent.level
-      }
+      this.indentPush('実行速度優先')
+      this.currentIndentLevel = indentBase.indent.level
+      this.currentIndentSemantic = indentSemantic
       block = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur()
+          const linkMain : LinkMain = { type: '実行速度優先', childTokenIndex: [speedIndex]};
+          (speed as TokenLink).link = linkMain
+          if (kokokaraIndex !== undefined) {
+            (this.tokens[kokokaraIndex] as TokenLink).link = { mainTokenIndex: speedIndex }
+            linkMain.childTokenIndex.push(kokokaraIndex)
+          }
+          (kokomade as TokenLink).link = { mainTokenIndex: speedIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
+        } else {
+          logger.debug(`実行速度優先の『ここまで』が省略されています。`)
+          this.errorInfos.addFromToken('WARN', 'shortenedKokomadeForOptimize', {}, speed)
         }
       }
+      this.indentPop(['実行速度優先'])
     } else {
       block = this.ySentence() || block
     }
@@ -699,7 +820,9 @@ export class NakoParser extends NakoParserBase {
     }
     const optionNode = this.get()
     if (!optionNode) { return null }
-    let indentBase: Token = this.getCur()
+    const permonIndex = this.getIndex()
+    const permon = this.getCur()
+    let indentBase: Token = permon
 
     const options: {[key: string]: boolean} = { ユーザ関数: false, システム関数本体: false, システム関数: false }
     for (const name of optionNode.value.split('/')) {
@@ -721,8 +844,11 @@ export class NakoParser extends NakoParserBase {
       }
     }
 
+    let indentSemantic = this.moduleOption.isIndentSemantic
     let multiline = false
+    let kokokaraIndex: number|undefined = undefined
     if (this.check('ここから')) {
+      kokokaraIndex = this.getIndex()
       indentBase = this.getCur()
       multiline = true
     } else if (this.check('eol')) {
@@ -731,21 +857,32 @@ export class NakoParser extends NakoParserBase {
 
     let block: Ast = this.yNop()
     if (multiline) {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('パフォーマンスモニタ適用')
-        this.currentIndentLevel = indentBase.indent.level
-      }
+      this.indentPush('パフォーマンスモニタ適用')
+      this.currentIndentLevel = indentBase.indent.level
+      this.currentIndentSemantic = indentSemantic
       block = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur()
+          const linkMain : LinkMain = { type: 'パフォーマンスモニタ適用', childTokenIndex: [permonIndex]};
+          (permon as TokenLink).link = linkMain
+          if (kokokaraIndex !== undefined) {
+            (this.tokens[kokokaraIndex] as TokenLink).link = { mainTokenIndex: permonIndex }
+            linkMain.childTokenIndex.push(kokokaraIndex)
+          }
+          (kokomade as TokenLink).link = { mainTokenIndex: permonIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
+        } else {
+          logger.debug(`パフォーマンスモニタ適用の『ここまで』が省略されています。`)
+          this.errorInfos.addFromToken('WARN', 'shortenedKokomadeForPerformanceMonitor', {}, permon)
         }
       }
+      this.indentPop(['パフォーマンスモニタ適用'])
     } else {
       block = this.ySentence() || block
     }
@@ -971,37 +1108,58 @@ export class NakoParser extends NakoParserBase {
   yRepeatTime(): AstRepeatTimes | null {
     const map = this.peekSourceMap()
     if (!this.check('回')) { return null }
-    let indentBase = this.getCur() // skip '回'
+    const kaiIndex = this.getIndex()
+    const kai = this.getCur() // '回'
+    let indentBase = kai
+    const linkMain : LinkMain = { type: '回', childTokenIndex: [kaiIndex]};
+    (kai as TokenLink).link = linkMain
     if (this.check(',')) { this.get() } // skip comma
-    if (this.check('繰返')) { this.get() } // skip 'N回、繰り返す' (#924)
+    if (this.check('繰返')) {
+      const kurikaesuIndex = this.getIndex()
+      const kurikaesu = this.getCur() // 'N回、繰り返す' (#924)
+      linkMain.childTokenIndex.push(kurikaesuIndex);
+      (kurikaesu as TokenLink).link = { mainTokenIndex: kaiIndex }
+    }
     const num = this.popStack([]) || { type: 'word', value: 'それ', josi: '', ...this.fromSourceMap(map) } as Ast
-    let multiline = false
     let block: Ast = this.yNop()
+
+    let multiline = false
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    if (this.check(':')) {
+      this.get()
+      multiline = true
+      indentSemantic = true
+    }
     if (this.check(',')) { this.get() }
     if (this.check('ここから')) {
-      indentBase = this.get()!
       multiline = true
+      const kokokaraIndex = this.getIndex()
+      const kokokara = this.getCur()
+      linkMain.childTokenIndex.push(kokokaraIndex);
+      (kokokara as TokenLink).link = { mainTokenIndex: kaiIndex }
     } else if (this.check('eol')) {
       multiline = true
     }
     if (multiline) { // multiline
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('回')
-        this.currentIndentLevel = indentBase.indent.level
-      }
+      this.indentPush('回')
+      this.currentIndentLevel = indentBase.indent.level
+      this.currentIndentSemantic = indentSemantic
       block = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur();
+          (kokomade as TokenLink).link = { mainTokenIndex: kaiIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
         } else {
           this.errorInfos.addFromToken('ERROR', 'noKokomadeAtForLoop', {}, map)
         }
       }
+      this.indentPop(['回'])
     } else {
       // singleline
       const b = this.ySentence()
@@ -1018,8 +1176,11 @@ export class NakoParser extends NakoParserBase {
   /** @returns {AstWhile | null} */
   yWhile(): AstWhile | null { // 「＊の間」文
     const map = this.peekSourceMap()
+    let indentSemantic = this.moduleOption.isIndentSemantic
     if (!this.check('間')) { return null }
-    let indentBase = this.get()! // skip '間'
+    const aidaIndex = this.getIndex()
+    let aida = this.getCur() // '間'
+    let indentBase = aida
     while (this.check(',')) { this.get() } // skip ','
     if (this.check('繰返')) { this.get() } // skip '繰り返す' #927
     let expr = this.popStack()
@@ -1027,19 +1188,21 @@ export class NakoParser extends NakoParserBase {
       this.errorInfos.addFromToken('ERROR', 'noExprWhile', {}, map)
       expr = this.yNop()
     }
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
+    }
     if (this.check(',')) { this.get() }
     if (!this.checkTypes(['ここから', 'eol'])) {
       this.errorInfos.addFromToken('ERROR', 'requireLfAfterWhile', {}, map)
     }
-    if (this.moduleOption.isIndentSemantic) {
-      this.indentPush('間')
-      this.currentIndentLevel = indentBase.indent.level
-    }
+    this.indentPush('間')
+    this.currentIndentLevel = indentBase.indent.level
+    this.currentIndentSemantic = indentSemantic
     const block = this.yBlock()
-    if (this.moduleOption.isIndentSemantic) {
+    if (this.currentIndentSemantic) {
       const level = this.peek()?.indent.level
       if (level !== undefined && level <= this.currentIndentLevel) {
-        this.indentPop()
       }
     } else {
       if (this.check('ここまで')) {
@@ -1048,6 +1211,7 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'noKokomadeAtWhile', {}, map)
       }
     }
+    this.indentPop(['間'])
     return {
       type: 'while',
       blocks: [expr, block],
@@ -1059,25 +1223,32 @@ export class NakoParser extends NakoParserBase {
   /** @returns {AstAtohantei | null} */
   yAtohantei(): AstAtohantei |null {
     const map = this.peekSourceMap()
-    let indentBase: Token|null  = null
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    let indentBase: Token|null  = null 
     if (this.check('後判定')) { indentBase = this.get() } // skip 後判定
     if (this.check('繰返')) { indentBase = this.get() } // skip 繰り返す
-    if (this.check('ここから')) { indentBase = this.get() }
-    if (this.moduleOption.isIndentSemantic) {
-      this.indentPush('後判定')
-      this.currentIndentLevel = indentBase!.indent.level
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
     }
+    if (this.check('ここから')) { indentBase = this.get() }
+    indentBase = indentBase || this.peekDef()
+    this.indentPush('後判定')
+    this.currentIndentLevel = indentBase.indent.level
+    this.currentIndentSemantic = indentSemantic
     const block = this.yBlock()
-    if (this.moduleOption.isIndentSemantic) {
+    if (this.currentIndentSemantic) {
       const level = this.peek()?.indent.level
       if (level !== undefined && level <= this.currentIndentLevel) {
-        this.indentPop()
       }
     } else {
       if (this.check('ここまで')) {
         this.get()
+      } else {
+        logger.debug(`後判定に『ここまで』がありません。`)
       }
     }
+    this.indentPop(['後判定'])
     if (this.check(',')) { this.get() }
     let cond = this.yGetArg() // 条件
     let bUntil = false
@@ -1115,16 +1286,19 @@ export class NakoParser extends NakoParserBase {
     } else {
       return null
     }
-    const kurikaesu: Token = this.getCur() // skip 繰り返す
+    const kurikaesuIndex = this.getIndex()
+    const kurikaesu: Token = this.getCur() // 繰り返す
     let indentBase = kurikaesu
     // スタックに(増や|減ら)してがある？
-    const incdec = this.stack.pop()
+    let incdec = this.stack.pop()
+    let incdecIndex: number|undefined = undefined
     if (incdec) {
       const v = trimOkurigana(incdec.value)
       if (incdec.type === 'word' && (v === '増' || v === '減')) {
         incdec.value = v
         if (v === '増') { flagDown = false }
         const w = incdec.value + kurikaesu.type
+        incdecIndex = incdec.incdecIndex
         if (w == '増繰返') {
           kurikaesu.type =  '増繰返'
         } else if (w == '減繰返') {
@@ -1135,6 +1309,7 @@ export class NakoParser extends NakoParserBase {
       } else {
         // 普通の繰り返しの場合
         this.stack.push(incdec) // 違ったので改めて追加
+        incdec = null
       }
     }
     let vInc: Ast = this.yNop()
@@ -1163,34 +1338,52 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'errorFromToAtFor', {}, kurikaesu)
       }
     }
-    if (this.check(',')) { this.get() } // skip comma
+    const linkMain : LinkMain = { type: '繰返', childTokenIndex: [kurikaesuIndex]};
+    (kurikaesu as TokenLink).link = linkMain
+    if (incdec && incdecIndex !== undefined) {
+      linkMain.childTokenIndex.push(incdecIndex);
+      (this.tokens[incdecIndex] as TokenLink).link = { mainTokenIndex: kurikaesuIndex }
+    }
     let multiline = false
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    if (this.check(':')) {
+      this.get()
+      multiline = true
+      indentSemantic = true
+    }
+    if (this.check(',')) { this.get() } // skip comma
     if (this.check('ここから')) {
       multiline = true
-      indentBase = this.getCur()
+      const kokokaraIndex = this.getIndex()
+      const kokokara = this.getCur()
+      indentBase = kokokara
+      linkMain.childTokenIndex.push(kokokaraIndex);
+      (kokokara as TokenLink).link = { mainTokenIndex: kurikaesuIndex }
     } else if (this.check('eol')) {
       multiline = true
       this.get()
     }
     let block: Ast = this.yNop()
     if (multiline) {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('繰返')
-        this.currentIndentLevel = indentBase.indent.level
-      }
+      this.indentPush('繰返')
+      this.currentIndentLevel = indentBase.indent.level
+      this.currentIndentSemantic = indentSemantic
       block = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur();
+          (kokomade as TokenLink).link = { mainTokenIndex: kurikaesuIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
         } else {
           this.errorInfos.addFromToken('ERROR', 'noKokomadeAtLoop', {}, map)
         }
       }
+      this.indentPop(['繰返'])
     } else {
       const b = this.ySentence()
       if (b) { block = b }
@@ -1231,7 +1424,9 @@ export class NakoParser extends NakoParserBase {
   yForEach(): AstForeach |null {
     const map = this.peekSourceMap()
     if (!this.check('反復')) { return null }
-    let indentBase = this.getCur() // skip '反復'
+    const hanpukuIndex = this.getIndex()
+    const hanpuku = this.getCur() // '反復'
+    let indentBase = hanpuku
     while (this.check(',')) { this.get() } // skip ','
     const target = this.popStack(['を']) || this.yNop()
     // target == null なら「それ」の値が使われる
@@ -1245,31 +1440,45 @@ export class NakoParser extends NakoParserBase {
         const nameToken = this.getVarName(name)
       }
     }
+    const linkMain : LinkMain = { type: '反復', childTokenIndex: [hanpukuIndex]};
+    (hanpuku as TokenLink).link = linkMain
     let block: Ast = this.yNop()
     let multiline = false
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    if (this.check(':')) {
+      this.get()
+      multiline = true
+      indentSemantic = true
+    }
     if (this.check('ここから')) {
       multiline = true
       indentBase = this.getCur()
+      const kokokaraIndex = this.getIndex()
+      const kokokara = this.getCur()
+      linkMain.childTokenIndex.push(kokokaraIndex);
+      (kokokara as TokenLink).link = { mainTokenIndex: hanpukuIndex }
     } else if (this.check('eol')) { multiline = true }
 
     if (multiline) {
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('反復')
-        this.currentIndentLevel = indentBase.indent.level
-      }
+      this.indentPush('反復')
+      this.currentIndentLevel = indentBase.indent.level
+      this.currentIndentSemantic = indentSemantic
       block = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur();
+          (kokomade as TokenLink).link = { mainTokenIndex: hanpukuIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
         } else {
           this.errorInfos.addFromToken('ERROR', 'noKokomadeAtForOf', {}, map)
         }
       }
+      this.indentPop(['反復'])
     } else {
       const b = this.ySentence()
       if (b) { block = b }
@@ -1290,8 +1499,14 @@ export class NakoParser extends NakoParserBase {
   ySwitch (): AstSwitch | null {
     const map = this.peekSourceMap()
     if (!this.check('条件分岐')) { return null }
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    const joukenbunkiIndex = this.getIndex()
     const joukenbunki = this.get() // skip '条件分岐'
     if (!joukenbunki) { return null }
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
+    }
     const eol = this.get() // skip 'eol'
     if (!eol) { return null }
     let expr = this.popStack(['で'])
@@ -1306,10 +1521,11 @@ export class NakoParser extends NakoParserBase {
     const blocks: Ast[] = []
     blocks[0] = expr
     blocks[1] = this.yNop() // 後で default のAstを再設定するため
-    if (this.moduleOption.isIndentSemantic) {
-      this.indentPush('条件分岐')
-      this.currentIndentLevel = joukenbunki.indent.level
-    }
+    const linkMain : LinkMain = { type: '条件分岐', childTokenIndex: [joukenbunkiIndex]};
+    (joukenbunki as TokenLink).link = linkMain
+    this.indentPush('条件分岐')
+    this.currentIndentLevel = joukenbunki.indent.level
+    this.currentIndentSemantic = indentSemantic
     //
     while (!this.isEOF()) {
       if (this.check('eol')) {
@@ -1317,59 +1533,84 @@ export class NakoParser extends NakoParserBase {
         continue
       }
       // ここまで？
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
+          this.indentPop(['条件分岐'])
           break
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          this.indentPop(['条件分岐'])
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur();
+          (kokomade as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
           break
         }
       }
       // 違えば？
       const condToken: Token|null = this.peek()
       if (condToken && condToken.type === '違えば') {
+        let indentSemantic = this.moduleOption.isIndentSemantic
+        const chigaebaIndex = this.getIndex()
         const chigaeba = this.getCur() // skip 違えば
-        if (this.moduleOption.isIndentSemantic) {
-          this.indentPush('違えば')
-          this.currentIndentLevel = chigaeba.indent.level
+        if (this.check(':')) {
+          this.get()
+          indentSemantic = true
         }
         if (this.check(',')) { this.get() } // skip ','
+        linkMain.childTokenIndex.push(chigaebaIndex);
+        (chigaeba as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+        this.indentPush('違えば')
+        this.currentIndentLevel = chigaeba.indent.level
+        this.currentIndentSemantic = indentSemantic
         const defaultBlock = this.yBlock()
-        if (this.moduleOption.isIndentSemantic) {
+        if (this.currentIndentSemantic) {
           const level = this.peek()?.indent.level
           if (level !== undefined && level <= this.currentIndentLevel) {
-            this.indentPop()
           }
         } else {
           if (this.check('ここまで')) {
-            this.get()
+            const kokomadeIndex = this.getIndex()
+            const kokomade = this.getCur();
+            (kokomade as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+            linkMain.childTokenIndex.push(kokomadeIndex)
+          } else {
+            logger.debug(`条件分岐-違えばに『ここまで』がありません。`)
           }
         }
+        this.indentPop(['違えば'])
         while (this.check('eol')) { this.get() } // skip eol
-        if (this.moduleOption.isIndentSemantic) {
+        // 条件分岐の『違えば』の閉じるしかないので続けて検証する。
+        if (this.currentIndentSemantic) {
           const level = this.peek()?.indent.level
           if (level !== undefined && level <= this.currentIndentLevel) {
-            this.indentPop()
           }
         } else {
           if (this.check('ここまで')) {
-            this.get()
+            const kokomadeIndex = this.getIndex()
+            const kokomade = this.getCur();
+            (kokomade as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+            linkMain.childTokenIndex.push(kokomadeIndex)
+          } else {
+            logger.debug(`条件分岐に『ここまで』がありません。`)
           }
         }
+        this.indentPop(['条件分岐'])
+        while (this.check('eol')) { this.get() } // skip eol
         blocks[1] = defaultBlock
         break
       }
       // 通常の条件
+      let indentSemantic = this.moduleOption.isIndentSemantic
       let indentTop = this.peek()
       let cond: Ast | null = this.yValue()
       if (!cond) {
         this.errorInfos.addFromToken('ERROR', 'suggestSwitchCase', {}, joukenbunki)
         cond = this.yNop()
       }
+      const narabaIndex = this.getIndex()
       const naraba = this.get() // skip ならば
       if (!naraba || naraba.type !== 'ならば') {
         this.errorInfos.addFromToken('ERROR', 'requireNarabaForSwitch', {}, joukenbunki)
@@ -1377,23 +1618,33 @@ export class NakoParser extends NakoParserBase {
       } else {
         indentTop = naraba
       }
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('ならば')
-        this.currentIndentLevel = indentTop.indent.level
+      if (this.check(':')) {
+        this.get()
+        indentSemantic = true
       }
+      linkMain.childTokenIndex.push(narabaIndex);
+      (naraba as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+      this.indentPush('ならば')
+      this.currentIndentLevel = indentTop.indent.level
+      this.currentIndentSemantic = indentSemantic
       if (this.check(',')) { this.get() } // skip ','
       // 条件にあったときに実行すること
       const condBlock = this.yBlock()
-      if (this.moduleOption.isIndentSemantic) {
+      if (this.currentIndentSemantic) {
         const level = this.peek()?.indent.level
         if (level !== undefined && level <= this.currentIndentLevel) {
-          this.indentPop()
         }
       } else {
         if (this.check('ここまで')) {
-          this.get()
+          const kokomadeIndex = this.getIndex()
+          const kokomade = this.getCur();
+          (kokomade as TokenLink).link = { mainTokenIndex: joukenbunkiIndex }
+          linkMain.childTokenIndex.push(kokomadeIndex)
+        } else {
+          logger.debug(`条件分岐-ならばに『ここまで』がありません。`)
         }
       }
+      this.indentPop(['ならば'])
       blocks.push(cond)
       blocks.push(condBlock)
     }
@@ -1417,12 +1668,17 @@ export class NakoParser extends NakoParserBase {
     const defTokenIndex = this.index
     const defToken = this.get()
     if (!defToken) { return null }
+    let indentSemantic = this.moduleOption.isIndentSemantic
     const def = defToken as TokenDefFunc
     let args: Ast[] = []
     // 「,」を飛ばす
     if (this.check(',')) { this.get() }
     // 関数の引数定義は省略できる
     if (this.check('FUNCTION_ARG_PARENTIS_START')) { args = this.yDefFuncReadArgs() || [] }
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
+    }
     // 「,」を飛ばす
     if (this.check(',')) { this.get() }
     // ブロックを読む
@@ -1431,11 +1687,11 @@ export class NakoParser extends NakoParserBase {
     // ローカル変数を生成
     const backupLocalvars = this.localvars
     this.localvars = new Map([['それ', this.genDeclareSore()]])
+
+    this.indentPush('には')
+    this.currentIndentLevel = def.indent.level
+    this.currentIndentSemantic = indentSemantic
     this.saveStack()
-    if (this.moduleOption.isIndentSemantic) {
-      this.indentPush('には')
-      this.currentIndentLevel = def.indent.level
-    }
     // 関数の引数をローカル変数として登録する
     for (const arg of def.meta.args!) {
       if (!arg || !arg.varname) { continue }
@@ -1454,18 +1710,23 @@ export class NakoParser extends NakoParserBase {
 
     const block = this.yBlock()
     // 末尾の「ここまで」をチェック - もしなければエラーにする #1045
-    if (this.moduleOption.isIndentSemantic) {
+    if (this.currentIndentSemantic) {
       const level = this.peek()?.indent.level
       if (level !== undefined && level <= this.currentIndentLevel) {
-        this.indentPop()
       }
     } else {
       if (this.check('ここまで')) {
-        this.get()
+        const kokomadeIndex = this.getIndex()
+        const kokomade = this.getCur()
+        const linkMain : LinkMain = { type: '無名関数', childTokenIndex: [defTokenIndex]};
+        (defToken as TokenLink).link = linkMain
+        linkMain.childTokenIndex.push(kokomadeIndex);
+        (kokomade as TokenLink).link = { mainTokenIndex: defTokenIndex }
       } else {
         this.errorInfos.addFromToken('ERROR', 'noKokomadeAtNiwa', {}, map)
       }
     }
+    this.indentPop(['には'])
     this.loadStack()
     this.popScopeId()
     def.endTokenIndex = this.index
@@ -1497,6 +1758,9 @@ export class NakoParser extends NakoParserBase {
     if (word.type === 'ref_array') {
       const indexArray = word.index || []
       const blocks = [value, ...indexArray]
+      for (const i in indexArray) {
+        (blocks[i] as TokenRef).isWrite = true
+      }
       return {
         type: 'let_array',
         name: (word.name as AstStrValue).value,
@@ -1508,7 +1772,8 @@ export class NakoParser extends NakoParserBase {
       } as AstLetArray
     }
     // 一般的な変数への代入
-    const word2 = this.getVarName(word)
+    const word2 = this.getVarName(word);
+    (word as TokenRef).isWrite = true
     return {
       type: 'let',
       name: (word2 as AstStrValue).value,
@@ -1533,15 +1798,24 @@ export class NakoParser extends NakoParserBase {
     // 公開設定
     let isExport: boolean = this.moduleOption.isExportDefault
     if (this.check2(['{', 'word', '}'])) {
-      this.get() // skip {
+      const s = this.get()
+      if (s) {
+        s.type = 'VARIABLE_ATTR_PARENTIS_START'
+      }
       const attrNode = this.get()
       if (attrNode === null) {
         this.errorInfos.addFromToken('ERROR', 'errorSadameruAttr', { name: (word as AstStrValue).value }, word)
+      } else {
+        attrNode.type = 'VARIABLE_ATTRIBUTE'
+        const attr = attrNode.value
+        if (attr === '公開') { isExport = true } else if (attr === '非公開') { isExport = false } else if (attr === 'エクスポート') { isExport = true } else { logger.warn(`不明な変数属性『${attr}』が指定されています。`) }
       }
-      const attr = attrNode?.value || ''
-      if (attr === '公開') { isExport = true } else if (attr === '非公開') { isExport = false } else if (attr === 'エクスポート') { isExport = true } else { logger.warn(`不明な変数属性『${attr}』が指定されています。`) }
-      this.get() // skip }
+      const e = this.get()
+      if (e) {
+        e.type = 'VARIABLE_ATTR_PARENTIS_END'
+      }
     }
+    (word as TokenRef).isWrite = true
     // 変数を生成する
     const nameToken = this.createVar(word as AstStrValue, true, isExport, true)
     return {
@@ -1558,12 +1832,13 @@ export class NakoParser extends NakoParserBase {
 
   yIncDec (): AstBlocks | null {
     const map = this.peekSourceMap()
+    const actionIndex = this.getIndex()
     const action = this.get() // (増やす|減らす)
     if (action === null) { return null }
 
     // 『Nずつ増やして繰り返す』文か？
     if (this.check('繰返')) {
-      this.pushStack({ type: 'word', value: action.value, josi: action.josi, ...this.fromSourceMap(map) })
+      this.pushStack({ type: 'word', value: action.value, josi: action.josi, incdecIndex: actionIndex, ...this.fromSourceMap(map) })
       return this.yFor()
     }
 
@@ -1583,6 +1858,18 @@ export class NakoParser extends NakoParserBase {
       value = { type: 'op', operator: '*', blocks: [value, minus_one], josi: '', ...map } as AstOperator
     }
 
+    if (word) {
+      if (word.type === 'ref_array') {
+        const indexArray = word.index
+        if (indexArray) {
+          for (let i in indexArray) {
+            (this.tokens[i] as TokenRef).isWrite = true
+          }
+        }
+      } else if (word.type === 'word') {
+        (word as TokenRef).isWrite = true
+      }
+    }
     return {
       type: 'inc',
       name: word,
@@ -1798,7 +2085,8 @@ export class NakoParser extends NakoParserBase {
             valueToken = this.yNop()
           }
           if (this.check(',')) { this.get() } // skip comma (ex) name1=val1, name2=val2
-          const nameToken = this.getVarName(this.y[0])
+          const nameToken = this.getVarName(this.y[0]);
+          (nameToken as TokenRef).isWrite = true
           return {
             type: 'let',
             name: (nameToken as AstStrValue).value,
@@ -1845,6 +2133,7 @@ export class NakoParser extends NakoParserBase {
         this.skipToEol()
         return this.yNop() as any
       }
+      (word as TokenRef).isWrite = true
       return {
         type: 'let_prop',
         name: (word as AstStrValue).value,
@@ -1884,15 +2173,22 @@ export class NakoParser extends NakoParserBase {
       const vtype = this.getCur() // 変数 or 定数
       let isExport : boolean = this.moduleOption.isExportDefault
       if (this.check2(['{', 'word', '}'])) {
-        this.get()
+        const s = this.get()
+        if (s) {
+          s.type = 'VARIABLE_ATTR_PARENTIS_START'
+        }
         const attrNode = this.get()
         if (attrNode === null) {
           this.errorInfos.addFromToken('ERROR', 'errorDeclareLocalVars', { varname: wordToken.value }, wordToken)
         } else {
           const attr = attrNode.value
+          attrNode.type = 'VARIABLE_ATTRIBUTE'
           if (attr === '公開') { isExport = true } else if (attr === '非公開') { isExport = false } else if (attr === 'エクスポート') { isExport = true } else { logger.warn(`不明な変数属性『${attr}』が指定されています。`) }
         }
-        this.get()
+        const e = this.get()
+        if (e) {
+          e.type = 'VARIABLE_ATTR_PARENTIS_END'
+        }
       }
       const word = this.createVar(wordToken, vtype.type === '定数', isExport, true)
       // 初期値がある？
@@ -1934,7 +2230,6 @@ export class NakoParser extends NakoParserBase {
             activeDeclare: true
           }
           this.addGlobalvars(decvar, wordToken)
-  
         }
       }
       return {
@@ -1953,7 +2248,8 @@ export class NakoParser extends NakoParserBase {
       // 変数の宣言および初期化1
       if (this.accept(['変数', 'word', 'eq', this.yCalc])) {
         const word = this.createVar(this.y[1], false, this.moduleOption.isExportDefault, true)
-        const astValue = this.y[3] || this.yNop()
+        const astValue = this.y[3] || this.yNop();
+        (this.y[1] as TokenRef).isWrite = true
         return {
           type: 'def_local_var',
           name: (word as AstStrValue).value,
@@ -1966,10 +2262,14 @@ export class NakoParser extends NakoParserBase {
       // 変数の宣言および初期化2
       if (this.accept(['変数', 'word', '{', 'word', '}', 'eq', this.yCalc])) {
         let isExport: boolean = this.moduleOption.isExportDefault
+        this.y[2].type = 'VARIABLE_ATTR_PARENTIS_START'
+        this.y[3].type = 'VARIABLE_ATTRIBUTE'
+        this.y[4].type = 'VARIABLE_ATTR_PARENTIS_END'
         const attr = this.y[3].value
         if (attr === '公開') { isExport = true } else if (attr === '非公開') { isExport = false } else if (attr === 'エクスポート') { isExport = true } else { logger.warn(`不明な変数属性『${attr}』が指定されています。`) }
         const word = this.createVar(this.y[1], false, isExport, true)
-        const astValue = this.y[6] || this.yNop()
+        const astValue = this.y[6] || this.yNop();
+        (this.y[1] as TokenRef).isWrite = true
         return {
           type: 'def_local_var',
           name: (word as AstStrValue).value,
@@ -1996,7 +2296,8 @@ export class NakoParser extends NakoParserBase {
 
     if (this.accept(['定数', 'word', 'eq', this.yCalc])) {
       const word = this.createVar(this.y[1], true, this.moduleOption.isExportDefault, true)
-      const astValue = this.y[3] || this.yNop()
+      const astValue = this.y[3] || this.yNop();
+      (this.y[1] as TokenRef).isWrite = true
       return {
         type: 'def_local_var',
         name: (word as AstStrValue).value,
@@ -2008,10 +2309,14 @@ export class NakoParser extends NakoParserBase {
 
     if (this.accept(['定数', 'word', '{', 'word', '}', 'eq', this.yCalc])) {
       let isExport : boolean = this.moduleOption.isExportDefault
+      this.y[2].type = 'VARIABLE_ATTR_PARENTIS_START'
+      this.y[3].type = 'VARIABLE_ATTRIBUTE'
+      this.y[4].type = 'VARIABLE_ATTR_PARENTIS_END'
       const attr = this.y[3].value
       if (attr === '公開') { isExport = true } else if (attr === '非公開') { isExport = false } else if (attr === 'エクスポート') { isExport = true } else { logger.warn(`不明な定数属性『${attr}』が指定されています。`) }
       const word = this.createVar(this.y[1], true, isExport, true)
-      const astValue = this.y[6] || this.yNop()
+      const astValue = this.y[6] || this.yNop();
+      (this.y[1] as TokenRef).isWrite = true
       return {
         type: 'def_local_var',
         name: (word as AstStrValue).value,
@@ -2037,6 +2342,9 @@ export class NakoParser extends NakoParserBase {
       }
       const namesAst = this._tokensToNodes(this.createVarList(names.blocks, true, this.moduleOption.isExportDefault))
       const astValue = this.y[3] || this.yNop()
+      for (const i in names.blocks) {
+        (names.blocks[i] as TokenRef).isWrite = true
+      }
       return {
         type: 'def_local_varlist',
         names: namesAst,
@@ -2060,6 +2368,9 @@ export class NakoParser extends NakoParserBase {
       }
       const namesAst = this._tokensToNodes(this.createVarList(names.blocks as Token[], false, this.moduleOption.isExportDefault))
       const astValue = this.y[3] || this.yNop()
+      for (const i in names.blocks) {
+        (names.blocks[i] as TokenRef).isWrite = true
+      }
       return {
         type: 'def_local_varlist',
         names: namesAst,
@@ -2076,6 +2387,9 @@ export class NakoParser extends NakoParserBase {
         let names = [this.y[0], this.y[2]]
         names = this.createVarList(names, false, this.moduleOption.isExportDefault)
         const astValue = this.y[4] || this.yNop()
+        for (const i in names) {
+          (names[i] as TokenRef).isWrite = true
+        }
         return {
           type: 'def_local_varlist',
           names,
@@ -2089,6 +2403,9 @@ export class NakoParser extends NakoParserBase {
         let names = [this.y[0], this.y[2], this.y[4]]
         names = this.createVarList(names, false, this.moduleOption.isExportDefault)
         const astValue = this.y[6] || this.yNop()
+        for (const i in names) {
+          (names[i] as TokenRef).isWrite = true
+        }
         return {
           type: 'def_local_varlist',
           names,
@@ -2102,6 +2419,9 @@ export class NakoParser extends NakoParserBase {
         let names = [this.y[0], this.y[2], this.y[4], this.y[6]]
         names = this.createVarList(names, false, this.moduleOption.isExportDefault)
         const astValue = this.y[8] || this.yNop()
+        for (const i in names) {
+          (names[i] as TokenRef).isWrite = true
+        }
         return {
           type: 'def_local_varlist',
           names,
@@ -2115,6 +2435,9 @@ export class NakoParser extends NakoParserBase {
         let names = [this.y[0], this.y[2], this.y[4], this.y[6], this.y[8]]
         names = this.createVarList(names, false, this.moduleOption.isExportDefault)
         const astValue = this.y[10] || this.yNop()
+        for (const i in names) {
+          (names[i] as TokenRef).isWrite = true
+        }
         return {
           type: 'def_local_varlist',
           names,
@@ -2891,26 +3214,67 @@ export class NakoParser extends NakoParserBase {
   yTryExcept (): AstBlocks | null {
     const map = this.peekSourceMap()
     if (!this.check('エラー監視')) { return null }
-    const kansi = this.getCur() // skip エラー監視
+    const kansiIndex = this.getIndex()
+    let indentSemantic = this.moduleOption.isIndentSemantic
+    const kansi = this.getCur() // エラー監視
+    if (this.check(':')) {
+      this.get()
+      indentSemantic = true
+    }
+    const linkMain : LinkMain = { type: 'エラー監視', childTokenIndex: [kansiIndex]};
+    (kansi as TokenLink).link = linkMain
+    this.indentPush('エラー監視')
+    this.currentIndentLevel = kansi.indent.level
+    this.currentIndentSemantic = indentSemantic
     const block = this.yBlock()
-    if (!this.check('エラーならば')) {
+    if (this.currentIndentSemantic) {
+      const level = this.peek()?.indent.level
+      if (level !== undefined && level <= this.currentIndentLevel) {
+      }
+    } else {
+      if (this.check('エラーならば')) {
+        // skip
+      }
+    }
+    this.indentPop(['エラー監視'])
+
+    if (this.check('エラーならば')) {
+      const narabaIndex = this.getIndex()
+      const naraba = this.getCur() // エラーならば
+      let indentSemantic = this.moduleOption.isIndentSemantic
+      if (this.check(':')) {
+        this.get()
+        indentSemantic = true
+      }
+      (naraba as TokenLink).link = { mainTokenIndex: kansiIndex }
+      linkMain.childTokenIndex.push(narabaIndex)
+      this.indentPush('エラーならば')
+      this.currentIndentLevel = naraba.indent.level
+      this.currentIndentSemantic = indentSemantic
+    } else {
       this.errorInfos.addFromToken('ERROR', 'noCatchAtTry', {}, kansi)
       this.indentPush('エラーならば')
       this.currentIndentLevel = kansi.indent.level
-  } else {
-      const naraba = this.get()! // skip エラーならば
-      if (this.moduleOption.isIndentSemantic) {
-        this.indentPush('エラーならば')
-        this.currentIndentLevel = naraba.indent.level
-      }
+      this.currentIndentSemantic = this.moduleOption.isIndentSemantic
     }
 
     const errBlock = this.yBlock()
-    if (this.check('ここまで')) {
-      this.get()
+    if (this.currentIndentSemantic) {
+      const level = this.peek()?.indent.level
+      if (level !== undefined && level <= this.currentIndentLevel) {
+      }
     } else {
-      this.errorInfos.addFromToken('ERROR', 'noKokomadeAtTry', {}, kansi)
+      if (this.check('ここまで')) {
+        const kokomadeIndex = this.getIndex()
+        const kokomade = this.getCur();
+        (kokomade as TokenLink).link = { mainTokenIndex: kansiIndex }
+        linkMain.childTokenIndex.push(kokomadeIndex)
+        } else {
+        this.errorInfos.addFromToken('ERROR', 'noKokomadeAtTry', {}, kansi)
+      }
     }
+    this.indentPop(['エラーならば'])
+
     return {
       type: 'try_except',
       blocks: [block, errBlock],

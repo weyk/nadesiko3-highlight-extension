@@ -5,6 +5,12 @@ import type { Ast } from './nako3/nako_ast.mjs'
 
 export type MessageLevel = 'ERROR'|'WARN'|'INFO'|'HINT'
 
+export interface ErrorInfoSubset {
+    level: MessageLevel
+    messageId: string
+    args: MessageArgs
+}
+
 export interface ErrorInfoID {
     type: MessageLevel
     messageId: string

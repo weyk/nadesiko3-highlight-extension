@@ -86,6 +86,7 @@ export type Nako3TokenTypeReserve = 'もし'
   | '変数'
   | '定数'
   | 'エラー監視'
+  | 'エラーならば'
   | 'エラー'
   | 'インデント構文'
   | '非同期モード'
@@ -97,6 +98,7 @@ export type Nako3TokenTypeReserve = 'もし'
   | 'def_func'
   | '厳チェック'
   | 'word'
+  | 'ならば'
 
 export type Nako3TokenTypeFix = '!'
   | 'には'
@@ -118,9 +120,15 @@ export type Nako3TokenTypeFix = '!'
   | 'FUNCTION_ARG_PARAMETER'
 
 export type Nako3TokenTypeApply = '?'
-  |'user_func'
-  |'user_var'
-  |'user_const'
+  | 'user_func'
+  | 'user_var'
+  | 'user_const'
+
+export type Nako3TokenTypeParser = '?'
+  | 'VARIABLE_ATTRIBUTE'
+  | 'VARIABLE_ATTR_PARENTIS_START'
+  | 'VARIABLE_ATTR_PARENTIS_END'
+  | 'VARIABLE_ATTR_SEPARATOR'
 
 export type Nako3TokenTypePlugin = '?'
   | 'sys_func'
@@ -131,6 +139,7 @@ export type TokenType = Nako3TokenRawType
   | Nako3TokenTypeReserve
   | Nako3TokenTypeFix
   | Nako3TokenTypeApply
+  | Nako3TokenTypeParser
   | Nako3TokenTypePlugin
 
 export type TokenGroup = '?'
@@ -193,8 +202,38 @@ export interface TokenRefFunc extends Token {
 
 export interface TokenRefVar extends Token {
   meta: GlobalVarConst|LocalVarConst
+  isWrite?: boolean
 }
 
 export interface TokenRef extends Token {
   meta?: GlobalFunction|GlobalVarConst|LocalVarConst
+  isWrite?: boolean
+}
+
+export interface TokenLink extends Token {
+  link?: StatementLink
+}
+
+type TokenLinkType = '?'
+  | '関数'
+  | '無名関数'
+  | 'もし'
+  | '条件分岐'
+  | '繰返'
+  | '回'
+  | '反復'
+  | '後判定'
+  | 'エラー監視'
+  | 'パフォーマンスモニタ適用'
+  | '実行速度優先'
+
+export type StatementLink = LinkMain | LinkRef
+
+export interface LinkMain {
+  type: TokenLinkType
+  childTokenIndex: number[]
+}
+
+export interface LinkRef {
+  mainTokenIndex: number
 }
