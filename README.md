@@ -5,7 +5,7 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 ## feature
 
 - Semantic syntax highlight
-- Document highlight(word highlight)
+- Document highlight(words highlight)
 - Document symbols(outline)
 - Hover(built-in function hint)
 - Definition(go to definition)

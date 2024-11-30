@@ -1,3 +1,9 @@
+## 0.2.1
+- Modify document highlight(same variable, statement set)
+- No analize source code unless change.
+- No reload js-plugin unless update.
+- Fix semantic indent logic.
+
 ## 0.2.0
 - Add document color support(no editable)
 - Can launch wnako file(no local import)
