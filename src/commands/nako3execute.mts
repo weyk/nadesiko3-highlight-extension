@@ -209,7 +209,7 @@ export class Nako3Execute implements Command {
         const dataScheme = nako3extensionOption.autoTurtleStart ? ` data:` : ''
         const cspCode = nako3extensionOption.enableCSP ? `<meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; img-src ${resources.cspSource}${dataScheme} https:; script-src 'unsafe-eval'${nonceInCspCode}; style-src ${resources.cspSource} 'unsafe-inline' 'self';"
+      content="default-src 'none'; img-src ${resources.cspSource}${dataScheme} https:; script-src 'unsafe-eval'${nonceInCspCode}; style-src ${resources.cspSource} 'unsafe-inline' 'self'; connect-src https:;"
     />
 ` : ''
         const drawStartCode = nako3extensionOption.autoDrawStart ? `『#${nako3extensionOption.canvasId}』へ描画開始

@@ -1,3 +1,6 @@
+## 0.2.2
+- Allow import js/nako3 from remote https site when execute wnako3.
+
 ## 0.2.1
 - Modify document highlight(same variable, statement set)
 - No analize source code unless change.
