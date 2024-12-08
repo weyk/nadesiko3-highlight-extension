@@ -28,7 +28,7 @@ class Logger {
 
     debug (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 2) {
-            console.log(message)
+            console.debug(message)
         } else {
             // console.log(`logger(${this.level||"NONE"}>2):log:dropped(${message})`)
         }
@@ -36,7 +36,7 @@ class Logger {
 
     info (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 3) {
-            console.log(message)
+            console.info(message)
         } else {
             // console.log(`logger(${this.level||"NONE"}>3):log:dropped(${message})`)
         }
@@ -44,7 +44,7 @@ class Logger {
 
     warn (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 4) {
-            console.log(message)
+            console.warn(message)
         } else {
             // console.log(`logger(${this.level||"NONE"}>4):log:dropped(${message})`)
         }
@@ -52,7 +52,7 @@ class Logger {
 
     error (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 5) {
-            console.log(message)
+            console.error(message)
         } else {
             // console.log(`logger(${this.level||"NONE"}>5):log:dropped(${message})`)
         }

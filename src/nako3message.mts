@@ -41,7 +41,10 @@ export const messages = new Map<string,string>([
     ['unknwonNadesiko3home','Unknown nadesiko3 installed directory. Set nadesiko3 folder setting.'],
     ['unknwonCWD', 'Unknown working directory! Try to save the file before running.'],
     ['cannnotDeleteFile', 'Processfile cannot be deleted ({error}:{file})'],
-    ['conflictNakoRuntime', 'Conflict runtime depend imported plugin'],
+    ['conflictNakoRuntimePlugin', 'Conflict runtime depend imported plugin'],
+    ['conflictNakoRuntimeMergePlugin', 'Conflict runtime depend imported plugin vs shebang/function'],
+    ['conflictNakoRuntimeWord', 'Conflict runtime use system function'],
+    ['conflictNakoRuntimeMergeWord', 'Conflict runtime use system function vs shebang/plugin'],
     // parser
     ['errorParse', 'Invalid token at parser:{nodeset}'],
     ['failParse', 'Parse filed:{nodestr}'],

@@ -132,6 +132,7 @@ export class NakoParserBase {
     this.currentIndentSemantic = this.moduleOption.isIndentSemantic
     this.indentLevelStack = []
     this.genMode = 'sync' // #637, #1056
+    this.funcLevel = 0
     this.errorInfos.clear()
     this.scopeId = 'global'                                                                                                                         
     this.scopeIdStack = []
@@ -142,10 +143,10 @@ export class NakoParserBase {
 
   indentPush (tag: string,):void {
     logger.debug(`indentPush: ${tag}`)
-    if (this.currentIndentSemantic ) {
-      console.log(`indentPush: push indentSmentic = true`)
+    if (this.currentIndentSemantic) {
+      logger.debug(`indentPush: push indentSmentic = true`)
     }
-  this.indentLevelStack.push({
+    this.indentLevelStack.push({
       level: this.currentIndentLevel,
       tag,
       indentSemantic: this.currentIndentSemantic
@@ -163,8 +164,8 @@ export class NakoParserBase {
       }
       this.currentIndentLevel = indentLevel.level
       this.currentIndentSemantic = indentLevel.indentSemantic
-      if (this.currentIndentSemantic ) {
-        console.log(`indentPop : change indentSmentic to true`)
+      if (this.currentIndentSemantic) {
+        logger.debug(`indentPop : change indentSmentic to true`)
       }
     } else {
       logger.info(`indentPop: stack over pop`)

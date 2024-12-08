@@ -2,10 +2,10 @@ import { Uri } from 'vscode'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
-import { ModuleLink, LinkPlugin } from './nako3module.mjs'
+import { ModuleLink, LinkPlugin, LinkPlugins } from './nako3module.mjs'
 import { ErrorInfoManager, ErrorInfoSubset } from './nako3errorinfo.mjs'
 import { Nako3Range } from './nako3range.mjs'
-import { trimOkurigana, trimQuote } from './nako3util.mjs'
+import { mergeNakoRuntimes, trimOkurigana, trimQuote } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { cssColor } from './csscolor.mjs'
@@ -148,89 +148,28 @@ class Nako3Plugin {
         return suggestWords.get(cmd)
     }
 
-    getNakoRuntimeFromPlugin(imports: ImportStatementInfo[], errorInfos: ErrorInfoManager): NakoRuntime[] {
-        let nakoRuntimes: NakoRuntime[] = []
+    getNakoRuntimeFromPlugin(imports: LinkPlugins): NakoRuntime[]|'invalid' {
         let runtimeWork: NakoRuntime[]|'invalid' = []
-        for (const importInfo of imports) {
-            const imp = importInfo.value
-            if (/\.nako3?$/.test(imp)) {
-                continue
-            }
-            const r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
-            if (r && r.length > 1) {
-                const plugin = r[1]
-                if (nako3plugin.has(plugin)) {
-                    const runtimes = nako3plugin.getNakoRuntimes(plugin)
-                    if (runtimes && runtimes.length > 0) {
-                        if (runtimeWork.length === 0) {
-                            runtimeWork = runtimes
-                        } else if (runtimeWork === 'invalid' || runtimeWork.join(',') === runtimes.join(',')) {
-                            // nop
-                        } else {
-                            const r2: NakoRuntime[] = []
-                            for (const r of runtimes) {
-                                if (runtimeWork.includes(r)) {
-                                    r2.push(r)
-                                }
-                            }
-                            if (r2.length === 0) {
-                                runtimeWork = 'invalid'
-                            } else {
-                                runtimeWork = r2
-                            }
-                        }
-                    }
-                }
+        for (const [, importInfo] of imports) {
+            const plugin = importInfo.pluginKey
+            if (nako3plugin.has(plugin)) {
+                const runtimes = nako3plugin.getNakoRuntimes(plugin)
+                runtimeWork = mergeNakoRuntimes(runtimeWork, runtimes)
             }
         }
-        if (runtimeWork === 'invalid') {
-            errorInfos.add('WARN', 'conflictNakoRuntime', {}, 0, 0, 0, 0)
-            nakoRuntimes = []
-        } else if (runtimeWork.length === 0) {
-            nakoRuntimes = []
-        } else {
-            nakoRuntimes = runtimeWork
-        }
-        return nakoRuntimes
+        return runtimeWork
     }
 
-    getNakoRuntimeFromToken(tokens: Token[], errorInfos: ErrorInfoManager): NakoRuntime[] {
-        let nakoRuntimes: NakoRuntime[] = []
+    getNakoRuntimeFromToken(tokens: Token[]): NakoRuntime[]|'invalid' {
         let runtimeWork: NakoRuntime[]|'invalid' = []
         for (const token of tokens) {
             if (['word', 'sys_func'].includes(token.fixType)) {
                 const tv = trimOkurigana(token.value)
                 const runtimes = this.getNakoRuntimesFromWord(tv)
-                if (runtimes && runtimes.length > 0) {
-                    if (runtimeWork.length === 0) {
-                        runtimeWork = runtimes
-                    } else if (runtimeWork === 'invalid' || runtimeWork.join(',') === runtimes.join(',')) {
-                        // nop
-                    } else {
-                        const r2: NakoRuntime[] = []
-                        for (const r of runtimes) {
-                            if (runtimeWork.includes(r)) {
-                                r2.push(r)
-                            }
-                        }
-                        if (r2.length === 0) {
-                            runtimeWork = 'invalid'
-                        } else {
-                            runtimeWork = r2
-                        }
-                    }
-                }
+                runtimeWork = mergeNakoRuntimes(runtimeWork, runtimes)
             }
         }
-        if (runtimeWork === 'invalid') {
-            // errorInfos.add('WARN', 'conflictNakoRuntime', {}, 0, 0, 0, 0)
-            nakoRuntimes = []
-        } else if (runtimeWork.length === 0) {
-            nakoRuntimes = []
-        } else {
-            nakoRuntimes = runtimeWork
-        }
-        return nakoRuntimes
+        return runtimeWork
     }
 
     getCommandInfo (command: string, pluginNames: string[], nakoRuntime?: NakoRuntime): DeclareThing|null {
@@ -957,7 +896,7 @@ class Nako3Plugin {
                         pure: true,
                         asyncFn: false,
                         args: [],
-                        range: { startLine: i, startCol: col, endLine: i, endCol: col + resLen, resEndCol: col + resLen },
+                        range: new Nako3Range(i, col, i, col + resLen, col + resLen)
                     }
                     continue
                 }

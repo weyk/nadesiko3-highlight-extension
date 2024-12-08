@@ -21,7 +21,7 @@ type AsyncWalkCallback = (node: ProjectNode) => Promise<void>
 type WalkCallback = SyncWalkCallback|AsyncWalkCallback
 export class Nako3Project {
     mainUri: Uri
-    nakoRuntime:NakoRuntime
+    nakoRuntime: NakoRuntime
     pluginNames: string[]
     projectTree: ProjectNode
 
@@ -43,7 +43,7 @@ export class Nako3Project {
         await this.walkTree(this.projectTree, async (node) => {
             const doc = nako3docs.get(node.uri)
             if (doc) {
-                await nako3docs.analyzeToSetNakoRuntime(doc)
+                await nako3docs.analyzeOnlyTokenize(doc)
             }
         })
     }

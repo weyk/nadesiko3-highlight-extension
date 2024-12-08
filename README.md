@@ -11,7 +11,7 @@ This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for
 - Definition(go to definition)
 - Reference(find all references)
 - Rename
-- Document Color(preppend color icon for system color const)
+- Document Color(prepend color icon for color const and color-code string)
 - Launch snako/cnako3 program with shebang line
 - Launch wnako3 program without import local file
 

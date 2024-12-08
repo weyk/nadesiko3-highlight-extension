@@ -66,6 +66,9 @@ export class Nako3TokenFixer {
         let delayedToken: Token|null = null
         const pushToken = (token: Token) => {
             let type = token.type
+            token.fixType = type
+            token.funcType = type
+            token.parseType = type
             if ((type === 'def_func' || type === '*') && token.startCol === 0 && token.josi === '') {
                 functionIndex.push(this.tokens.length)
                 if (type === '*') {
@@ -84,8 +87,6 @@ export class Nako3TokenFixer {
                         }
                     }
                 }
-                token.fixType = token.type
-                token.parseType = token.type
                 this.commentTokens.push(token)
             } else {
                 if (type === 'eol') {
@@ -96,8 +97,6 @@ export class Nako3TokenFixer {
                     }
                     topOfLine = false
                 }
-                token.fixType = token.type
-                token.parseType = token.type
                 this.tokens.push(token)
             }
         }
@@ -285,6 +284,7 @@ export class Nako3TokenFixer {
             lastToken = {
                 type: '?',
                 fixType: '?',
+                funcType: '?',
                 parseType: '?',
                 group: '?',
                 uri: this.moduleEnv.uri,
@@ -305,6 +305,7 @@ export class Nako3TokenFixer {
         this.tokens.push({
             type: 'eol',
             fixType: 'eol',
+            funcType: 'eol',
             parseType: 'eol',
             group: '区切',
             len: 0,
@@ -324,6 +325,7 @@ export class Nako3TokenFixer {
         this.tokens.push({
             type: 'eof',
             fixType: 'eof',
+            funcType: 'eof',
             parseType: 'eof',
             group: '区切',
             len: 0,

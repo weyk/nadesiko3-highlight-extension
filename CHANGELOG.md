@@ -1,3 +1,11 @@
+## 0.2.3
+- Support analyze code in template string.
+- Add color icon for user declare constant.
+- Add color icon for color-code-like string.
+- Support document color edit.
+- Modify guess runtime logic.
+- Fix incorrect analize word after edit unclosed function.
+
 ## 0.2.2
 - Allow import js/nako3 from remote https site when execute wnako3.
 

@@ -65,8 +65,9 @@ export interface GlobalConstant extends GlobalBase, ConstantBase {
 
 export interface LocalVariable extends LocalBase, VariableBase {
 }
-
+2
 export interface LocalConstant extends LocalBase, ConstantBase {
+  isColor?: boolean
 }
 
 export type GlobalVarConst = GlobalVariable | GlobalConstant

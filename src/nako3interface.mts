@@ -17,7 +17,7 @@ import { nako3diagnostic } from './provider/nako3diagnotic.mjs'
 import { logger } from './logger.mjs'
 import type { NakoRuntime, ExternalInfo } from './nako3types.mjs'
 import type { Token } from './nako3token.mjs'
-import { filenameToModName } from './nako3util.mjs'
+import { filenameToModName, mergeNakoRuntimes } from './nako3util.mjs'
 
 interface DependNako3Info {
     uri: Uri
@@ -244,8 +244,9 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         }
     }
 
-    async analyze(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<void> {
-        logger.info(`interface:analyzeA:start:${doc.uri.toString()}`)
+    async analyze(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<boolean> {
+        logger.info(`interface:analyzeA:start        :${doc.uri.toString()}`)
+        let changed = false
         if (doc.nako3doc.tokenize(canceltoken)) {
             doc.nako3doc.validApplyerFuncToken = false
             doc.nako3doc.validAst = false
@@ -261,40 +262,69 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             doc.nako3doc.validAst = false
             doc.nako3doc.validApplyerVarToken = false
         }
+        if (doc.nako3doc.applyFunc(canceltoken)) {
+            doc.nako3doc.validAst = false
+            doc.nako3doc.validApplyerVarToken = false
+        }
         if (doc.nako3doc.parse(canceltoken)) {
             doc.nako3doc.validApplyerVarToken = false
         }
-        doc.nako3doc.applyVarConst(canceltoken)
-        logger.info(`interface:analyzeA:end  :${doc.uri.toString()}`)
+        if (doc.nako3doc.applyVarConst(canceltoken)) {
+            changed = true
+        }
+        logger.info(`interface:analyzeA:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
+        return changed
     }
 
-    async analyzeToSetNakoRuntime(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<void> {
-        logger.info(`interface:analyze1:start:${doc.uri.toString()}`)
+    async analyzeOnlyTokenize(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<boolean> {
+        logger.info(`interface:analyze1:start        :${doc.uri.toString()}`)
+        let changed = false
         if (doc.nako3doc.tokenize(canceltoken)) {
             doc.nako3doc.validApplyerFuncToken = false
             doc.nako3doc.validAst = false
             doc.nako3doc.validApplyerVarToken = false
         }
-        logger.info(`interface:analyze1:end  :${doc.uri.toString()}`)
+        logger.info(`interface:analyze1:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
+        return changed
     }
 
     suggestRuntime (doc: Nako3DocumentExt): boolean {
         let changed = false
         let nakoRuntime: NakoRuntime
-        if (doc.nako3doc.preNakoRuntime instanceof Array && doc.nako3doc.preNakoRuntime.length > 0) {
-            const runtimes = nako3plugin.getNakoRuntimeFromToken(doc.nako3doc.tokens, doc.nako3doc.errorInfos)
-            if (runtimes.length > 0) {
-                doc.nako3doc.preNakoRuntime = runtimes
-            }
-        } else if (doc.nako3doc.preNakoRuntime.length === 0) {
-            const runtimes = nako3plugin.getNakoRuntimeFromToken(doc.nako3doc.tokens, doc.nako3doc.errorInfos)
-            doc.nako3doc.preNakoRuntime = runtimes
+        let nakoRuntimes: NakoRuntime[]|'invalid'
+        doc.nako3doc.errorInfos.clear()
+        if (Array.isArray(doc.nako3doc.preNakoRuntime)) {
+            nakoRuntimes = doc.nako3doc.preNakoRuntime
+        } else if (doc.nako3doc.preNakoRuntime !== '') {
+            nakoRuntimes = [doc.nako3doc.preNakoRuntime]
+        } else {
+            nakoRuntimes = []
         }
-
-        if (doc.nako3doc.preNakoRuntime instanceof Array && doc.nako3doc.preNakoRuntime.length > 0) {
-            nakoRuntime = doc.nako3doc.preNakoRuntime[0]
-        } else if (typeof doc.nako3doc.preNakoRuntime === 'string' && doc.nako3doc.preNakoRuntime !== '') {
-            nakoRuntime = doc.nako3doc.preNakoRuntime
+        if (Array.isArray(nakoRuntimes) && doc.link.importPlugins.size > 0) {
+            const runtimes = nako3plugin.getNakoRuntimeFromPlugin(doc.link.importPlugins)
+            if (runtimes === 'invalid') {
+                doc.nako3doc.errorInfos.add('WARN', 'conflictNakoRuntimePlugin', {}, 0, 0, 0, 0)
+            }
+            nakoRuntimes = mergeNakoRuntimes(nakoRuntimes, runtimes)
+            if (nakoRuntimes === 'invalid') {
+                doc.nako3doc.errorInfos.add('WARN', 'conflictNakoRuntimeMergePlugin', {}, 0, 0, 0, 0)
+            }
+        }
+        if (Array.isArray(nakoRuntimes)) {
+            const runtimes = nako3plugin.getNakoRuntimeFromToken(doc.nako3doc.tokens)
+            if (runtimes === 'invalid') {
+                // doc.nako3doc.errorInfos.add('WARN', 'conflictNakoRuntimeWord', {}, 0, 0, 0, 0)
+            } else {
+                const work = mergeNakoRuntimes(nakoRuntimes, runtimes)
+                if (work === 'invalid') {
+                    // doc.nako3doc.errorInfos.add('WARN', 'conflictNakoRuntimeMergeWord', {}, 0, 0, 0, 0)
+                } else {
+                    nakoRuntimes = work
+                }
+            }
+        }
+        if (Array.isArray(nakoRuntimes) && nakoRuntimes.length > 0) {
+            nakoRuntime = nakoRuntimes[0]
         } else {
             nakoRuntime = ''
         }

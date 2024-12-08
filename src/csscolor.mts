@@ -2,6 +2,14 @@ import { logger } from './logger.mjs'
 
 type CssColorEntry = {[color:string]: string}
 type CssColorAliasEntry = {[color:string]: string}
+export type ColorFormat = '?'|'#3'|'#6'|'#8'|'rgb(,)'|'rgb(,)%'|'rgb( )'|'const'
+export interface ColorInfo {
+    red: number
+    green: number
+    blue: number
+    alpha: number|undefined
+    colorFormat: ColorFormat
+}
 
 class CssColor {
     public level1: CssColorEntry = {
@@ -187,6 +195,33 @@ class CssColor {
         slategray: 'slategrey',
     }
 
+    public colorCodeRegexp = new Map<ColorFormat, RegExp>([
+        [
+            '#3',
+            /^#(?<RX>[0-9A-Fa-f])(?<GX>[0-9A-Fa-f])(?<BX>[0-9A-Fa-f])$/
+        ],
+        [
+            '#6',
+            /^#(?<RX>[0-9A-Fa-f]{2})(?<GX>[0-9A-Fa-f]{2})(?<BX>[0-9A-Fa-f]{2})$/
+        ],
+        [
+            '#8',
+            /^#(?<RX>[0-9A-Fa-f]{2})(?<GX>[0-9A-Fa-f]{2})(?<BX>[0-9A-Fa-f]{2})(?<AX>[0-9A-Fa-f]{2})$/
+        ],
+        [
+            'rgb(,)',
+            /^rgba?\s*\(\s*(?<R>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\s*,\s*(?<G>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\s*,\s*(?<B>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\s*,\s*(?<A>1(\.0+)?|0?\.[0-9]*))?\s*\)$/
+        ],
+        [
+            'rgb(,)%',
+            /^rgba?\s*\(\s*(?<R>((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)\s*,\s*(?<G>((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)\s*,\s*(?<B>((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)(\s*,\s*(?<A>1(\.0+)?|0?\.[0-9]*))?\s*\)$/
+        ],
+        [
+            'rgb( )',
+            /^rgba?\s*\(\s*(?<R>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)\s*(?<G>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)\s*(?<B>[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|((0?|[1-9][0-9]?)(\.[0-9]*)?|100(\.0*)?)%)(\s*\/\s*(?<A>1(\.0+)?|0?\.[0-9]*))?\s\)$/
+        ]
+    ])
+
     public all: CssColorEntry
 
     constructor () {
@@ -230,6 +265,71 @@ class CssColor {
             return [ r, g, b, a ]
         }
         logger.debug(`getRgba: invalid color code "${colorCode}" from "${color}"`)
+        return null
+    }
+
+    public parseColor (s: string): ColorInfo|null {
+        const parseX = (s: string): number => {
+            let i = parseInt(s, 16)
+            if (s.length === 1) {
+                i *= 17
+            }
+            return i / 255
+        }
+        const parseD = (s: string): number => {
+            let isPercent = false
+            if (s.endsWith('%')) {
+                s = s.slice(0, -1)
+                isPercent = true
+            }
+            let n = parseFloat(s)
+            if (isPercent) {
+                n = n / 100
+            } else {
+                n = n / 255
+            }
+            return n
+        }
+        const parseA = (s: string): number => {
+            let isPercent = false
+            if (s.endsWith('%')) {
+                s = s.slice(0, -1)
+                isPercent = true
+            }
+            let n = parseFloat(s)
+            if (isPercent) {
+                n = n / 100
+            }
+            return n
+        }
+        for (const [ formatName, re] of this.colorCodeRegexp) {
+            const colorFormat = formatName
+            const rslt = re.exec(s)
+            if (rslt && rslt.groups) {
+                let r
+                let g
+                let b
+                let a
+                if (rslt.groups['RX']) { r = parseX(rslt.groups['RX']) }
+                if (rslt.groups['GX']) { g = parseX(rslt.groups['GX']) }
+                if (rslt.groups['BX']) { b = parseX(rslt.groups['BX']) }
+                if (rslt.groups['AX']) { a = parseX(rslt.groups['AX']) }
+                if (rslt.groups['R']) { r = parseD(rslt.groups['R']) }
+                if (rslt.groups['G']) { g = parseD(rslt.groups['G']) }
+                if (rslt.groups['B']) { b = parseD(rslt.groups['B']) }
+                if (rslt.groups['A']) { a = parseA(rslt.groups['A']) }
+                if (r === undefined || g === undefined || b === undefined) {
+                    continue
+                }
+                return {
+                    red: r,
+                    green: g,
+                    blue: b,
+                    alpha: a,
+                    colorFormat
+                }
+            }
+        }
         return null
     }
 }

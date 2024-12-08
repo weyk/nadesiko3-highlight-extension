@@ -11,6 +11,8 @@ class Nako3ExtensionOption {
     useShebang: boolean
     enablePluginFromRemote: boolean
     enableNako3FromRemote: boolean
+    useLazyColorPresent: boolean
+    lazyColorRegexps: RegExp[]
     defaultNakoRuntime: NakoRuntime
     useOperatorHint: boolean
     problemsLimit: number
@@ -25,6 +27,8 @@ class Nako3ExtensionOption {
     autoTurtleStart: boolean
 
     constructor () {
+        this.useLazyColorPresent = true
+        this.lazyColorRegexps = []
         this.enablePluginFromRemote = true
         this.enableNako3FromRemote = true
         this.useOperatorHint = true
@@ -47,6 +51,7 @@ class Nako3ExtensionOption {
         this.loadNakoRuntime(conf)
         this.loadUseShebang(conf)
         this.loadUseOperatorHint(conf)
+        this.loadUseLazyColorPresent(conf)
         this.loadEnablePluginFromRemote(conf)
         this.loadEnableNako3FromRemote(conf)
         this.loadNako3Folder(conf)
@@ -102,6 +107,15 @@ class Nako3ExtensionOption {
             this.useOperatorHint = v
         } else {
             this.useOperatorHint = true
+        }
+    }
+
+    loadUseLazyColorPresent (conf: WorkspaceConfiguration) {
+        const v = conf.get('useLazyColorPresent')
+        if (typeof v === 'boolean') {
+            this.useLazyColorPresent = v
+        } else {
+            this.useLazyColorPresent = true
         }
     }
 
@@ -240,6 +254,9 @@ export function configurationChanged (e: ConfigurationChangeEvent) {
     if (e.affectsConfiguration('nadesiko3Highlight.maxNumberOfProblems')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadProbremsLimit(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.useLazyColorPresent')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadUseLazyColorPresent(conf)
     } else if (e.affectsConfiguration('nadesiko3Highlight.enablePluginFromRemote')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadEnablePluginFromRemote(conf)

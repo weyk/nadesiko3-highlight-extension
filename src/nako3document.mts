@@ -28,7 +28,6 @@ export class Nako3Document {
     public importStatements: ImportStatementInfo[]
     public preNakoRuntime: NakoRuntime|NakoRuntime[]
     validFixToken: boolean
-    validNakoRuntime: boolean
     validApplyerFuncToken: boolean
     validAst: boolean
     validApplyerVarToken: boolean
@@ -65,7 +64,6 @@ export class Nako3Document {
         this.astSerialId = setSerialId()
         this.applyerVarTokenSerialId = setSerialId()
         this.validFixToken = false
-        this.validNakoRuntime = false
         this.validApplyerFuncToken = false
         this.validAst = false
         this.validApplyerVarToken = false
@@ -91,7 +89,6 @@ export class Nako3Document {
 
     invalidate(): void {
         this.validFixToken = false
-        this.validNakoRuntime = false
         this.validApplyerFuncToken = false
         this.validAst = false
         this.validApplyerVarToken = false
@@ -103,15 +100,14 @@ export class Nako3Document {
 
     // 以下の４つのmethodにより解析を行う。
     // tokenize      :テキストからトークンの生成とユーザ関数と取り込み情報の抽出
-    // setNakoRuntime:shebangと取り込んだpluginからruntimeを判定する。
-    // parse         :システム関数、ユーザ関数をトークン列に反映。
-    //                トークン列とユーザ定義関数情報から各位置のスコープの確定と変数の抽出
+    // applyFunc     :システム関数、ユーザ関数をトークン列に反映。
+    // parse         :トークン列とユーザ定義関数情報から各位置のスコープの確定と変数の抽出
     // applyVarConst:変数をトークン列に反映
     // 
-    // tokenizeとsetNakoRuntimeの間に以下の処置が必要
+    // tokenizeとapplyFuncの間に以下の処置が必要
     //   取り込み情報からpluginの取り込みとpluginNamesへの反映
-    // setNakoRuntimeとparseの間に以下の処置が必要
-    //   取り込み情報からnako3を取り込みし含まれるユーザ関数の情報を参照できるようにする
+    // applyFuncとparseの間に以下の処置が必要
+    //   なし。基本的には連続して呼び出せる
     // parseとapplyVarConstの間に以下の処置が必要
     //   変数のうちモジュールを跨るグローバル変数の確定(定義箇所を確定と参照の設定)
     //   明示的な宣言の無いローカル変数でグローバル変数にあるものを読み替え
@@ -129,6 +125,7 @@ export class Nako3Document {
         if (canceltoken && canceltoken.isCancellationRequested) {
             return false
         }
+        this.lengthLines = lexerResult.lengthLines
         // tokenFixerを使用してrawTokenからtokens/commentTokensを生成する
         // moduleEnv.declareThingsにユーザ関数を登録し定義のあるトークンにmetaを登録する。
         const fixerResult = this.fixer.fixTokens(lexerResult.tokens)
@@ -141,39 +138,44 @@ export class Nako3Document {
         this.preNakoRuntime = fixerResult.nakoRuntime
         this.fixTokenSerialId = incSerialId(this.fixTokenSerialId)
         this.validFixToken = true
-        this.validNakoRuntime = false
+        this.validApplyerFuncToken = false
+        return true
+    }
+
+    applyFunc(canceltoken?: CancellationToken): boolean {
+        console.info(`doc:applyFunc start:${this.filename}`)
+        if (this.validApplyerFuncToken) {
+            console.info(`doc:applyFunc skip :${this.filename}`)
+            return false
+        }                                                     
+        this.applyer.applyFunction(this.tokens)
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return true
+        }
+        this.applyerFuncTokenSerialId = incSerialId(this.applyerFuncTokenSerialId)
+        this.validApplyerFuncToken = true
+        this.validAst = false
         return true
     }
 
     parse(canceltoken?: CancellationToken): boolean {
         console.info(`doc:parse start:${this.filename}`)
-        if (this.validApplyerFuncToken && this.validAst) {
+        if (this.validAst) {
             console.info(`doc:parse skip :${this.filename}`)
             return false
         }                                                     
-        if (!this.validApplyerFuncToken) {
-            this.applyer.applyFunction(this.tokens)
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return true
-            }
-            this.applyerFuncTokenSerialId = incSerialId(this.applyerFuncTokenSerialId)
-            this.validApplyerFuncToken = true
-            this.validAst = false
+        try {
+            this.parser.parse(this.tokens)
+        } catch (err) {
+            console.error('cause exception in parse.')
+            console.error(err)
         }
-        if (!this.validAst) {                                                     
-            try {
-                this.parser.parse(this.tokens)
-            } catch (err) {
-                console.error('cause exception in parse.')
-                console.error(err)
-            }
-            if (canceltoken && canceltoken.isCancellationRequested) {
-                return true
-            }
-            this.astSerialId = incSerialId(this.astSerialId)
-            this.validAst = true
-            this.validApplyerVarToken = false
+        if (canceltoken && canceltoken.isCancellationRequested) {
+            return true
         }
+        this.astSerialId = incSerialId(this.astSerialId)
+        this.validAst = true
+        this.validApplyerVarToken = false
         return true
     }
 

@@ -21,7 +21,8 @@ export class Nako3TokenApplyer {
         this.errorInfos.setProblemsLimit(limit)
     }
 
-    public applyFunction(tokens: Token[]) {
+    // この処理はerrorInfosを使用しない。
+    public applyFunction(tokens: Token[]):void {                                                                                                                                                                                                                               
         for (const token of tokens) {
             let type = token.fixType
             let nextTokenToFuncPointer = false
@@ -84,13 +85,15 @@ export class Nako3TokenApplyer {
                 nextTokenToFuncPointer = true
             }
             token.type = type
+            token.funcType = type
             token.parseType = type
         }
     }
 
-    applyVarConst(tokens: Token[], scopeIdList: ScopeIdRange[]) {
+    applyVarConst(tokens: Token[], scopeIdList: ScopeIdRange[]):void {
         this.errorInfos.clear()
         let i = 0
+        let causeUnknownWordError = false
         for (const token of tokens) {
             let type = token.parseType
             if (type === 'word') {
@@ -217,6 +220,7 @@ export class Nako3TokenApplyer {
                                     // ・Pluginの取り込み漏れによるシステム関数の名前が解決できていない。
                                     // ・打ち間違いによる変数・定数・関数の名称誤り。
                                     this.errorInfos.addFromToken('ERROR', 'unknwonWord', { value: token.value }, token)
+                                    causeUnknownWordError =  true
                                 }
                             }
                         }
@@ -243,6 +247,11 @@ export class Nako3TokenApplyer {
             }
             token.type = type
             i++
+        }
+        if (causeUnknownWordError) {
+            console.log(`unknownWord has raised`)
+            console.log(this.moduleEnv.declareThings)
+            console.log(this.moduleEnv.allScopeVarConsts)
         }
     }
 }

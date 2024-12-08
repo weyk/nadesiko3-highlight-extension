@@ -5,6 +5,7 @@
     "useOperatorHint.description": "Use hover hint for operator",
     "enablePluginFromRemote.description": "Enable import javascript plugin from remote.",
     "enableNako3FromRemote.description": "Enable import nako3 file from remote.",
+    "useLazyColorPresent.description": "Enable present color icon if match regexp.",
     "nadesiko3.folder.description": "Nadesiko3 instlled folder",
     "useRuntimeSnako.descriptions": "Use snako runtime",
     "useRuntimeCnako.descriptions": "Use cnako runtime",

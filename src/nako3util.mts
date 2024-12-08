@@ -1,7 +1,7 @@
 import { Uri } from 'vscode'
 import { lexRulesRE } from './nako3lexer_rule.mjs'
 import { ModuleLink } from './nako3module.mjs'
-import type { FunctionArg, ScopeIdRange } from './nako3types.mjs'
+import type { FunctionArg, ScopeIdRange, NakoRuntime } from './nako3types.mjs'
 import type { Token, TokenType, TokenGroup } from './nako3token.mjs'
 
 const SerialIdStart = 0
@@ -181,6 +181,7 @@ export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', va
     return {
       type,
       fixType: type,
+      funcType: type,
       parseType: type,
       group,
       value,
@@ -245,4 +246,29 @@ export function incSerialId(serialId: number): number {
         return SerialIdStart
     }
     return serialId + 1
+}
+
+export function mergeNakoRuntimes(nakoRuntime: NakoRuntime[]|'invalid', runtimes: NakoRuntime[]|'invalid'|undefined):NakoRuntime[]|'invalid' {
+    if (runtimes && runtimes.length > 0) {
+        if (nakoRuntime.length === 0) {
+            nakoRuntime = runtimes
+        } else if (runtimes === 'invalid') {
+            nakoRuntime = runtimes
+        } else if (nakoRuntime === 'invalid' || nakoRuntime.join(',') === runtimes.join(',')) {
+            // nop
+        } else {
+            const r2: NakoRuntime[] = []
+            for (const r of runtimes) {
+                if (nakoRuntime.includes(r)) {
+                    r2.push(r)
+                }
+            }
+            if (r2.length === 0) {
+                nakoRuntime = 'invalid'
+            } else {
+                nakoRuntime = r2
+            }
+        }
+    }
+    return nakoRuntime
 }

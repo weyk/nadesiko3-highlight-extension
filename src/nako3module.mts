@@ -28,7 +28,7 @@ export interface LinkPlugin {
 }
 
 type ImportInfos = Map<string, ImportInfo>
-type LinkPlugins = Map<string, LinkPlugin>
+export type LinkPlugins = Map<string, LinkPlugin>
 
 export class ModuleLink {
     uri: Uri

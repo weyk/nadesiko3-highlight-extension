@@ -167,6 +167,7 @@ export interface Indent {
 export interface Token {
     type: TokenType
     fixType: TokenType
+    funcType: TokenType
     parseType: TokenType
     group: TokenGroup
     len: number

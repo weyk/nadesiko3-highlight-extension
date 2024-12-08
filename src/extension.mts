@@ -14,6 +14,7 @@ import { Nako3DefinitionProvider } from './provider/nako3definitionprovider.mjs'
 import { Nako3ReferenceProvider } from './provider/nako3referenceprovider.mjs'
 import { Nako3RenameProvider } from './provider/nako3renameprovider.mjs'
 import { Nako3DocumentColorProvider } from './provider/nako3documentcolorprovider.mjs'
+import { Nako3CallHierarchyProvider } from './provider/nako3callhierarchyprovider.mjs'
 
 import * as commands from './commands/index.mjs'
 import { CommandManager } from './nako3command.mjs'
@@ -28,6 +29,7 @@ import type { NakoRuntime } from './nako3types.mjs'
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
 let nako3RuntimeStatusBarItem: vscode.StatusBarItem
+
 
 export class Nako3CodeActionProvider implements vscode.CodeActionProvider {
 	public static readonly providedCodeActionKinds = [
@@ -133,6 +135,7 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerReferenceProvider(NAKO3_MODE, new Nako3ReferenceProvider()))
     context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
     context.subscriptions.push(vscode.languages.registerColorProvider(NAKO3_MODE, new Nako3DocumentColorProvider()))
+    context.subscriptions.push(vscode.languages.registerCallHierarchyProvider(NAKO3_MODE, new Nako3CallHierarchyProvider()))
 
 	const commandManager = new CommandManager()
 	context.subscriptions.push(commandManager)

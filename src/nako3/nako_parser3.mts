@@ -7,10 +7,12 @@ import { NakoParserBase, CHECK_WILDCARD } from './nako_parser_base.mjs'
 import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
 import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
+import { cssColor } from '../csscolor.mjs'
 import { logger } from '../logger.mjs'
-import type { GlobalFunction, SourceMap, GlobalVariable, GlobalConstant, GlobalVarConst, LocalVariable } from '../nako3types.mjs'
-import type { Token, TokenDefFunc, TokenCallFunc, TokenRef, StatementLink, LinkMain, LinkRef, TokenLink } from '../nako3token.mjs'
+import type { GlobalFunction, SourceMap, GlobalVariable, GlobalConstant, GlobalVarConst, LocalVariable, LocalConstant } from '../nako3types.mjs'
+import type { Token, TokenDefFunc, TokenCallFunc, TokenRef, TokenRefVar, StatementLink, LinkMain, LinkRef, TokenLink } from '../nako3token.mjs'
 import type { NodeType, Ast, AstEol, AstBlocks, AstOperator, AstConst, AstLet, AstLetArray, AstIf, AstWhile, AstAtohantei, AstFor, AstForeach, AstSwitch, AstRepeatTimes, AstDefFunc, AstCallFunc, AstStrValue, AstDefVar, AstDefVarList } from './nako_ast.mjs'
+import { nako3extensionOption } from 'src/nako3option.mjs'
 
 /**
  * 構文解析を行うクラス
@@ -25,6 +27,11 @@ export class NakoParser extends NakoParserBase {
     this.tokens = tokens
     this.modName = this.moduleEnv.modName
     this.modList.push(this.modName)
+
+    // parseの結果で変化したtypeをparseTypeにコピーする。
+    for (const token of this.tokens) {
+      token.type = token.funcType
+    }
 
     logger.log(`perser:startParser call`)
     // 解析処理 - 先頭から解析開始
@@ -91,7 +98,7 @@ export class NakoParser extends NakoParserBase {
           continue
         }
         break
-      }
+        }
       blocks.push(n)
     }
     if (blocks.length === 0) {
@@ -900,7 +907,7 @@ export class NakoParser extends NakoParserBase {
   yTikuji (): Ast|null {
     if (!this.check('逐次実行')) { return null }
     const tikuji = this.getCur() // skip
-    logger.error('『逐次実行』構文は廃止されました(https://nadesi.com/v3/doc/go.php?944)。', tikuji)
+    logger.debug('『逐次実行』構文は廃止されました(https://nadesi.com/v3/doc/go.php?944)。', tikuji)
     this.errorInfos.addFromToken('ERROR', 'tikujiDeprecated', {}, tikuji)
     return { type: 'eol', ...this.peekSourceMap() }
   }
@@ -1025,7 +1032,7 @@ export class NakoParser extends NakoParserBase {
         if (priority(t) > priority(sTop)) { break }
         const tpop = stack.pop()
         if (!tpop) {
-          logger.error('計算式に間違いがあります。', t)
+          logger.debug('計算式に間違いがあります。', t)
           break
         }
         polish.push(tpop)
@@ -1818,6 +1825,8 @@ export class NakoParser extends NakoParserBase {
     (word as TokenRef).isWrite = true
     // 変数を生成する
     const nameToken = this.createVar(word as AstStrValue, true, isExport, true)
+    // 定数で内容が文字列１つのみの場合に色コードチェックをしてマークする
+    this.markColor(word, value)
     return {
       type: 'def_local_var',
       name: (nameToken as AstStrValue).value,
@@ -2232,6 +2241,9 @@ export class NakoParser extends NakoParserBase {
           this.addGlobalvars(decvar, wordToken)
         }
       }
+      if (vtype.type === '定数') {
+        this.markColor(word, value)
+      }
       return {
         type: 'def_local_var',
         name: (word as AstStrValue).value,
@@ -2298,6 +2310,7 @@ export class NakoParser extends NakoParserBase {
       const word = this.createVar(this.y[1], true, this.moduleOption.isExportDefault, true)
       const astValue = this.y[3] || this.yNop();
       (this.y[1] as TokenRef).isWrite = true
+      this.markColor(this.y[1], astValue)
       return {
         type: 'def_local_var',
         name: (word as AstStrValue).value,
@@ -2317,6 +2330,7 @@ export class NakoParser extends NakoParserBase {
       const word = this.createVar(this.y[1], true, isExport, true)
       const astValue = this.y[6] || this.yNop();
       (this.y[1] as TokenRef).isWrite = true
+      this.markColor(this.y[1], astValue)
       return {
         type: 'def_local_var',
         name: (word as AstStrValue).value,
@@ -2715,6 +2729,10 @@ export class NakoParser extends NakoParserBase {
     // カンマなら飛ばす #877
     if (this.check(',')) { this.get() }
 
+    // 展開あり文字列
+    if (this.check2(['STRING_EX', 'STRING_INJECT_START'])) {
+      return this.yTemplateString()
+    }
     // プリミティブな値
     if (this.checkTypes(['number', 'bigint', 'string'])) {
       return this.yConst(this.getCur(), map)
@@ -2971,6 +2989,54 @@ export class NakoParser extends NakoParserBase {
     return null
   }
 
+  yTemplateString (): Ast {
+    //logger.info(`yTemplateString: start`)
+    const map = this.peekSourceMap()
+    const asts: Ast[] = []
+    let lastToken: Token|undefined
+    while (!this.isEOF()) {
+      if (!this.check('STRING_EX')) {
+        //console.log(`yTemplateString: not STARING_EX`)
+        //logger.info(`yTemplateString: encount invalid token type: ${this.peekDef().type}`)
+        break
+      }
+      let str = this.getCur() // string
+      lastToken = str
+      str.type = 'string'
+      asts.push({
+        type: str.type as NodeType,
+        value: str.value,
+        josi: str.josi,
+        ...map
+      } as AstConst)
+      //console.log(`yTemplateString: range : ${str.startLine}:${str.startCol} - ${str.endLine}-${str.endCol}`)
+      //console.log(`yTemplateString: string :${str.value}`)
+      if (!this.check('STRING_INJECT_START')) { break }
+      logger.info(`yTemplateString: inject start`)
+      let s1 = this.getCur() // inject start char
+      //console.log(`yTemplateString: range : ${s1.startLine}:${s1.startCol} - ${s1.endLine}-${s1.endCol}`)
+      while (!this.isEOF() && !this.check('STRING_INJECT_END')) {
+        if (!this.get()) {
+          //
+        }
+      }
+      let e1 = this.getCur() // inject end char
+      //console.log(`yTemplateString: range : ${e1.startLine}:${e1.startCol} - ${e1.endLine}-${e1.endCol}`)
+      if (e1.type !== 'STRING_INJECT_END') {
+        //console.log(`yTemplateString: not STRING_INJECT_END`)
+        //logger.info(`yTemplateString: encount invalid token type: ${this.peekDef().type}`)
+        break
+      }
+      //logger.info(`yTemplateString: inject end`)
+    }
+    //logger.info(`yTemplateString: end`)
+    return {
+      type: 'string',
+      blocks: asts,
+      josi: lastToken !== undefined ? lastToken.josi : '',
+      ...this.fromSourceMap(map)
+    } as AstBlocks
+  }
   /** 変数を生成 */
   createVar (word: Token|Ast, isConst: boolean, isExport: boolean, isActiveDeclare: boolean): Token|Ast {
     let gname: string = (word as AstStrValue).value
@@ -2997,7 +3063,6 @@ export class NakoParser extends NakoParserBase {
             value: ''
           }
           this.addGlobalvars(defValue, word as Token)
-  
         } else {
           const defValue: GlobalVariable = {
             name: gname,
@@ -3380,5 +3445,23 @@ export class NakoParser extends NakoParserBase {
     }
     this.errorInfos.addFromToken('ERROR', 'unknownToken', {type: token.type}, token)
     return this.yNop()
+  }
+
+  protected markColor(word: Ast|Token, value: Ast|Token):void {
+    // 定数で内容が文字列１つのみの場合に色コードチェックをしてマークする
+    if (value.type === 'string') { 
+      const vv = (value as AstConst).value as string
+      if (vv.startsWith('#')) {
+        const color = cssColor.getRgba(vv)
+        if (color) {
+          const v = this.findVar((word as AstStrValue).value)
+          if (v && v.info && v.info.type === 'const') {
+            const c = v.info as LocalConstant
+            c.isColor = true
+            c.hint = (value as AstConst).value as string
+          }
+        }
+      }
+    }
   }
 }

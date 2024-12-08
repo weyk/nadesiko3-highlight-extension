@@ -15,31 +15,38 @@ import type { Token, TokenRef, TokenLink, LinkMain, LinkRef } from '../nako3toke
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
     async provideDocumentHighlights(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<DocumentHighlight[]> {
-        logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights`)
-        let highlight: DocumentHighlight[]|null = []
-        if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideDocumentHighlights: canceled begining`)
+        logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights start`)
+        try {
+            let highlight: DocumentHighlight[]|null = []
+            if (canceltoken.isCancellationRequested) {
+                logger.debug(`provideDocumentHighlights: canceled begining`)
+                return highlight
+            }
+            const nako3doc = nako3docs.get(document)
+            if (nako3doc) {
+                await nako3doc.updateText(document, canceltoken)
+                if (canceltoken.isCancellationRequested) {
+                    logger.debug(`provideDocumentHighlights: canceled adter updateText`)
+                    return highlight
+                }
+                await nako3docs.analyze(nako3doc, canceltoken)
+                if (canceltoken.isCancellationRequested) {
+                    logger.debug(`provideDocumentHighlights: canceled after tokenize`)
+                    return highlight
+                }
+                highlight = this.getHighlight(position, nako3doc.nako3doc)
+                if (canceltoken.isCancellationRequested) {
+                    return highlight
+                }
+                await nako3diagnostic.refreshDiagnostics(canceltoken)
+            }
+            logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights end  (count = ${highlight.length})`)
             return highlight
+        } catch (err) {
+            logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights exception`)
+            console.log(err)
+            throw err
         }
-        const nako3doc = nako3docs.get(document)
-        if (nako3doc) {
-            await nako3doc.updateText(document, canceltoken)
-            if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentHighlights: canceled adter updateText`)
-                return highlight
-            }
-            await nako3docs.analyze(nako3doc, canceltoken)
-            if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentHighlights: canceled after tokenize`)
-                return highlight
-            }
-            highlight = this.getHighlight(position, nako3doc.nako3doc)
-            if (canceltoken.isCancellationRequested) {
-                return highlight
-            }
-            await nako3diagnostic.refreshDiagnostics(canceltoken)
-        }
-		return highlight
     }
 
     getHighlightFromToken(token: Token, kind: DocumentHighlightKind, col?: number): DocumentHighlight|null {

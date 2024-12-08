@@ -93,6 +93,7 @@ export class Nako3Tokenizer {
             let token: Token = {
                 type: '?',
                 fixType: '?',
+                funcType: '?',
                 parseType: '?',
                 group: '?',
                 uri: this.moduleEnv.uri,
@@ -277,6 +278,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'COMMENT_LINE',
             fixType: 'COMMENT_LINE',
+            funcType: 'COMMENT_LINE',
             parseType: 'COMMENT_LINE',
             group: 'コメント',
             uri: this.moduleEnv.uri,
@@ -325,6 +327,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'COMMENT_BLOCK',
             fixType: 'COMMENT_BLOCK',
+            funcType: 'COMMENT_BLOCK',
             parseType: 'COMMENT_BLOCK',
             group: 'コメント',
             uri: this.moduleEnv.uri,
@@ -381,6 +384,7 @@ export class Nako3Tokenizer {
                     const token: Token = {
                         type: type,
                         fixType: type,
+                        funcType: type,
                         parseType: type,
                         group :'文字列',
                         uri: this.moduleEnv.uri,
@@ -409,6 +413,7 @@ export class Nako3Tokenizer {
                         token = {
                             type: 'STRING_INJECT_START',
                             fixType: 'STRING_INJECT_START',
+                            funcType: 'STRING_INJECT_START',
                             parseType: 'STRING_INJECT_START',
                             group: '記号',
                             uri: this.moduleEnv.uri,
@@ -433,6 +438,7 @@ export class Nako3Tokenizer {
                         token = {
                             type: 'STRING_INJECT_END',
                             fixType: 'STRING_INJECT_END',
+                            funcType: 'STRING_INJECT_END',
                             parseType: 'STRING_INJECT_END',
                             group: '記号',
                             uri: this.moduleEnv.uri,
@@ -500,6 +506,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: hasInject ? type: 'string',
             fixType: hasInject ? type: 'string',
+            funcType: hasInject ? type: 'string',
             parseType: hasInject ? type: 'string',
             group: '文字列',
             uri: this.moduleEnv.uri,
@@ -648,6 +655,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: 'word',
             fixType: 'word',
+            funcType: 'word',
             parseType: 'word',
             group: '単語',
             uri: this.moduleEnv.uri,
@@ -725,6 +733,7 @@ export class Nako3Tokenizer {
         const token: Token = {
             type: type,
             fixType: type,
+            funcType: type,
             parseType: type,
             group: '単語',
             uri: this.moduleEnv.uri,
