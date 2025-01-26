@@ -1,3 +1,9 @@
+## 0.2.4
+- バンドルする命令情報ファイル(command.json)をなでしこ3.6.41に更新。
+- 配列記法に続く配列へのアクセスの構文に対応。
+- オブジェクト記法に続く配列へのアクセスの構文に対応。
+- [README.md](README.md)及び[CHANGELOG.md](CHANGELOG.md)(0.2.4以降)を日本語による記述に変更。
+
 ## 0.2.3
 - Support analyze code in template string.
 - Add color icon for user declare constant.

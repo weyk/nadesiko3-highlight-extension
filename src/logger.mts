@@ -1,13 +1,19 @@
+
 const levelTag = ['NONE','LOG','DEBUG','INFO','WARN','ERROR','FATAL']
 
 class Logger {
-    level: number
+        level: number
 
-    constructor () {
+        constructor () {
         this.level = 0
         console.log(`logger:created`)
     }
 
+    /**
+     * ロガーの出力レベルを指定したレベルにする。
+     * 指定した文字列が無効ならばNONEとなる。
+     * @param level {string} - レベルを文字列で指定する
+     */
     setLevel (level: string):void {
         let lvl = levelTag.indexOf(level)
         if (lvl === -1) {
@@ -18,6 +24,11 @@ class Logger {
         this.level = lvl
     }
 
+    /**
+     * ロガーからLOGレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     log (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 1) {
             console.log(message)
@@ -26,6 +37,11 @@ class Logger {
         }
     }
 
+    /**
+     * ロガーからDEBUGレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     debug (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 2) {
             console.debug(message)
@@ -34,6 +50,11 @@ class Logger {
         }
     }
 
+    /**
+     * ロガーからINFOレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     info (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 3) {
             console.info(message)
@@ -42,6 +63,11 @@ class Logger {
         }
     }
 
+    /**
+     * ロガーからWARNレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     warn (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 4) {
             console.warn(message)
@@ -50,6 +76,11 @@ class Logger {
         }
     }
 
+    /**
+     * ロガーからERRORレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     error (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 5) {
             console.error(message)
@@ -58,6 +89,11 @@ class Logger {
         }
     }
 
+    /**
+     * ロガーからFATALレベルのメッセージを出力する
+     * @param message {string} - 表示するメッセージ
+     * @param t {amy} - 使用しない。互換性のため。
+     */
     fatal (message: string, t?: any):void {
         if (this.level > 0 && this.level <= 6) {
             console.log(message)

@@ -69,6 +69,8 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     })
 
+    setTimeout(() => { nako3docs.loadAllFiles() } , 0)
+
     // extension開始時点で既に開かれているTextDocumentを登録する
     for (const document of vscode.workspace.textDocuments) {
         if (!document.isClosed && document.languageId === 'nadesiko3') {
@@ -135,7 +137,7 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerReferenceProvider(NAKO3_MODE, new Nako3ReferenceProvider()))
     context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
     context.subscriptions.push(vscode.languages.registerColorProvider(NAKO3_MODE, new Nako3DocumentColorProvider()))
-    context.subscriptions.push(vscode.languages.registerCallHierarchyProvider(NAKO3_MODE, new Nako3CallHierarchyProvider()))
+    // context.subscriptions.push(vscode.languages.registerCallHierarchyProvider(NAKO3_MODE, new Nako3CallHierarchyProvider()))
 
 	const commandManager = new CommandManager()
 	context.subscriptions.push(commandManager)

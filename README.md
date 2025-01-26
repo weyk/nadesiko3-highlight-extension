@@ -1,25 +1,47 @@
 # VSCode Nadesiko3 Highlight
 
-This extension provides [Nadesiko3](https://nadesi.com/) syntax highlighting for [Visual Studio Code](https://code.visualstudio.com/).
+この[Visual Studio Code](https://code.visualstudio.com/)用の拡張機能は[なでしこ３](https://nadesi.com/)の文法に順じたハイライト表示を提供します。
 
-## feature
+## 機能一覧
 
-- Semantic syntax highlight
-- Document highlight(words highlight)
-- Document symbols(outline)
-- Hover(built-in function hint)
-- Definition(go to definition)
-- Reference(find all references)
-- Rename
-- Document Color(prepend color icon for color const and color-code string)
-- Launch snako/cnako3 program with shebang line
-- Launch wnako3 program without import local file
+- 文法によるハイライト表示(Semantic syntax highlight)
+- 単語のハイライト表示(document highlight)
+- アウトラインの表示(Document symbols)
+- ホバーヒントの表示(Hover)
+- 定義へ移動(Definition)
+- 全ての参照を検索(Reference)
+- シンボルの名前変更(Rename)
+- 色の定数名と色を表す文字列に色アイコンを表示(Document Color)
+- シェバングのあるsnako/cnako3のファイルを実行する
+- ローカルファイルの取り込みが無いwnako3のファイルを実行する
 
-## Install
+## インストール
 
-Search and install **`nadesiko3 syntax highlight`** in VSCode extension marketplace.
+VSCodeの「管理」から「拡張機能」を開き、**`nadesiko3 syntax highlight`** を探してインストールする。
 
-## License
+## 設定
+- ### Enable Nako3 From Remote
+  ハイライト表示のためにリモートにあるnako3ファイルを取り込む。
+- ### Enable Plugin From Remote
+  ハイライト表示のためにリモートにあるjs形式のファイルを取り込む。
+- ### Max Number Of Problems
+  問題タブに表示する表示する最大の問題/警告の数(１ファイル毎)
+- ### Nadesiko3 > Folder
+  なでしこ３をインストールしたフォルダーを指定する。  
+  ワークスペースの./node_modules/nadesiko3が存在しない場合に使用する。  
+  標準的なプラグインの取り込みや実行時のランタイムとして使用する。
+- ### Node > Node Bin
+  NodeJSの実行ファイル(node又はnode.exe)のフルパスを指定する。  
+  実行する際のランタイムとして使用する。
+- ### Runtime Mode
+  シェバング行が無く使用しているプラグインや命令からランタイム環境の判別が付かない場合にここで設定したランタイム環境としてハイライト表示を行う。  
+  実行しようとしている場合にランタイム環境の判別が付かない場合はここの設定は参照せず実行を中止する。
+- ### Runtime Use Shebang
+  ランタイム環境の判別の際に先頭行がシェバング行ならばその設定値を判別に用いる。
+- ### Trace
+  拡張機能開発時のログの出力レベルを選択する。  
+  拡張機能を利用している環境では開発ツールを表示しない限り関係しない。
 
-[MIT](LICENSE.txt)
+## ライセンス
 
+[MITライセンス](LICENSE.txt)

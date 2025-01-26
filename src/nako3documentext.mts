@@ -37,6 +37,16 @@ export class Nako3DocumentExt {
         this.nakoRuntime = ''
     }
 
+    reset ():void {
+        this.nako3doc.reset()
+        this.errorInfos.clear()
+        this.nakoRuntime = ''
+        this.isDirty = false
+        this.isTextDocument = false
+        this.cache = {}
+        this.link.reset()
+    }
+
     setProblemsLimit (limit: number) {
         this.errorInfos.setProblemsLimit(limit)
     }

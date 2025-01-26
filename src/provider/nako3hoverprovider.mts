@@ -2,6 +2,7 @@ import {
     CancellationToken,
     Hover,
     HoverProvider,
+    MarkdownString,
     Position,
     Range,
     TextDocument
@@ -9,13 +10,14 @@ import {
 import { Nako3DocumentExt } from '../nako3documentext.mjs'
 import { argsToString } from '../nako3util.mjs'
 import { operatorCommand } from '../nako3operatorhint.mjs'
+import { statementCommand } from '../nako3statementhint.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { logger } from '../logger.mjs'
 import type { GlobalFunction, LocalVariable, LocalConstant } from '../nako3types.mjs'
-import type { Token, TokenCallFunc, TokenRefVar } from '../nako3token.mjs'
+import type { Token, TokenCallFunc, TokenRefVar, TokenLink, LinkDef, LinkRef, TokenStatement, StatementDef } from '../nako3token.mjs'
 
 export class Nako3HoverProvider implements HoverProvider {
     async provideHover(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<Hover|null> {
@@ -50,6 +52,7 @@ export class Nako3HoverProvider implements HoverProvider {
         const line = position.line
         const col = position.character
         const token = doc.nako3doc.getTokenByPosition(line, col)
+        const tokens = doc.nako3doc.tokens
         
         if (token !== null) {
             if (['sys_func','sys_var','sys_const'].includes(token.type)) {
@@ -76,7 +79,12 @@ export class Nako3HoverProvider implements HoverProvider {
                             cmd = `命令 ${commandInfo.name}`
                         }
                     }
-                    return new Hover([cmd, commandInfo.hint || ''], range)
+                    let md = new MarkdownString()
+                    md.appendMarkdown(`### ${cmd}\n`)
+                    if (commandInfo.hint) {
+                        md.appendMarkdown(commandInfo.hint)
+                    }
+                    return new Hover(md, range)
                 } else if (origin === 'system') {
                     const meta = (token as TokenCallFunc).meta
                     let range = this.getRangeFromTokenContent(token, col)
@@ -95,7 +103,9 @@ export class Nako3HoverProvider implements HoverProvider {
                             cmd = `システム関数 ${meta.name}`
                         }
                     }
-                    return new Hover([cmd, ''], range)
+                    let md = new MarkdownString()
+                    md.appendMarkdown(`### ${cmd}\n`)
+                    return new Hover(md, range)
                 }
             } else if (['user_func', 'user_var', 'user_const'].includes(token.type)) {
                 let cmd:string
@@ -131,19 +141,49 @@ export class Nako3HoverProvider implements HoverProvider {
                 if (range === null) {
                     return null
                 }
-                return new Hover([cmd, ''], range)
-            } else if (nako3extensionOption.useOperatorHint && token.group === '演算子') {
-                let range = this.getRangeFromTokenContent(token, col)
-                if (range === null) {
-                    return null
+                let md = new MarkdownString()
+                md.appendMarkdown(`### ${cmd}\n`)
+                return new Hover(md, range)
+            } else if (token.group === '演算子') {
+                if (nako3extensionOption.useOperatorHint) {
+                    let range = this.getRangeFromTokenContent(token, col)
+                    if (range === null) {
+                        return null
+                    }
+                    const opeInfo = operatorCommand.get(token.type)
+                    if (!opeInfo) {
+                        return null
+                    }
+                    let md = new MarkdownString()
+                    md.appendMarkdown(`### 演算子 「${opeInfo.cmd.join('」「')}」\n`)
+                    md.appendMarkdown(opeInfo.hint)
+                    return new Hover(md, range)
                 }
-                const opeInfo = operatorCommand.get(token.type)
-                if (!opeInfo) {
-                    return null
+            } else if ((token as TokenStatement).statement || (token as TokenLink).link) {
+                if (nako3extensionOption.useStatementHint) {
+                    let range = this.getRangeFromTokenContent(token, col)
+                    if (range === null) {
+                        return null
+                    }
+                    let statement = (token as TokenStatement).statement
+                    if (!statement) {
+                        let link = (token as TokenLink).link
+                        if (link && (link as LinkRef).mainTokenIndex) {
+                            statement = (tokens[(link as LinkRef).mainTokenIndex] as TokenStatement).statement
+                        }
+                    }
+                    if (statement) {
+                        const statementType = (statement as StatementDef).type
+                        const statementInfo = statementCommand.get(statementType)
+                        if (!statementInfo) {
+                            return null
+                        }
+                        let md = new MarkdownString()
+                        md.appendMarkdown(`### 構文 「${statementInfo.cmd.join('」「')}」\n`)
+                        md.appendMarkdown(statementInfo.hint)
+                        return new Hover(md, range)
+                    }
                 }
-                let cmd: string = '演算子 「' + opeInfo.cmd.join('」「') + '」'
-                let hint: string = opeInfo.hint
-                return new Hover([cmd, hint || ''], range)
             }
         }
         return null

@@ -93,6 +93,8 @@ export const lexRules: LexRule[] = [
     { name: 'and', group: '演算子', pattern: /^(かつ|&&|＆＆|and\s)/ },
     { name: 'or', group: '演算子', pattern: /^(または|或いは|あるいは|or\s|\|\||｜｜)/ },
     { name: 'word', group: '記号', pattern: /^[\$＄][\{｛].+?[\}｝]/, proc: 'cbWordEx',  procArgs: ['${', '}', 'word'], withJosi: true }, // 特別名前トークン(#1836)(#672)
+    { name: '…', group: '記号', pattern: /^…/ }, // 範囲オブジェクト(#1704)
+    { name: '…', group: '記号', pattern: /^\.{2,3}/ }, // 範囲オブジェクト(#1704)
     { name: '@', group: '記号', pattern: /^(@|＠)/ },
     { name: '+', group: '演算子', pattern: /^(\+|＋)/ },
     { name: '-', group: '演算子', pattern: /^(-|−|－)/ },

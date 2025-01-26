@@ -46,6 +46,14 @@ export class ModuleLink {
         this.importNako3s = new Map()
         this.importBy = new Set()
     }
+
+    reset ():void {
+        this.filePath = ''
+        this.mainFilepath = ''
+        this.importPlugins.clear()
+        this.importNako3s.clear()
+        this.importBy.clear()
+    }
 }
 
 export class ModuleOption {
@@ -109,6 +117,18 @@ export class ModuleEnv {
         this.scopeIdList = []
         this.declareFuncSid = setSerialId()
         this.declareAllSid = setSerialId()
+    }
+
+    reset () {
+        this.filename = ''
+        this.modName = ''
+        this.isRemote = false
+        this.pluginNames.length = 0
+        this.declareThings.clear()
+        this.externalThings.clear()
+        this.allScopeVarConsts.clear()
+        this.nakoRuntime = ''
+        this.scopeIdList.length = 0
     }
 
     updateFuncSid ():void {

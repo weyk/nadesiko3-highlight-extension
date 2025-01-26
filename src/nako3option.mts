@@ -15,6 +15,7 @@ class Nako3ExtensionOption {
     lazyColorRegexps: RegExp[]
     defaultNakoRuntime: NakoRuntime
     useOperatorHint: boolean
+    useStatementHint: boolean
     problemsLimit: number
     // for execute wnako setting
     enableCSP: boolean
@@ -32,6 +33,7 @@ class Nako3ExtensionOption {
         this.enablePluginFromRemote = true
         this.enableNako3FromRemote = true
         this.useOperatorHint = true
+        this.useStatementHint = true
         this.defaultNakoRuntime = ''
         this.useShebang = true
         this.problemsLimit = 100
@@ -51,6 +53,7 @@ class Nako3ExtensionOption {
         this.loadNakoRuntime(conf)
         this.loadUseShebang(conf)
         this.loadUseOperatorHint(conf)
+        this.loadUseStatementHint(conf)
         this.loadUseLazyColorPresent(conf)
         this.loadEnablePluginFromRemote(conf)
         this.loadEnableNako3FromRemote(conf)
@@ -107,6 +110,15 @@ class Nako3ExtensionOption {
             this.useOperatorHint = v
         } else {
             this.useOperatorHint = true
+        }
+    }
+
+    loadUseStatementHint (conf: WorkspaceConfiguration) {
+        const v = conf.get('useStatementHint')
+        if (typeof v === 'boolean') {
+            this.useStatementHint = v
+        } else {
+            this.useStatementHint = true
         }
     }
 
@@ -266,6 +278,9 @@ export function configurationChanged (e: ConfigurationChangeEvent) {
     } else if (e.affectsConfiguration('nadesiko3Highlight.useOperatorHint')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadUseOperatorHint(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.useStatementHint')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadUseStatementHint(conf)
     } else if (e.affectsConfiguration('nadesiko3Highlight.runtimeMode')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadNakoRuntime(conf)

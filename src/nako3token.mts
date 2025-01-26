@@ -60,6 +60,7 @@ export type Nako3TokenRawType = '?'
 | '}'
 | ':'
 | ','
+| '…'
 | 'word'
 
 export type Nako3TokenTypeReserve = 'もし'
@@ -211,27 +212,36 @@ export interface TokenRef extends Token {
   isWrite?: boolean
 }
 
-export interface TokenLink extends Token {
-  link?: StatementLink
+export interface TokenStatement extends Token {
+  statement?: StatementDef
 }
 
-type TokenLinkType = '?'
+type TokenStatementType = '?'
   | '関数'
   | '無名関数'
+  | '戻る'
   | 'もし'
   | '条件分岐'
   | '繰返'
   | '回'
+  | '間'
   | '反復'
   | '後判定'
+  | '抜ける'
+  | '続ける'
   | 'エラー監視'
   | 'パフォーマンスモニタ適用'
   | '実行速度優先'
 
-export type StatementLink = LinkMain | LinkRef
+export interface StatementDef {
+  type: TokenStatementType
+}
 
-export interface LinkMain {
-  type: TokenLinkType
+export interface TokenLink extends Token {
+  link?: LinkDef | LinkRef
+}
+
+export interface LinkDef {
   childTokenIndex: number[]
 }
 

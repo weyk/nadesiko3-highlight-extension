@@ -9,6 +9,7 @@ import {
 import { EventEmitter } from 'node:events'
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { Nako3Range } from './nako3range.mjs'
+import { Nako3Project, ProjectNode } from './nako3project.mjs'
 import { ImportInfo, LinkPlugin } from './nako3module.mjs'
 import { ImportStatementInfo } from './nako3tokenfixer.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
@@ -198,22 +199,20 @@ export class Nako3Documents extends EventEmitter implements Disposable {
 
     /**
      * クローズを際にTextDocument/Uri共通で必要な処理をまとめたもの。
-     * @param fileName Uri.toString()をしたもの。内部での管理キー。
+     * @param uristr Uri.toString()をしたもの。内部での管理キー。
      * @param doc クローズするファイルのNako3DocumentExt(Uriベースの場合は不要)
      * @returns 登録したNako3DocumentExtを返す
      */
-    private trushDocument (fileName: string, doc?: Nako3DocumentExt):void {
-        if (doc) {
-            doc.nako3doc.onTextUpdated = null
-            doc.link.importPlugins.clear()
-            doc.link.importNako3s.clear()
-        }
+    private trushDocument (uristr: string, doc?: Nako3DocumentExt):void {
         for (const [ , doc ] of this.docs) {
-            if (doc.link.importBy.has(fileName)) {
-                doc.link.importBy.delete(fileName)
+            if (doc.link.importBy.has(uristr)) {
+                doc.link.importBy.delete(uristr)
             }
         }
-        this.docs.delete(fileName)
+        if (doc) {
+            doc.reset()
+        }
+        this.docs.delete(uristr)
     }
 
     async updateText (doc: Nako3DocumentExt, document: Uri|TextDocument, canceltoken?: CancellationToken): Promise<boolean> {
@@ -343,8 +342,24 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     private async refreshLink(doc: Nako3DocumentExt): Promise<boolean> {
         const imports = doc.nako3doc.importStatements
         doc.errorInfos.clear()
+
+        const sortResult = this.sortImports(imports)
+        if (sortResult.otherlist.length > 0) {
+            for (const importInfo of sortResult.otherlist) {
+                const imp = importInfo.value
+                doc.errorInfos.add('WARN', 'unknownImport', { file: imp }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+            }
+        }
+        let changed = false
+        changed = await this.importPlugins(doc, sortResult.pluginlist) || changed
+        changed = await this.importNako3s(doc, sortResult.nako3list) || changed
+        return changed
+    }
+
+    private sortImports (imports: ImportStatementInfo[]): { nako3list: ImportStatementInfo[], pluginlist: ImportStatementInfo[], otherlist: ImportStatementInfo[] } {
         const nako3list: ImportStatementInfo[] = []
         const pluginlist: ImportStatementInfo[] = []
+        const otherlist: ImportStatementInfo[] = []
         let r: RegExpExecArray | null
         for (const importInfo of imports) {
             const imp = importInfo.value
@@ -367,13 +382,10 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             } else  if (type === 'js') {
                 pluginlist.push(importInfo)
             } else {
-                doc.errorInfos.add('WARN', 'unknownImport', { file: imp }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
+                otherlist.push(importInfo)
             }
         }
-        let changed = false
-        changed = await this.importPlugins(doc, pluginlist) || changed
-        changed = await this.importNako3s(doc, nako3list) || changed
-        return changed
+        return { nako3list, pluginlist, otherlist }
     }
 
     private async importPlugins(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<boolean> {
@@ -718,6 +730,57 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             }
         }
         return null
+    }
+
+    async loadAllFiles(canceltoken?: CancellationToken) {
+        logger.info(`loadAllFiles: start`)
+        logger.info(`loadAllFiles: call   findFiles`)
+        const uris = await workspace.findFiles('**/*.nako3','**/node_modules/**', undefined, canceltoken)
+        logger.info(`loadAllFiles: return findFiles(${uris.length})`)
+        for (const uri of uris) {
+            logger.info(`loadAllFiles: file "${uri.toString()}"`)
+            if (canceltoken && canceltoken.isCancellationRequested) {
+                return null
+            }
+            let doc: Nako3DocumentExt|undefined = nako3docs.get(uri)
+            if (!doc) {
+                doc = nako3docs.openFromFile(uri)
+                if (canceltoken && canceltoken.isCancellationRequested) {
+                    return null
+                }
+            }
+            try {
+                if (!doc.isTextDocument) {
+                    await doc.updateText(uri)
+                    if (canceltoken && canceltoken.isCancellationRequested) {
+                        return null
+                    }
+                }
+                await nako3docs.analyzeOnlyTokenize(doc, canceltoken)
+                if (canceltoken && canceltoken.isCancellationRequested) {
+                    return null
+                }
+                const sortResult = this.sortImports(doc.nako3doc.importStatements)
+                const node = new ProjectNode(doc.uri)
+            } catch (err) {
+                console.log(`cause error in enumlateRenameGlobalVar`)
+                console.log(err)
+                if (doc) {
+                    this.closeAtFile(uri)
+                }
+            }
+        }
+        logger.info(`loadAllFiles: end`)
+        return
+    }
+
+    async analyzeProject (project: Nako3Project) {
+        await project.walkTree(project.projectTree, async (node) => {
+            const doc = this.get(node.uri)
+            if (doc) {
+                await this.analyzeOnlyTokenize(doc)
+            }
+        })
     }
 }
 

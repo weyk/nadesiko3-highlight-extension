@@ -70,6 +70,26 @@ export class Nako3Document {
         this.onTextUpdated =null
     }
 
+    reset ():void {
+        this.moduleOption.reset()
+        this.moduleEnv.reset()
+        this.lexer.reset()
+        this.fixer.reset()
+        this.applyer.reset()
+        this.parser.reset()
+        this.invalidate()
+        this.errorInfos.clear()
+        this.text = ''
+        this.textVersion = null
+        this.lengthLines.length = 0
+        this.tokens.length = 0
+        this.commentTokens.length = 0
+        this.importStatements.length = 0
+        this.preNakoRuntime = ''
+        this.project = null
+        this.onTextUpdated = null
+    }
+
     // called by Nako3DocumentExt only.
     updateText (text: string, textVersion: number|null): boolean {
         if (textVersion === null || textVersion !== this.textVersion) {

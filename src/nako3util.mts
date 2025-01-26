@@ -57,11 +57,16 @@ const convertCharTable = new Map<number, string>([
     [0x2797, '÷'] // ÷の絵文字 (#1183)
 ])
 
-// 一文字だけ変換
 /**
- * @param {string} ch
+ * @summary １文字を正規化して返す
+ * @description
+ * chの先頭１文字を変換して以下に従い正規化する。  
+ * ・半角に変換可能な文字を半角にする。  
+ * ・同一視したい文字を一方に寄せる。
+ * @param {string} ch - 正規化する文字。先頭の１文字のみが対象
+ * @returns {string} 正規化した文字
  */
-export function convert1ch(ch: string): string {
+function convert1ch(ch: string): string {
     if (!ch) { return '' }
     const c: number = ch.codePointAt(0) || 0
     // テーブルによる変換
@@ -77,7 +82,15 @@ export function convert1ch(ch: string): string {
     return ch
 }
 
-  /** convert code */
+/**
+ * @summary 文字列を正規化する。
+ * @description
+ * 文字列を以下に従い正規化して返す。
+ * ・各文字に１文字変換用の関数を適用する。
+ * ・改行として扱う\r\n,\r,\nを\nに変換して統一する。
+ * @param {string} code - 正規化する文字列
+ * @returns {return} 正規化した文字列
+ */
 export function convert(code: string): string {
     if (!code) { return code }
     // 改行コードを統一
@@ -228,6 +241,11 @@ export function dumpScopIdList (scopeList: ScopeIdRange[], tokens : Token[]) {
     }
 }
 
+/**
+ * @summary ""もしくは''によるクォーティングを外す。無ければそのまま返す。
+ * @param {string} str
+ * @returns {string}
+ */
 export function trimQuote (str: string): string {
     if (str === '""' || str === "''") {
         return ''

@@ -11,7 +11,7 @@ import { Nako3Document } from '../nako3document.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { Token, TokenRef, TokenLink, LinkMain, LinkRef } from '../nako3token.mjs'
+import type { Token, TokenRef, TokenLink, LinkDef, LinkRef } from '../nako3token.mjs'
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
     async provideDocumentHighlights(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<DocumentHighlight[]> {
@@ -113,8 +113,8 @@ export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider
             if (link && (link as LinkRef).mainTokenIndex) {
                 link = (doc.tokens[(link as LinkRef).mainTokenIndex] as TokenLink).link
             }
-            if (link) {
-                for (let i of (link as LinkMain).childTokenIndex) {
+            if (link && (link as LinkDef).childTokenIndex.length > 1) {
+                for (let i of (link as LinkDef).childTokenIndex) {
                     const token = doc.tokens[i]
                     const highlight = this.getHighlightFromToken(token, DocumentHighlightKind.Text)
                     if (highlight) {

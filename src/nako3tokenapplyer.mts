@@ -17,6 +17,10 @@ export class Nako3TokenApplyer {
         this.errorInfos = new ErrorInfoManager()
     }
 
+    reset ():void {
+        this.errorInfos.clear()
+    }
+
     public setProblemsLimit (limit: number):void {
         this.errorInfos.setProblemsLimit(limit)
     }

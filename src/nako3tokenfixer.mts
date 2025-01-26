@@ -44,6 +44,13 @@ export class Nako3TokenFixer {
         this.imports = []
     }
 
+    reset ():void {
+        this.errorInfos.clear()
+        this.tokens.length = 0
+        this.imports.length = 0
+        this.nakoRuntime = ''
+    }
+
     public setProblemsLimit (limit: number):void {
         this.errorInfos.setProblemsLimit(limit)
     }

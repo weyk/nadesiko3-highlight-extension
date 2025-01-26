@@ -3,6 +3,7 @@
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
     "useOperatorHint.description": "演算子に対するヒントの表示を有効にする",
+    "useStatementHint.description": "構文に対するヒントの表示を有効にする",
     "useLazyColorPresent.description": "正規表現に一致した文字列を色コードとして色アイコンの追加をする",
     "enablePluginFromRemote.description": "Javascriptで書かれたプラグインのリモートからの取り込みを有効にする",
     "enableNako3FromRemote.description": "なでしこ３で書かれたファイルのリモートからの取り込みを有効にする",

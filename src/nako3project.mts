@@ -1,13 +1,16 @@
 import {
-    Uri
+    CancellationToken,
+    Uri,
+    workspace
 } from 'vscode'
-import { nako3docs } from './nako3interface.mjs'
+import { Nako3DocumentExt } from './nako3documentext.mjs'
+import { logger } from './logger.mjs'
 import type { NakoRuntime } from './nako3types.mjs'
 
-class ProjectNode {
-    uri: Uri
-    children: ProjectNode[]
-    parent: ProjectNode|null
+export class ProjectNode {
+    public uri: Uri
+    public children: ProjectNode[]
+    public parent: ProjectNode|null
 
     constructor (uri: Uri, parent?: ProjectNode) {
         this.uri = uri
@@ -39,12 +42,6 @@ export class Nako3Project {
         }
     }
 
-    async analyze () {
-        await this.walkTree(this.projectTree, async (node) => {
-            const doc = nako3docs.get(node.uri)
-            if (doc) {
-                await nako3docs.analyzeOnlyTokenize(doc)
-            }
-        })
-    }
+
 }
+

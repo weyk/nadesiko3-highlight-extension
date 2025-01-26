@@ -40,6 +40,14 @@ export class Nako3Tokenizer {
         }
     }
 
+    reset ():void {
+        this.errorInfos.clear()
+        this.rawTokens.length = 0
+        this.lengthLines.length = 0
+        this.line = 0
+        this.col = 0
+    }
+
     /** 
      * 保持しているトークンや解析毛結果を削除し生トークンを生成する
      * @param text トークン化する

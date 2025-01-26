@@ -10,7 +10,7 @@ import { nako3plugin } from '../nako3plugin.mjs'
 import { cssColor } from '../csscolor.mjs'
 import { logger } from '../logger.mjs'
 import type { GlobalFunction, SourceMap, GlobalVariable, GlobalConstant, GlobalVarConst, LocalVariable, LocalConstant } from '../nako3types.mjs'
-import type { Token, TokenDefFunc, TokenCallFunc, TokenRef, TokenRefVar, StatementLink, LinkMain, LinkRef, TokenLink } from '../nako3token.mjs'
+import type { Token, TokenDefFunc, TokenCallFunc, TokenRef, TokenRefVar, StatementDef, TokenStatement, LinkDef, LinkRef, TokenLink } from '../nako3token.mjs'
 import type { NodeType, Ast, AstEol, AstBlocks, AstOperator, AstConst, AstLet, AstLetArray, AstIf, AstWhile, AstAtohantei, AstFor, AstForeach, AstSwitch, AstRepeatTimes, AstDefFunc, AstCallFunc, AstStrValue, AstDefVar, AstDefVarList } from './nako_ast.mjs'
 import { nako3extensionOption } from 'src/nako3option.mjs'
 
@@ -177,14 +177,20 @@ export class NakoParser extends NakoParserBase {
     if (this.check('エラー監視')) {
       return this.yTryExcept()
     }
-    if (this.accept(['抜ける'])) {
+    if (this.check('抜ける')) {
+      const breakDef = this.getCur() // '抜ける'
+      const statementDef : StatementDef = { type: '抜ける' };
+      (breakDef as TokenStatement).statement = statementDef
       return { type: 'break', josi: '', ...this.fromSourceMap(map) }
     }
-    if (this.accept(['続ける'])) {
+    if (this.check('続ける')) {
+      const continueDef = this.getCur() // '続ける'
+      const statementDef : StatementDef = { type: '続ける' };
+      (continueDef as TokenStatement).statement = statementDef
       return { type: 'continue', josi: '', ...this.fromSourceMap(map) }
     }
     if (this.check('??')) {
-      return this.yPrint()
+      return this.yDebugPrint()
     }
 
     if (this.currentIndentSemantic) {
@@ -471,8 +477,12 @@ export class NakoParser extends NakoParserBase {
       this.errorInfos.addFromToken('ERROR', 'exceptionInFuncDef', { nodestr: this.nodeToStr(funcName, { depth: 0, typeName: '関数' }, false), msg: err?.message }, def)
     }
 
+    if (defTokenIndex) {
+      const statementDef : StatementDef = { type: '関数' };
+      (defToken as TokenStatement).statement = statementDef
+    }
     if (statementCount > 1) {
-      const linkMain : LinkMain = { type: '関数', childTokenIndex: [defTokenIndex]};
+      const linkMain : LinkDef = { childTokenIndex: [defTokenIndex]};
       (defToken as TokenLink).link = linkMain
       if (tohaIndex !== undefined) {
         linkMain.childTokenIndex.push(tohaIndex);
@@ -706,8 +716,12 @@ export class NakoParser extends NakoParserBase {
       }
     }
 
+    if (mainIndex) {
+      const statementDef : StatementDef = { type: 'もし' };
+      (this.tokens[mainIndex] as TokenStatement).statement = statementDef
+    }
     if (statementCount > 1) {
-      const linkMain : LinkMain = { type: 'もし', childTokenIndex: [mainIndex]};
+      const linkMain : LinkDef = { childTokenIndex: [mainIndex]};
       (this.tokens[mainIndex] as TokenLink).link = linkMain
       if (narabaIndex !== undefined && narabaIndex !== mainIndex) {
         linkMain.childTokenIndex.push(narabaIndex);
@@ -793,7 +807,7 @@ export class NakoParser extends NakoParserBase {
         if (this.check('ここまで')) {
           const kokomadeIndex = this.getIndex()
           const kokomade = this.getCur()
-          const linkMain : LinkMain = { type: '実行速度優先', childTokenIndex: [speedIndex]};
+          const linkMain : LinkDef = { childTokenIndex: [speedIndex]};
           (speed as TokenLink).link = linkMain
           if (kokokaraIndex !== undefined) {
             (this.tokens[kokokaraIndex] as TokenLink).link = { mainTokenIndex: speedIndex }
@@ -809,6 +823,11 @@ export class NakoParser extends NakoParserBase {
       this.indentPop(['実行速度優先'])
     } else {
       block = this.ySentence() || block
+    }
+
+    if (speed) {
+      const statementDef : StatementDef = { type: '実行速度優先' };
+      (speed as TokenStatement).statement = statementDef
     }
 
     return {
@@ -876,7 +895,7 @@ export class NakoParser extends NakoParserBase {
         if (this.check('ここまで')) {
           const kokomadeIndex = this.getIndex()
           const kokomade = this.getCur()
-          const linkMain : LinkMain = { type: 'パフォーマンスモニタ適用', childTokenIndex: [permonIndex]};
+          const linkMain : LinkDef = { childTokenIndex: [permonIndex]};
           (permon as TokenLink).link = linkMain
           if (kokokaraIndex !== undefined) {
             (this.tokens[kokokaraIndex] as TokenLink).link = { mainTokenIndex: permonIndex }
@@ -892,6 +911,11 @@ export class NakoParser extends NakoParserBase {
       this.indentPop(['パフォーマンスモニタ適用'])
     } else {
       block = this.ySentence() || block
+    }
+
+    if (permon) {
+      const statementDef : StatementDef = { type: 'パフォーマンスモニタ適用' };
+      (permon as TokenStatement).statement = statementDef
     }
 
     return {
@@ -976,7 +1000,7 @@ export class NakoParser extends NakoParserBase {
    * 表示(関数)を返す 「??」のエイリアスで利用 (#1745)
    * @returns {AstCallFunc | null}
    */
-  yPrint (): AstCallFunc | null {
+  yDebugPrint (): AstCallFunc | null {
     const map = this.peekSourceMap()
     const t = this.get() // skip '??'
     if (!t || t.value !== '??') {
@@ -990,14 +1014,14 @@ export class NakoParser extends NakoParserBase {
       this.skipToEol()
       return this.yNop() as AstCallFunc
     }
-    const meta = nako3plugin.getDeclare('plugin_system')?.get('表示') as GlobalFunction|undefined
+    const meta = nako3plugin.getDeclare('plugin_system')?.get('ハテナ関数実行') as GlobalFunction|undefined
     if (!meta) {
-      this.errorInfos.addFromToken('ERROR', 'noCommandInSystemPlugin', { command: '表示' }, map)
+      this.errorInfos.addFromToken('ERROR', 'noCommandInSystemPlugin', { command: 'ハテナ関数実行' }, map)
       return this.yNop() as any
     }
     return {
       type: 'func',
-      name: '表示',
+      name: 'ハテナ関数実行',
       blocks: [arg],
       josi: '',
       meta,
@@ -1118,8 +1142,10 @@ export class NakoParser extends NakoParserBase {
     const kaiIndex = this.getIndex()
     const kai = this.getCur() // '回'
     let indentBase = kai
-    const linkMain : LinkMain = { type: '回', childTokenIndex: [kaiIndex]};
+    const linkMain : LinkDef = { childTokenIndex: [kaiIndex]};
     (kai as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: '回' };
+    (kai as TokenStatement).statement = statementDef
     if (this.check(',')) { this.get() } // skip comma
     if (this.check('繰返')) {
       const kurikaesuIndex = this.getIndex()
@@ -1188,19 +1214,34 @@ export class NakoParser extends NakoParserBase {
     const aidaIndex = this.getIndex()
     let aida = this.getCur() // '間'
     let indentBase = aida
+    const linkMain : LinkDef = { childTokenIndex: [aidaIndex]};
+    (aida as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: '間' };
+    (aida as TokenStatement).statement = statementDef
     while (this.check(',')) { this.get() } // skip ','
-    if (this.check('繰返')) { this.get() } // skip '繰り返す' #927
+    if (this.check('繰返')) {
+      const kurikaesuIndex = this.getIndex()
+      const kurikaesu = this.getCur() // 'Nの間、繰り返す' (#927)
+      linkMain.childTokenIndex.push(kurikaesuIndex);
+      (kurikaesu as TokenLink).link = { mainTokenIndex: aidaIndex }
+    }
     let expr = this.popStack()
     if (expr === null) {
       this.errorInfos.addFromToken('ERROR', 'noExprWhile', {}, map)
       expr = this.yNop()
     }
+
     if (this.check(':')) {
       this.get()
       indentSemantic = true
     }
     if (this.check(',')) { this.get() }
-    if (!this.checkTypes(['ここから', 'eol'])) {
+    if (this.check('ここから')) {
+      const kokokaraIndex = this.getIndex()
+      const kokokara = this.getCur()
+      linkMain.childTokenIndex.push(kokokaraIndex);
+      (kokokara as TokenLink).link = { mainTokenIndex: aidaIndex }
+    } else if (!this.check('eol')) {
       this.errorInfos.addFromToken('ERROR', 'requireLfAfterWhile', {}, map)
     }
     this.indentPush('間')
@@ -1213,7 +1254,10 @@ export class NakoParser extends NakoParserBase {
       }
     } else {
       if (this.check('ここまで')) {
-        this.get()
+        const kokomadeIndex = this.getIndex()
+        const kokomade = this.getCur();
+        (kokomade as TokenLink).link = { mainTokenIndex: aidaIndex }
+        linkMain.childTokenIndex.push(kokomadeIndex)
       } else {
         this.errorInfos.addFromToken('ERROR', 'noKokomadeAtWhile', {}, map)
       }
@@ -1345,8 +1389,10 @@ export class NakoParser extends NakoParserBase {
         this.errorInfos.addFromToken('ERROR', 'errorFromToAtFor', {}, kurikaesu)
       }
     }
-    const linkMain : LinkMain = { type: '繰返', childTokenIndex: [kurikaesuIndex]};
+    const linkMain : LinkDef = { childTokenIndex: [kurikaesuIndex]};
     (kurikaesu as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: '繰返' };
+    (kurikaesu as TokenStatement).statement = statementDef
     if (incdec && incdecIndex !== undefined) {
       linkMain.childTokenIndex.push(incdecIndex);
       (this.tokens[incdecIndex] as TokenLink).link = { mainTokenIndex: kurikaesuIndex }
@@ -1413,7 +1459,9 @@ export class NakoParser extends NakoParserBase {
   yReturn(): AstBlocks | null {
     const map = this.peekSourceMap()
     if (!this.check('戻る')) { return null }
-    this.get() // skip '戻る'
+    const returnDef = this.getCur() // skip '戻る'
+    const statementDef : StatementDef = { type: '戻る' };
+    (returnDef as TokenStatement).statement = statementDef
     const v = this.popStack(['で', 'を']) || this.yNop()
     if (this.stack.length > 0) {
       this.errorInfos.addFromToken('ERROR', 'returnWithMultiStack', {} , map)
@@ -1447,8 +1495,10 @@ export class NakoParser extends NakoParserBase {
         const nameToken = this.getVarName(name)
       }
     }
-    const linkMain : LinkMain = { type: '反復', childTokenIndex: [hanpukuIndex]};
+    const linkMain : LinkDef = { childTokenIndex: [hanpukuIndex]};
     (hanpuku as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: '反復' };
+    (hanpuku as TokenStatement).statement = statementDef
     let block: Ast = this.yNop()
     let multiline = false
     let indentSemantic = this.moduleOption.isIndentSemantic
@@ -1528,8 +1578,10 @@ export class NakoParser extends NakoParserBase {
     const blocks: Ast[] = []
     blocks[0] = expr
     blocks[1] = this.yNop() // 後で default のAstを再設定するため
-    const linkMain : LinkMain = { type: '条件分岐', childTokenIndex: [joukenbunkiIndex]};
+    const linkMain : LinkDef = { childTokenIndex: [joukenbunkiIndex]};
     (joukenbunki as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: '条件分岐' };
+    (joukenbunki as TokenStatement).statement = statementDef
     this.indentPush('条件分岐')
     this.currentIndentLevel = joukenbunki.indent.level
     this.currentIndentSemantic = indentSemantic
@@ -1675,6 +1727,8 @@ export class NakoParser extends NakoParserBase {
     const defTokenIndex = this.index
     const defToken = this.get()
     if (!defToken) { return null }
+    const statementDef : StatementDef = { type: '無名関数' };
+    (defToken as TokenStatement).statement = statementDef
     let indentSemantic = this.moduleOption.isIndentSemantic
     const def = defToken as TokenDefFunc
     let args: Ast[] = []
@@ -1725,7 +1779,7 @@ export class NakoParser extends NakoParserBase {
       if (this.check('ここまで')) {
         const kokomadeIndex = this.getIndex()
         const kokomade = this.getCur()
-        const linkMain : LinkMain = { type: '無名関数', childTokenIndex: [defTokenIndex]};
+        const linkMain : LinkDef = { childTokenIndex: [defTokenIndex]};
         (defToken as TokenLink).link = linkMain
         linkMain.childTokenIndex.push(kokomadeIndex);
         (kokomade as TokenLink).link = { mainTokenIndex: defTokenIndex }
@@ -2896,7 +2950,9 @@ export class NakoParser extends NakoParserBase {
           this.checkArrayIndex(this.y[1]),
           this.checkArrayIndex(this.y[3])
         ]
+        const aa = ast.index.pop()
         ast.index = this.checkArrayReverse(index)
+        if (aa) { ast.index.unshift(aa) }
         ast.josi = this.y[4].josi
         return this.y[4].josi === '' // 助詞があればそこで終了(false)を返す
       }
@@ -2908,7 +2964,9 @@ export class NakoParser extends NakoParserBase {
           this.checkArrayIndex(this.y[3]),
           this.checkArrayIndex(this.y[5])
         ]
+        const aa = ast.index.pop()
         ast.index = this.checkArrayReverse(index)
+        if (aa) { ast.index.unshift(aa) }
         ast.josi = this.y[6].josi
         return this.y[6].josi === '' // 助詞があればそこで終了(false)を返す
       }
@@ -3198,8 +3256,27 @@ export class NakoParser extends NakoParserBase {
     return a
   }
 
+  yJSONObject(): AstBlocks | Ast | null {
+    const map = this.peekSourceMap()
+    const a = this.yJSONObjectRaw()
+    if (!a) { return null }
+    // 配列の直後に@や[]があるか？助詞がある場合には、別の引数の可能性があるので無視。 (例) [0,1,2]を[3,4,5]に配列＊＊＊
+    if (a.josi === '' && this.checkTypes(['@', '['])) {
+      const ast: Ast = {
+        type: 'ref_array',
+        name: '__ARRAY__',
+        index: [a],
+        josi: '',
+        ...this.fromSourceMap(map)
+      }
+      this.yValueWordGetIndex(ast)
+      return ast
+    }
+    return a
+  }
+
   /** @returns {Ast | null} */
-  yJSONObject (): AstBlocks | null {
+  yJSONObjectRaw (): AstBlocks | null {
     const map = this.peekSourceMap()
     if (this.accept(['{', '}'])) {
       return {
@@ -3246,8 +3323,28 @@ export class NakoParser extends NakoParserBase {
     return a
   }
 
+  yJSONArray(): AstBlocks | Ast | null {
+    const map = this.peekSourceMap()
+    // 配列を得る
+    const a = this.yJSONArrayRaw()
+    if (!a) { return null }
+    // 配列の直後に@や[]があるか？助詞がある場合には、別の引数の可能性があるので無視。 (例) [0,1,2]を[3,4,5]に配列＊＊＊
+    if (a.josi === '' && this.checkTypes(['@', '['])) {
+      const ast: Ast = {
+        type: 'ref_array',
+        name: '__ARRAY__',
+        index: [a],
+        josi: '',
+        ...this.fromSourceMap(map)
+      }
+      this.yValueWordGetIndex(ast)
+      return ast
+    }
+    return a
+  }
+
   /** @returns {AstBlocks | null} */
-  yJSONArray (): AstBlocks | null {
+  yJSONArrayRaw (): AstBlocks | null {
     const map = this.peekSourceMap()
     if (this.accept(['[', ']'])) {
       return {
@@ -3286,8 +3383,10 @@ export class NakoParser extends NakoParserBase {
       this.get()
       indentSemantic = true
     }
-    const linkMain : LinkMain = { type: 'エラー監視', childTokenIndex: [kansiIndex]};
+    const linkMain : LinkDef = { childTokenIndex: [kansiIndex]};
     (kansi as TokenLink).link = linkMain
+    const statementDef : StatementDef = { type: 'エラー監視' };
+    (kansi as TokenStatement).statement = statementDef
     this.indentPush('エラー監視')
     this.currentIndentLevel = kansi.indent.level
     this.currentIndentSemantic = indentSemantic
