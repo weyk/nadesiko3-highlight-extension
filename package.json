@@ -235,7 +235,7 @@
         "@types/vscode": "^1.91.0",
         "@typescript-eslint/parser": "^8.0.1",
         "@vscode/test-cli": "^0.0.10",
-        "eslint": "^9.8.0",
+        "eslint": "^9.20.0",
         "eslint-plugin-mocha": "^10.5.0",
         "mocha": "^10.7.0",
         "rollup": "^4.19.1",
