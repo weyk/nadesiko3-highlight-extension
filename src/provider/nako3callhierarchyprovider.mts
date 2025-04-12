@@ -21,24 +21,27 @@ import type { Token, TokenRef, TokenLink, LinkDef, LinkRef, TokenDefFunc, TokenC
 import type { GlobalFunction } from '../nako3types.mjs'
 
 export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
-    async prepareCallHierarchy(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<CallHierarchyItem | CallHierarchyItem[]| null> {
-        logger.info(`■ CallHierarchyProvider: prepareCallHierarchy start`)
+  protected log = logger.fromKey('/provider/Nako3CallHierarchyProvider')
+
+  async prepareCallHierarchy(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<CallHierarchyItem | CallHierarchyItem[]| null> {
+        const log = this.log.appendKey('.prepareCallHierarchy')
+        log.info(`■ CallHierarchyProvider: prepareCallHierarchy start`)
         try {
             let items: CallHierarchyItem[]|null = []
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`prepareCallHierarchy: canceled begining`)
+                log.debug(`prepareCallHierarchy: canceled begining`)
                 return items
             }
             const nako3doc = nako3docs.get(document)
             if (nako3doc) {
                 await nako3doc.updateText(document, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`prepareCallHierarchy: canceled adter updateText`)
+                    log.debug(`prepareCallHierarchy: canceled adter updateText`)
                     return items
                 }
                 await nako3docs.analyze(nako3doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`prepareCallHierarchy: canceled after tokenize`)
+                    log.debug(`prepareCallHierarchy: canceled after tokenize`)
                     return items
                 }
                 items = this.getCallHierarchyItem(position, nako3doc)
@@ -47,46 +50,48 @@ export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
                 }
                 await nako3diagnostic.refreshDiagnostics(canceltoken)
             }
-            logger.info(`■ CallHierarchyProvider: prepareCallHierarchy end  (count = ${items ? items.length : null})`)
+            log.info(`■ CallHierarchyProvider: prepareCallHierarchy end  (count = ${items ? items.length : null})`)
             return items
         } catch (err) {
-            logger.info(`■ CallHierarchyProvider: prepareCallHierarchy exception`)
-            console.log(err)
+            log.error(`■ CallHierarchyProvider: prepareCallHierarchy exception`)
+            log.error(err)
             throw err
         }
     }
 
     async provideCallHierarchyIncomingCalls(item: CallHierarchyItem, canceltoken: CancellationToken): Promise<CallHierarchyIncomingCall[]> {
-        logger.info(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls start`)
+        const log = this.log.appendKey('.provideCallHierarchyIncomingCalls')
+        log.info(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls start`)
         try {
             let calls: CallHierarchyIncomingCall[]|null = []
-            logger.info(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls end  (count = ${calls ? calls.length : null})`)
+            log.info(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls end  (count = ${calls ? calls.length : null})`)
             return calls
         } catch (err) {
-            logger.info(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls exception`)
-            console.log(err)
+            log.error(`■ CallHierarchyProvider: provideCallHierarchyIncomingCalls exception`)
+            log.error(err)
             throw err
         }
     }
 
     async provideCallHierarchyOutgoingCalls(item: CallHierarchyItem, canceltoken: CancellationToken): Promise<CallHierarchyOutgoingCall[]|null> {
-        logger.info(`■ CallHierarchyProvider: provideCallHierarchyOutgoingCalls start`)
+        const log = this.log.appendKey('.provideCallHierarchyOutgoingCalls')
+        log.info(`■ CallHierarchyProvider: provideCallHierarchyOutgoingCalls start`)
         try {
             let calls: CallHierarchyOutgoingCall[]|null = []
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideCallHierarchyOutgoingCalls: canceled begining`)
+                log.debug(`provideCallHierarchyOutgoingCalls: canceled begining`)
                 return calls
             }
             const nako3doc = nako3docs.get(item.uri)
             if (nako3doc) {
                 await nako3doc.updateText(item.uri, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`provideCallHierarchyOutgoingCalls: canceled adter updateText`)
+                    log.debug(`provideCallHierarchyOutgoingCalls: canceled adter updateText`)
                     return calls
                 }
                 await nako3docs.analyze(nako3doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`provideCallHierarchyOutgoingCalls: canceled after tokenize`)
+                    log.debug(`provideCallHierarchyOutgoingCalls: canceled after tokenize`)
                     return calls
                 }
                 calls = this.getCallHierarchyOutgoingCalls(item, nako3doc, canceltoken)
@@ -95,11 +100,11 @@ export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
                 }
                 await nako3diagnostic.refreshDiagnostics(canceltoken)
             }
-            logger.info(`■ CallHierarchyProvider: prepareCallHierarchy end  (count = ${calls ? calls.length : null})`)
+            log.info(`■ CallHierarchyProvider: prepareCallHierarchy end  (count = ${calls ? calls.length : null})`)
             return calls
         } catch (err) {
-            logger.info(`■ CallHierarchyProvider: prepareCallHierarchy exception`)
-            console.log(err)
+            log.error(`■ CallHierarchyProvider: prepareCallHierarchy exception`)
+            log.error(err)
             throw err
         }
     }
@@ -161,13 +166,14 @@ export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
     }
 
     getCallHierarchyItem (position: Position, doc: Nako3DocumentExt): CallHierarchyItem[] {
+        const log = this.log.appendKey('.getCallHierarchyItem')
         const line = position.line
         const col = position.character
         const token = doc.nako3doc.getTokenByPosition(line, col)
         const callHierarchyItemList: CallHierarchyItem[] = []
         if (!token) { return [] }
         if (!['user_func', 'sys_func', 'FUNCTION_NAME'].includes(token.type)) {
-            logger.info(`getCallHierarchyItem: unsupport type : ${token.type}`)
+            log.info(`getCallHierarchyItem: unsupport type : ${token.type}`)
             return []
         }
         let a = this.getCallHierarchyItemFromToken(doc, token, SymbolKind.Function)
@@ -178,12 +184,13 @@ export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
     }
 
     getCallHierarchyOutgoingCalls (item: CallHierarchyItem, doc: Nako3DocumentExt, canceltoken: CancellationToken): CallHierarchyOutgoingCall[]|null {
+        const log = this.log.appendKey('.getCallHierarchyOutgoingCalls')
         const line = item.range.start.line
         const col = item.range.start.character
         const token = doc.nako3doc.getTokenByPosition(line, col)
         const callHierarchyOutgoingCall: CallHierarchyOutgoingCall[] = []
         if (!token) {
-            logger.info(`getCallHierarchyOutgoingCalls: fail token from item`)
+            log.info(`getCallHierarchyOutgoingCalls: fail token from item`)
             console.log(item)
             return null
         }
@@ -198,8 +205,8 @@ export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
                     if (c) {
                         callHierarchyOutgoingCall.push(c)
                     } else {
-                        logger.info(`getCallHierarchyOutgoingCalls: fail calls from token`)
-                        console.log(token)
+                        log.info(`getCallHierarchyOutgoingCalls: fail calls from token`)
+                        log.info(token)
                     }
                 }
             }

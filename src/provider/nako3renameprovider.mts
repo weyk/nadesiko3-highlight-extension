@@ -24,37 +24,40 @@ interface PrepareRenameResult {
     placeholder: string
 }
 export class Nako3RenameProvider implements RenameProvider {
+    protected log = logger.fromKey('/provider/Nako3RenameProvider')
+
     async prepareRename(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<null | PrepareRenameResult> {
-        logger.info(`■ RenameProvider: prepareRename`)
+        const log = this.log.appendKey('.prepareRename')
+        log.info(`■ RenameProvider: prepareRename`)
         let result: PrepareRenameResult |string = "Disallow rename"
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`prepareRename: canceled begining`)
+            log.debug(`prepareRename: canceled begining`)
             return null
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
-            logger.info('prepareRename: before updateText')
+            log.info('prepareRename: before updateText')
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`prepareRename: canceled after updateText`)
+                log.debug(`prepareRename: canceled after updateText`)
                 return null
             }
-            logger.info('prepareRename: before tokenize')
+            log.info('prepareRename: before tokenize')
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`prepareRename: canceled after tokenize`)
+                log.debug(`prepareRename: canceled after tokenize`)
                 return null
             }
-            logger.info('prepareRename: before getPrepareRename')
+            log.info('prepareRename: before getPrepareRename')
             result = await this.getPrepareRename(position, nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`prepareRename: canceled after getPrepareRename`)
+                log.debug(`prepareRename: canceled after getPrepareRename`)
                 return null
             }
         } else {
             throw getMessageWithArgs('cannnotRenameThis', {})            
         }
-        logger.info(`prepareRename: end(${typeof result === 'string' ? result : 'accept'})`)
+        log.info(`prepareRename: end(${typeof result === 'string' ? result : 'accept'})`)
         if (typeof result === 'string') {
             throw result
         }
@@ -62,36 +65,37 @@ export class Nako3RenameProvider implements RenameProvider {
     }
 
     async provideRenameEdits(document: TextDocument, position: Position, newName: string, canceltoken: CancellationToken): Promise<null | WorkspaceEdit> {
-        logger.info(`■ RenameProvider: provideRenameEdits`)
+        const log = this.log.appendKey('.provideRenameEdits')
+        log.info(`■ RenameProvider: provideRenameEdits`)
         let result: WorkspaceEdit|null
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideRenameEdits: canceled begining`)
+            log.debug(`provideRenameEdits: canceled begining`)
             return null
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
-            logger.info('provideRenameEdits: before updateText')
+            log.info('provideRenameEdits: before updateText')
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideRenameEdits: canceled after updateText`)
+                log.debug(`provideRenameEdits: canceled after updateText`)
                 return null
             }
-            logger.info('provideRenameEdits: before tokenize')
+            log.info('provideRenameEdits: before tokenize')
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideRenameEdits: canceled after tokenize`)
+                log.debug(`provideRenameEdits: canceled after tokenize`)
                 return null
             }
-            logger.info('provideRenameEdits: before getPrepareRename')
+            log.info('provideRenameEdits: before getPrepareRename')
             result = await this.renameRefs(position, newName, nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideRenameEdits: canceled after getPrepareRename`)
+                log.debug(`provideRenameEdits: canceled after getPrepareRename`)
                 return null
             }
         } else {
             throw getMessageWithArgs('cannnotRenameThis', {})            
         }
-        logger.info(`prepareRename: end(${typeof result === 'string' ? result : 'accept'})`)
+        log.info(`prepareRename: end(${typeof result === 'string' ? result : 'accept'})`)
         if (typeof result === 'string') {
             throw result
         }
@@ -176,17 +180,18 @@ export class Nako3RenameProvider implements RenameProvider {
     }
 
     private async enumlateRenameGlobalVar (thing:DeclareThing, newName: string, canceltoken: CancellationToken): Promise<WorkspaceEdit|null> {
+        const log = this.log.appendKey('.enumlateRenameGlobalVar')
         const workspaceEdit = new WorkspaceEdit()
-        logger.info(`enumlateRenameGlobalVar: call   findFiles`)
+        log.info(`enumlateRenameGlobalVar: call   findFiles`)
         const uris = await workspace.findFiles('**/*.nako3','**/node_modules/**', undefined, canceltoken)
-        logger.info(`enumlateRenameGlobalVar: return findFiles(${uris.length})`)
+        log.info(`enumlateRenameGlobalVar: return findFiles(${uris.length})`)
         if (!thing.uri) {
             return null
         }
         const uristr = thing.uri.toString()
         const type: Nako3TokenTypePlugin|Nako3TokenTypeApply = thing.type === 'var' ? 'user_var' : thing.type === 'const' ? 'user_const'  : 'user_func'
         for (const uri of uris) {
-            logger.info(`enumlateRenameGlobalVar: file "${uri.toString()}"`)
+            log.info(`enumlateRenameGlobalVar: file "${uri.toString()}"`)
             if (canceltoken.isCancellationRequested) {
                 return null
             }
@@ -232,8 +237,8 @@ export class Nako3RenameProvider implements RenameProvider {
                     }
                 }
             } catch (err) {
-                console.log(`cause error in enumlateRenameGlobalVar`)
-                console.log(err)
+                log.error(`cause error in enumlateRenameGlobalVar`)
+                log.error(err)
             } finally {
                 if (requireClose) {
                     nako3docs.closeAtFile(uri)
@@ -244,11 +249,12 @@ export class Nako3RenameProvider implements RenameProvider {
     }
 
     private enumlateRenameLocalVar (doc: Nako3DocumentExt, thing:LocalVarConst, newName: string, canceltoken: CancellationToken): WorkspaceEdit|null {
+        const log = this.log.appendKey('.enumlateRenameLocalVar')
         const workspaceEdit = new WorkspaceEdit()
-        logger.info(`enumlateRenameLocalVar: start`)
+        log.info(`enumlateRenameLocalVar: start`)
         let type: Nako3TokenTypeApply
         type = thing.type === 'const' ? 'user_const' : 'user_var' 
-        logger.info(`enumlateRenameLocalVar: rename "${thing.name}" of "${type}" in "${thing.scopeId}" to "${newName}"`)
+        log.info(`enumlateRenameLocalVar: rename "${thing.name}" of "${type}" in "${thing.scopeId}" to "${newName}"`)
         try {
             // user-global-var/const
             let i = 0
@@ -271,8 +277,8 @@ export class Nako3RenameProvider implements RenameProvider {
                 i++
             }
         } catch (err) {
-            console.log(`cause error in enumlateRenameLocalVar`)
-            console.log(err)
+            log.error(`cause error in enumlateRenameLocalVar`)
+            log.error(err)
         } 
         return workspaceEdit
     }

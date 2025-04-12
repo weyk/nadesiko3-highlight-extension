@@ -17,23 +17,26 @@ import { logger } from '../logger.mjs'
 import type { GlobalFunction } from '../nako3types.mjs'
 
 export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
+    protected log = logger.fromKey('/provider/Nako3DocumentSymbolProvider')
+
     async provideDocumentSymbols(document: TextDocument, canceltoken: CancellationToken): Promise<SymbolInformation[] | DocumentSymbol[]> {
-        logger.info(`■ DocumentSymbolProvider: provideDocumentSymbols`)
+        const log = this.log.appendKey('.provideDocumentSymbols')
+        log.info(`■ DocumentSymbolProvider: provideDocumentSymbols`)
         let symbols: DocumentSymbol[] = []
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideDocumentSymbols: canceled begining`)
+            log.debug(`provideDocumentSymbols: canceled begining`)
             return symbols
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentSymbols: canceled after updateText`)
+                log.debug(`provideDocumentSymbols: canceled after updateText`)
                 return symbols
             }
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentSymbols: canceled after tokeninze`)
+                log.debug(`provideDocumentSymbols: canceled after tokeninze`)
                 return symbols
             }
             if (!nako3doc.cache.symbols || nako3doc.cache.symbolsSerialId !== nako3doc.nako3doc.applyerVarTokenSerialId) {
@@ -43,9 +46,9 @@ export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
                 }
                 nako3doc.cache.symbols = workSymbols
                 nako3doc.cache.symbolsSerialId = nako3doc.nako3doc.applyerVarTokenSerialId
-                logger.info('call getSymbols')
+                log.info('call getSymbols')
             } else {
-                logger.info('skip getSymbols')
+                log.info('skip getSymbols')
             }
             symbols = nako3doc.cache.symbols
             if (canceltoken.isCancellationRequested) {

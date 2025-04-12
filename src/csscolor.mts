@@ -236,6 +236,7 @@ class CssColor {
     }
 
     getRgba (color: string): [ number, number, number, number ]|null {
+        const log = logger.fromKey('/CssColor.getRgba')
         let r:number,g:number,b:number,a:number
         let colorCode: string
         if (color.startsWith('#')) {
@@ -244,7 +245,7 @@ class CssColor {
             colorCode = this.all[color]
         }
         if (!colorCode) {
-            logger.debug(`getRgba: invalid name "${color}"`)
+            log.debug(`getRgba: invalid name "${color}"`)
             return null
         }
         let reg:RegExpExecArray|null
@@ -264,7 +265,7 @@ class CssColor {
             a = reg[4] ? parseInt(reg[4], 16) / 255: 1.0
             return [ r, g, b, a ]
         }
-        logger.debug(`getRgba: invalid color code "${colorCode}" from "${color}"`)
+        log.debug(`getRgba: invalid color code "${colorCode}" from "${color}"`)
         return null
     }
 

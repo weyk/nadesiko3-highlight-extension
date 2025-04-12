@@ -71,7 +71,7 @@ export const messages = new Map<string,string>([
     ['tikujiDeprecated', '"逐次実行" was deprecated'],
     ['cannnotSetToFunction', 'Cannot set value to function'],
     ['errorInFuncdefDupArg', 'Duplicate declare argument in function({nodestr)'],
-    ['noKokomadeAtFunc', 'Require "ここまで" for declare function'],
+    ['noKokomadeAtFunc', 'Require "ここまで" for declare function, write "ここまで" before "{inst}".'],
     ['noExprWhile', 'While require condition'],
     ['requireLfAfterWhile', 'While must follow LF'],
     ['cannnotDeclareOtherModule', 'Cannnot declare variable with scope'],

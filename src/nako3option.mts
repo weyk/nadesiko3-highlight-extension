@@ -6,6 +6,7 @@ import {
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { logger } from './logger.mjs'
 import type { NakoRuntime} from './nako3types.mjs'
+import type { LogLevel } from './logger.mjs'
 
 class Nako3ExtensionOption {
     useShebang: boolean
@@ -232,11 +233,10 @@ class Nako3ExtensionOption {
 
     loadLogTrace (conf: WorkspaceConfiguration) {
         const traceLevel = conf.get('trace')
-        logger.info(`activate :workspace.trace:${traceLevel}`)
         if (typeof traceLevel === 'string') {
-            let level:string
+            let level:LogLevel
             if (traceLevel === 'all') {
-                level = 'LOG'
+                level = 'TRACE'
             } else if (traceLevel === 'debug') {
                 level = 'DEBUG'
             } else if (traceLevel === 'verbose') {
@@ -250,6 +250,9 @@ class Nako3ExtensionOption {
                 level = 'NONE'
             }
             logger.setLevel(level)
+            // logger.appendConfig({filter: /Nako3OnTypeFormattingEditProvider/, level: 'DEBUG' })
+            // logger.appendConfig({filter: /\/EditorNewLine[\.#]/, level: 'DEBUG' })
+            // logger.appendConfig({filter: null, level: 'FATAL' })
         }
     }
 }

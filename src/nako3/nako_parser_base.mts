@@ -2,7 +2,7 @@ import { ModuleEnv, ModuleOption } from '../nako3module.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
-import { logger } from '../logger.mjs'
+import { logger, Log } from '../logger.mjs'
 import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
 import type { SourceMap, GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
 import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
@@ -52,8 +52,10 @@ export class NakoParserBase {
   protected scopeIdStack: [ string, number][]
   protected scopeList: ScopeIdRange[]
   protected hasDeclareThingsUpdate: boolean
+  protected log:Log
 
   constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
+    this.log = logger.fromKey('/nako3/NakoParserBase')
     this.stackList = [] // 関数定義の際にスタックが混乱しないように整理する
     this.tokens = []
     this.usedFuncs = new Set()
@@ -142,9 +144,10 @@ export class NakoParserBase {
   }
 
   indentPush (tag: string,):void {
-    logger.debug(`indentPush: ${tag}`)
+    const log = this.log.appendKey('.indentPush')
+    log.debug(`indentPush: ${tag}`)
     if (this.currentIndentSemantic) {
-      logger.debug(`indentPush: push indentSmentic = true`)
+      log.debug(`indentPush: push indentSmentic = true`)
     }
     this.indentLevelStack.push({
       level: this.currentIndentLevel,
@@ -154,21 +157,22 @@ export class NakoParserBase {
   }
 
   indentPop (tags?: string[]):void {
-    logger.debug(`indentPop : ${tags?.join(',')}`)
+    const log = this.log.appendKey('.indentPop')
+    log.debug(`indentPop : ${tags?.join(',')}`)
     const indentLevel = this.indentLevelStack.pop()
     if (indentLevel) {
       if (tags) {
         if (!tags.includes(indentLevel.tag)) {
-          logger.info(`indentPop:tag unmach(expect:"${tags.join('","')}" != aquire:"${indentLevel.tag}")`)
+          log.info(`indentPop:tag unmach(expect:"${tags.join('","')}" != aquire:"${indentLevel.tag}")`)
         } 
       }
       this.currentIndentLevel = indentLevel.level
       this.currentIndentSemantic = indentLevel.indentSemantic
       if (this.currentIndentSemantic) {
-        logger.debug(`indentPop : change indentSmentic to true`)
+        log.debug(`indentPop : change indentSmentic to true`)
       }
     } else {
-      logger.info(`indentPop: stack over pop`)
+      log.info(`indentPop: stack over pop`)
       this.currentIndentLevel = 0
       this.currentIndentSemantic = this.moduleOption.isIndentSemantic
     }
@@ -195,6 +199,7 @@ export class NakoParserBase {
    * @param {string[]} josiList 下ろしたい助詞の配列
    */
   popStack (josiList: string[]|undefined = undefined): Ast | null {
+    const log = this.log.appendKey('.popStack')
     if (!josiList) {
       const t = this.stack.pop()
       if (t) { return t }
@@ -206,7 +211,7 @@ export class NakoParserBase {
       const t = this.stack[i]
       if (josiList.length === 0 || josiList.indexOf(t.josi) >= 0) {
         this.stack.splice(i, 1) // remove stack
-        logger.log('POP :' + JSON.stringify(t))
+        log.trace('POP :' + JSON.stringify(t))
         return t
       }
     }
@@ -333,7 +338,8 @@ export class NakoParserBase {
    * 計算用に要素をスタックに積む
    */
   pushStack (item: any) {
-    logger.log('PUSH:' + JSON.stringify(item))
+    const log = this.log.appendKey('.pushStack')
+    log.trace('PUSH:' + JSON.stringify(item))
     this.stack.push(item)
   }
 
@@ -420,6 +426,7 @@ export class NakoParserBase {
    * 型にマッチしなければ false を返し、カーソルを巻き戻す
    */
   accept (types: any[]): boolean {
+    const log = this.log.appendKey('.accept')
     const y = []
     const tmpIndex = this.index
     const rollback = () => {
@@ -448,7 +455,7 @@ export class NakoParserBase {
         y[i] = this.get()
         continue
       }
-      logger.error('System Error : accept broken : ' + typeof type)
+      log.error('System Error : accept broken : ' + typeof type)
       this.errorInfos.addFromToken('ERROR', 'acceptBroken', { type: typeof type }, this.peekDef())
       this.skipToEof()
       return false
@@ -542,23 +549,25 @@ export class NakoParserBase {
   }
 
   skipToEol ():void {
+    const log = this.log.appendKey('.skipToEol')
     while (!this.check('eol')) {
       const token = this.get()
       if (token === null || token.type === 'eof') {
         break
       }
     }
-    logger.log(`parser:skipToEol`)
+    log.trace(`parser:skipToEol`)
   }
  
   skipToEof ():void {
+    const log = this.log.appendKey('.skipToEof')
     while (!this.isEOF()) {
       const token = this.get()
       if (token === null || token.type === 'eof') {
         break
       }
     }
-    logger.log(`parser:skipToEof`)
+    log.trace(`parser:skipToEof`)
   }
  
   /**

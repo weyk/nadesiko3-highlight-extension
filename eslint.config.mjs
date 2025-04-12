@@ -1,6 +1,8 @@
-import stylisticTs from '@stylistic/eslint-plugin-ts'
+// @ts-check
+
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
 import mochaPlugin from 'eslint-plugin-mocha'
-import typescriptParser from '@typescript-eslint/parser'
 
 export default [
 	{
@@ -13,7 +15,25 @@ export default [
 		]
 	},
 	mochaPlugin.configs.flat.recommended,
-	{
+	tseslint.config(
+		eslint.configs.recommended,
+		tseslint.configs.strict,
+		tseslint.configs.stylistic,
+		{
+			files: [
+			"**/*.mts",
+			"**/*.cts",
+			"**/*.ts"
+			]
+		}
+    ),
+
+]
+
+/*
+import stylisticTs from '@stylistic/eslint-plugin-ts'
+import typescriptParser from '@typescript-eslint/parser'
+{
         languageOptions: {
             parser: typescriptParser
         },
@@ -28,10 +48,6 @@ export default [
 			'@stylistic/ts/no-non-null-assertion': "off",
 			'mocha/no-mocha-arrows': "off"
 		},
-		files: [
-			"**/*.mts",
-			"**/*.cts",
-			"**/*.ts"
-		]
 	}
 ]
+*/

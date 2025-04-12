@@ -120,24 +120,27 @@ const tokenModifiers = ['declaration', 'documentation', 'defaultLibrary', 'depre
 export const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticTokensProvider {
+    protected log = logger.fromKey('/provider/Nako3DocumentSemanticTokensProvider')
+
     async provideDocumentSemanticTokens(document: TextDocument, canceltoken: CancellationToken): Promise<SemanticTokens> {
-        logger.info(`■ DocumentSemanticTokensProvider: provideDocumentSemanticTokens`)
+        const log = this.log.appendKey('.provideDocumentSemanticTokens')
+        log.info(`■ DocumentSemanticTokensProvider: provideDocumentSemanticTokens`)
         const tokensBuilder = new SemanticTokensBuilder()
         let symbols: SemanticTokens =  tokensBuilder.build()
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideDocumentSemanticTokens: canceled begining`)
+            log.debug(`provideDocumentSemanticTokens: canceled begining`)
             return symbols
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentSemanticTokens: canceled updateText`)
+                log.debug(`provideDocumentSemanticTokens: canceled updateText`)
                 return symbols
             }
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentSemanticTokens: canceled begining`)
+                log.debug(`provideDocumentSemanticTokens: canceled begining`)
                 return symbols
             }
             if (!nako3doc.cache.semanticTokens || nako3doc.cache.semanticTokensSerialId !== nako3doc.nako3doc.applyerVarTokenSerialId) {
@@ -147,9 +150,9 @@ export class Nako3DocumentSemanticTokensProvider implements DocumentSemanticToke
                 }
                 nako3doc.cache.semanticTokens = workSymbols
                 nako3doc.cache.semanticTokensSerialId = nako3doc.nako3doc.applyerVarTokenSerialId
-                logger.info('call getSymbols')
+                log.info('call getSymbols')
             } else {
-                logger.info('skip getSymbols')
+                log.info('skip getSymbols')
             }
             symbols = nako3doc.cache.semanticTokens
             if (canceltoken.isCancellationRequested) {

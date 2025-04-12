@@ -23,23 +23,26 @@ import type { GlobalConstant } from '../nako3types.mjs'
 type ColorPresentationsContext = { readonly document: TextDocument; readonly range: Range }
 
 export class Nako3DocumentColorProvider implements DocumentColorProvider {
+    protected log = logger.fromKey('/provider/Nako3DocumentColorProvider')
+
     async provideDocumentColors(document: TextDocument, canceltoken: CancellationToken): Promise<ColorInformation[]|undefined> {
-        logger.info(`■ DocumentColorProvider: provideDocumentColors`)
+        const log = this.log.appendKey('.provideDocumentColors')
+        log.info(`■ DocumentColorProvider: provideDocumentColors`)
         let colors: ColorInformation[] = []
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideDocumentColors: canceled begining`)
+            log.debug(`provideDocumentColors: canceled begining`)
             return colors
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentColors: canceled after updateText`)
+                log.debug(`provideDocumentColors: canceled after updateText`)
                 return colors
             }
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentColors: canceled after tokeninze`)
+                log.debug(`provideDocumentColors: canceled after tokeninze`)
                 return colors
             }
             if (!nako3doc.cache.colors || nako3doc.cache.colorsSerialId !== nako3doc.nako3doc.applyerVarTokenSerialId) {
@@ -49,9 +52,9 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
                 }
                 nako3doc.cache.colors = workColors
                 nako3doc.cache.colorsSerialId = nako3doc.nako3doc.applyerVarTokenSerialId
-                logger.info('call getColors')
+                log.info('call getColors')
             } else {
-                logger.info('skip getColors')
+                log.info('skip getColors')
             }
             colors = nako3doc.cache.colors
             if (canceltoken.isCancellationRequested) {
@@ -63,7 +66,8 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
     }
 
     async provideColorPresentations(color: Color, context: ColorPresentationsContext, canceltoken: CancellationToken): Promise<ColorPresentation[]|undefined> {
-        logger.info(`■ DocumentSymbolProvider: provideColorPresentations`)
+        const log = this.log.appendKey('.provideColorPresentations')
+        log.info(`■ DocumentSymbolProvider: provideColorPresentations`)
         return this.computeColorPresentations(color, context)
     }
 
@@ -123,6 +127,7 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
     }
 
     private computeColorPresentations(color: Color, context: ColorPresentationsContext): ColorPresentation[] {
+        const log = this.log.appendKey('.computeColorPresentations')
         const document = context.document
         const stringQuotes = [
             { startChar: '\'', endChar: '\''  },
@@ -136,7 +141,7 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
             { startChar: '🌴', endChar: '🌴' }
         ]
         const text = document.getText(context.range)
-        logger.debug(`subtext: ${text}`)
+        log.debug(`subtext: ${text}`)
         let value = text
         let quote: any|null = null
         for (const q of stringQuotes) {
@@ -146,9 +151,9 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
             }
         }
         if (!quote) {
-            logger.debug(`quote : ${quote}`)
+            log.debug(`quote : ${quote}`)
         }
-        logger.debug(`value : ${value}`)
+        log.debug(`value : ${value}`)
 
         let colorFormat: ColorFormat                                                                                                                                                                                                                                                                                                                                                                                      
         let colorInfo = cssColor.parseColor(value)
@@ -156,7 +161,7 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
             colorFormat = colorInfo.colorFormat
 
             if (Math.round(colorInfo.red * 255) === Math.round(color.red * 255) && Math.round(colorInfo.green * 255) === Math.round(color.green * 255) && Math.round(colorInfo.blue * 255) === Math.round(color.blue * 255) && Math.round((colorInfo.alpha === undefined ? 1 : colorInfo.alpha) * 255) === Math.round(color.alpha  * 255)) {
-                logger.debug(`old color format : ${colorFormat}`)
+                log.debug(`old color format : ${colorFormat}`)
                 if (colorFormat === null) {
                     colorFormat = '#6'
                 } else {
@@ -173,17 +178,17 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
                         break
                     }
                 }
-                logger.debug(`new color format : ${colorFormat}`)
+                log.debug(`new color format : ${colorFormat}`)
             } else {
-                logger.debug(`color changed : ${colorFormat}`)
-                logger.debug(`   red: ${colorInfo.red} - ${color.red}`)
-                logger.debug(` green: ${colorInfo.green} - ${color.green}`)
-                logger.debug(`  blue: ${colorInfo.blue} - ${color.blue}`)
-                logger.debug(` alpha: ${colorInfo.alpha} - ${color.alpha}`)
+                log.debug(`color changed : ${colorFormat}`)
+                log.debug(`   red: ${colorInfo.red} - ${color.red}`)
+                log.debug(` green: ${colorInfo.green} - ${color.green}`)
+                log.debug(`  blue: ${colorInfo.blue} - ${color.blue}`)
+                log.debug(` alpha: ${colorInfo.alpha} - ${color.alpha}`)
             }
         } else {
             colorFormat = '#6'
-            logger.debug(`before format is const : ${colorFormat}`)
+            log.debug(`before format is const : ${colorFormat}`)
         }
 
         if (color.alpha !== 1) {
@@ -221,4 +226,3 @@ export class Nako3DocumentColorProvider implements DocumentColorProvider {
         return [c]
     }
 }
-

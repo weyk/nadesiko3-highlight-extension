@@ -92,10 +92,11 @@ export class Nako3Document {
 
     // called by Nako3DocumentExt only.
     updateText (text: string, textVersion: number|null): boolean {
+        const log = logger.fromKey('/Nako3Document.updateText')
         if (textVersion === null || textVersion !== this.textVersion) {
             this.textVersion = textVersion
             if (this.text !== text) {
-                logger.info(`doc:text update:${this.filename}.`)
+                log.info(`doc:text update:${this.filename}.`)
                 this.text = text
                 this.invalidate()
                 if (this.onTextUpdated) {
@@ -132,12 +133,13 @@ export class Nako3Document {
     //   変数のうちモジュールを跨るグローバル変数の確定(定義箇所を確定と参照の設定)
     //   明示的な宣言の無いローカル変数でグローバル変数にあるものを読み替え
     tokenize(canceltoken?: CancellationToken): boolean {
-        console.info(`doc:tokenize start:${this.filename}`)
+        const log = logger.fromKey('/Nako3Document.tokenize')
+        log.info(`doc:tokenize start:${this.filename}`)
         if (canceltoken && canceltoken.isCancellationRequested) {
             return false
         }
         if (this.validFixToken) {
-            console.info(`doc:tokineze skip :${this.filename}`)
+            log.info(`doc:tokineze skip :${this.filename}`)
             return false
         }
         // tokenizerを使用してtextからrawTokens/lineLengthsを生成する
@@ -163,9 +165,10 @@ export class Nako3Document {
     }
 
     applyFunc(canceltoken?: CancellationToken): boolean {
-        console.info(`doc:applyFunc start:${this.filename}`)
+        const log = logger.fromKey('/Nako3Document.tokenize')
+        log.info(`doc:applyFunc start:${this.filename}`)
         if (this.validApplyerFuncToken) {
-            console.info(`doc:applyFunc skip :${this.filename}`)
+            log.info(`doc:applyFunc skip :${this.filename}`)
             return false
         }                                                     
         this.applyer.applyFunction(this.tokens)
@@ -179,16 +182,17 @@ export class Nako3Document {
     }
 
     parse(canceltoken?: CancellationToken): boolean {
-        console.info(`doc:parse start:${this.filename}`)
+        const log = logger.fromKey('/Nako3Document.parse')
+        log.info(`doc:parse start:${this.filename}`)
         if (this.validAst) {
-            console.info(`doc:parse skip :${this.filename}`)
+            log.info(`doc:parse skip :${this.filename}`)
             return false
         }                                                     
         try {
             this.parser.parse(this.tokens)
         } catch (err) {
-            console.error('cause exception in parse.')
-            console.error(err)
+            log.error('cause exception in parse.')
+            log.error(err)
         }
         if (canceltoken && canceltoken.isCancellationRequested) {
             return true
@@ -200,9 +204,10 @@ export class Nako3Document {
     }
 
     applyVarConst(canceltoken?: CancellationToken): boolean {
-        console.info(`doc:applyvarConst start:${this.filename}`)
+        const log = logger.fromKey('/Nako3Document.applyVarConst')
+        log.info(`doc:applyvarConst start:${this.filename}`)
         if (this.validApplyerVarToken) {
-            console.info(`doc:applyvarConst skip :${this.filename}`)
+            log.info(`doc:applyvarConst skip :${this.filename}`)
             return false
         }
             

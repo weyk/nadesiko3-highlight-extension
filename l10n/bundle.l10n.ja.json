@@ -68,7 +68,7 @@
     "tikujiDeprecated": "『逐次実行』構文は廃止されました(https://nadesi.com/v3/doc/go.php?944)。",
     "cannnotSetToFunction": "関数『{func}』に代入できません。",
     "errorInFuncdefDupArg": "{nodestr}の宣言で、引数定義は名前の前か後に一度だけ可能です。",
-    "noKokomadeAtFunc": "『ここまで』がありません。関数定義の末尾に必要です。",
+    "noKokomadeAtFunc": "『ここまで』がありません。関数定義の末尾に必要です。『{inst}』の前に『ここまで』を記述してください。",
     "noExprWhile": "『間』で条件がありません。",
     "requireLfAfterWhile": "『間』の直後は改行が必要です",
     "cannnotDeclareOtherModule": "スコープ付きの変数の定義は小駒得ません(変数名:{name})",

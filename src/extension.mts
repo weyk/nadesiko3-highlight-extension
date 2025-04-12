@@ -1,5 +1,7 @@
 import * as vscode from 'vscode'
 
+import path from 'node:path'
+
 import { Nako3DocumentExt } from './nako3documentext.mjs'
 import { nadesiko3, TerminalExt } from './nako3nadesiko3.mjs'
 import { showMessage } from './nako3message.mjs'
@@ -28,26 +30,55 @@ import type { NakoRuntime } from './nako3types.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
+logger.setBaseFolder(path.dirname(import.meta.url))
+const logBase = logger.fromKey('/extension')
+
 let nako3RuntimeStatusBarItem: vscode.StatusBarItem
 
+export class Nako3DocumentFormattingEditProvider implements vscode.DocumentFormattingEditProvider {
+    protected log = logger.fromKey('/provider/Nako3DocumentFormattingEditProvider')
+
+    async provideDocumentFormattingEdits(document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): Promise<vscode.TextEdit[]> {
+        const log = this.log.appendKey('.provideDocumentFormattingEdits')
+        let edits: vscode.TextEdit[] = []
+        log.info(`■ start/end`)
+        return edits
+    }
+}
+
+export class Nako3OnTypeFormattingEditProvider implements vscode.OnTypeFormattingEditProvider {
+    protected log = logger.fromKey('/provider/Nako3OnTypeFormattingEditProvider')
+
+    async provideOnTypeFormattingEdits(document: vscode.TextDocument, position: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): Promise<vscode.TextEdit[]> {
+        const log = this.log.appendKey('.provideOnTypeFormattingEdits')
+        let edits: vscode.TextEdit[] = []
+        log.info(`■ start:${ch}/end`)
+        return edits
+    }
+}
 
 export class Nako3CodeActionProvider implements vscode.CodeActionProvider {
-	public static readonly providedCodeActionKinds = [
+    protected log = logger.fromKey('/provider/Nako3CodeActionProvider')
+
+    public static readonly providedCodeActionKinds = [
 		vscode.CodeActionKind.QuickFix
 	]
 
     provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection, context: vscode.CodeActionContext, token: vscode.CancellationToken): Promise<(vscode.CodeAction | vscode.Command)[]> {
+        const log = this.log.appendKey('.provideCodeActions')
         throw new Error('Method not implemented.')
     }
     resolveCodeAction?(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
+        const log = this.log.appendKey('.resolveCodeAction')
         throw new Error('Method not implemented.')
     }
 }
 
 export function activate(context: vscode.ExtensionContext):void {
+    const log = logBase.appendKey('#activate')
     configurationInitialize()
-    logger.info(`workspace is ${vscode.workspace.name}`)
-    logger.info(`■ activate`)
+    log.info(`workspace is ${vscode.workspace.name}`)
+    log.info(`■ activate`)
 
     nadesiko3.setWorkspaceFolders(vscode.workspace.workspaceFolders)
     nako3diagnostic.setNako3Docs(nako3docs)
@@ -58,7 +89,7 @@ export function activate(context: vscode.ExtensionContext):void {
 	context.subscriptions.push(nako3RuntimeStatusBarItem)
 
     nako3docs.addListener('changeNakoRuntime', e => {
-        logger.debug(`docs:onChangeNakoRuntime`)
+        log.debug(`docs:onChangeNakoRuntime`)
         const editor = vscode.window.activeTextEditor
         if (editor) {
             if (editor.document) {
@@ -68,6 +99,7 @@ export function activate(context: vscode.ExtensionContext):void {
             }
         }
     })
+    nadesiko3.setExtensionFolder(context.extensionPath)
 
     setTimeout(() => { nako3docs.loadAllFiles() } , 0)
 
@@ -82,7 +114,7 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
         // console.log(`onDidOpenTextDocument  :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
-            logger.info(`■ workspace.onDidOpenTextDocument`)
+            log.info(`■ workspace.onDidOpenTextDocument`)
             nako3docs.openFromDocument(e)
         }
     }))
@@ -91,14 +123,14 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(e => {
         // console.log(`onDidCloseTextDocument :${e.languageId}:${e.fileName}`)
         if (e.languageId === 'nadesiko3') {
-            logger.info(`■ workspace.onDidCloseTextDocument`)
+            log.info(`■ workspace.onDidCloseTextDocument`)
             nako3docs.closeAtDocument(e)
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
-        logger.log(`oonDidChangeTextDocument:${e.document.languageId}:${e.document.fileName}`)
+        log.trace(`onDidChangeTextDocument:${e.document.languageId}:${e.document.fileName}`)
         if (e.document.languageId === 'nadesiko3') {
-            logger.info(`■ workspace.onDidCloseTextDocument`)
+            log.info(`■ workspace.onDidCloseTextDocument`)
             const doc = nako3docs.get(e.document)
             if (doc) {
                 doc.isDirty = true
@@ -106,7 +138,7 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(e => {
-        logger.info(`■ workspace.onDidSaveTextDocument`)
+        log.info(`■ workspace.onDidSaveTextDocument`)
         if (e.languageId === 'nadesiko3') {
             const doc = nako3docs.get(e)
             if (doc) {
@@ -115,7 +147,7 @@ export function activate(context: vscode.ExtensionContext):void {
         }
     }))
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders( e => {
-        logger.info(`■ workspace.onDidChangeWorkspaceFolders`)
+        log.info(`■ workspace.onDidChangeWorkspaceFolders`)
         if (e.removed.length > 0) {
             nadesiko3.removeWorkspaceFolders(e.removed)
         }
@@ -138,10 +170,15 @@ export function activate(context: vscode.ExtensionContext):void {
     context.subscriptions.push(vscode.languages.registerRenameProvider(NAKO3_MODE, new Nako3RenameProvider()))
     context.subscriptions.push(vscode.languages.registerColorProvider(NAKO3_MODE, new Nako3DocumentColorProvider()))
     // context.subscriptions.push(vscode.languages.registerCallHierarchyProvider(NAKO3_MODE, new Nako3CallHierarchyProvider()))
+    // context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider(NAKO3_MODE, new Nako3DocumentFormattingEditProvider()))
+    // context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider(NAKO3_MODE, new Nako3OnTypeFormattingEditProvider(), "。", "．", "、"))
 
 	const commandManager = new CommandManager()
 	context.subscriptions.push(commandManager)
 	commandManager.register(new commands.Nako3Execute(context))
+	commandManager.register(new commands.EditorNewLine(context))
+	commandManager.register(new commands.EditorIndent(context))
+	commandManager.register(new commands.EditorOutdent(context))
 
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(configurationChanged))
 	// register some listener that make sure the status bar 
@@ -171,7 +208,8 @@ export function activate(context: vscode.ExtensionContext):void {
 }
 
 export function deactivate() {
-    logger.info(`■ deactivate`)
+    const log = logBase.appendKey('#deactivate')
+    log.info(`■ deactivate`)
     if (nako3diagnostic) {
         nako3diagnostic.dispose()
     }
@@ -182,7 +220,8 @@ export function deactivate() {
 }
 
 function updateNako3RunimeStatusBarItem(): void {
-    logger.info(`■ updateNako3RunimeStatusBarItem: ↓ start`)
+    const log = logBase.appendKey('#updateNako3RunimeStatusBarItem')
+    log.info(`■ updateNako3RunimeStatusBarItem: ↓ start`)
     const editor = vscode.window.activeTextEditor
     let nakoRuntime:NakoRuntime = ''
     if (editor) {
@@ -197,5 +236,5 @@ function updateNako3RunimeStatusBarItem(): void {
     } else {
         nako3RuntimeStatusBarItem.hide()
     }
-    logger.info(`■ updateNako3RunimeStatusBarItem: ↑ end`)
+    log.info(`■ updateNako3RunimeStatusBarItem: ↑ end`)
 }

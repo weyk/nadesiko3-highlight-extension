@@ -140,6 +140,7 @@ export class ModuleEnv {
     }
 
     fixAlllVars () {
+        const log = logger.fromKey('/ModuleEnv.fixAlllVars')
         const globalThings = this.allScopeVarConsts.get('global')
         for (const [ scopeId, things ] of this.allScopeVarConsts) {
             if (scopeId !== 'global') {
@@ -178,7 +179,7 @@ export class ModuleEnv {
                             isExtern = true
                         } else {
                             isExtern = true
-                            logger.info(`fixAllVars: passive extern ${v.name} from ${uristr}s`)
+                            log.info(`fixAllVars: passive extern ${v.name} from ${uristr}s`)
                         }
                         if (isExtern) {
                             thing.scopeId = 'extern'

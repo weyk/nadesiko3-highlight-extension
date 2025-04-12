@@ -72,15 +72,17 @@ type CmdPluginEntry = { [sectionName:string] : CmdSectionEntry[] }
 type CmdJsonEntry = { [pluginName:string]: CmdPluginEntry }
 
 export function initialize () {
-    logger.debug(`convert built-in plugin`)
+    const log = logger.fromKey('/nako3plugin_bultin.initialize')
+    log.debug(`convert built-in plugin`)
     importCommandJson(commandjson as unknown as CmdJsonEntry)
     importCommandJson(commandSnakoJson as unknown as CmdJsonEntry)
     nako3plugin.setPluginsInNakoruntime(pluginsInNakoruntime)
 }
 
 function importCommandJson (json: CmdJsonEntry):void {
+    const log = logger.fromKey('/nako3plugin_bultin.importCommandJson')
     for (const pluginName of Object.keys(json)) {
-        logger.debug(`  plugin name:${pluginName}`)
+        log.debug(`  plugin name:${pluginName}`)
         const plugin = json[pluginName]
         const nakoRuntime = pluginRuntimes.get(pluginName)
         const pluginInfo: PluginInfo = {
@@ -152,7 +154,7 @@ function importCommandJson (json: CmdJsonEntry):void {
                         commandEntry.set(command, v)
                     }
                 } else {
-                    logger.error(`nako3plugin: unknwon type(${rawType}) in ${plugin}`)
+                    log.error(`nako3plugin: unknwon type(${rawType}) in ${plugin}`)
                 }
             }
         }

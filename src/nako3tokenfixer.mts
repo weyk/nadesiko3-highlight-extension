@@ -33,6 +33,7 @@ export class Nako3TokenFixer {
     private moduleOption: ModuleOption
     private moduleEnv: ModuleEnv
     public errorInfos: ErrorInfoManager
+    protected log = logger.fromKey('/Nako3TokenFixer')
 
     constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
         this.moduleEnv = moduleEnv
@@ -56,6 +57,7 @@ export class Nako3TokenFixer {
     }
 
     public fixTokens (rawTokens: Token[]): TokenFixerResult {
+        const log = this.log.appendKey('.fixTokens')
         this.errorInfos.clear()
         this.tokens = []
         this.commentTokens = []
@@ -79,7 +81,7 @@ export class Nako3TokenFixer {
             if ((type === 'def_func' || type === '*') && token.startCol === 0 && token.josi === '') {
                 functionIndex.push(this.tokens.length)
                 if (type === '*') {
-                    logger.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
+                    log.info(`tokenize: function start with token-type '*'. not 'def_fund'`)
                 }
             } else if (type === 'には') {
                 functionIndex.push(this.tokens.length)
@@ -370,6 +372,7 @@ export class Nako3TokenFixer {
     }
 
     private preprocess (preprocessIndex: number[]):void {
+        const log = this.log.appendKey('.preprocess')
         let token: Token
         const tokens = this.tokens
         const tokenCount = tokens.length
@@ -381,7 +384,7 @@ export class Nako3TokenFixer {
             let targetType: TokenType = '?'
             token = tokens[i]
             if (!(token.type === 'not' && (token.value === '!' || token.value === '！'))) {
-                logger.log(`internal error: invalid token, expected 'NOT' token`)                
+                log.trace(`internal error: invalid token, expected 'NOT' token`)                
             }
             i++
             token = tokens[i]
@@ -389,14 +392,14 @@ export class Nako3TokenFixer {
                 this.moduleOption.isStrict = true
                 targetToken = token
                 targetType = '厳チェック'
-                logger.info('strict on')
+                log.info('strict on')
                 hit = true
             } else if (token.type === 'word' && token.value === '非同期モード') {
                 this.moduleOption.isAsync = true
                 targetToken = token
                 targetType = '非同期モード'
-                logger.info('async mode on')
-                logger.log('『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)。', token)
+                log.info('async mode on')
+                log.trace('『非同期モード』構文は廃止されました(https://nadesi.com/v3/doc/go.php?1028)。', token)
                 this.errorInfos.addFromToken('WARN', 'deprecatedAsync', {}, tokens[index], token)
                 hit = true
             } else if (token.type === 'word' && token.value === 'DNCLモード') {
@@ -404,20 +407,20 @@ export class Nako3TokenFixer {
                 targetToken = token
                 targetType = 'DNCLモード'
                 this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
-                logger.info('DNCL1 mode on')
+                log.info('DNCL1 mode on')
                 hit = true
             } else if (token.type === 'word' && ['DNCL2モード','DNCL2'].includes(token.value)) {
                 this.moduleOption.isDNCL2 = true
                 targetToken = token
                 targetType = 'DNCL2モード'
                 this.errorInfos.addFromToken('WARN', 'noSupportDNCL', {}, tokens[index], token)
-                logger.info('DNCL2 mode on')
+                log.info('DNCL2 mode on')
                 hit = true
             } else if (token.type === 'word' && token.value === 'インデント構文') {
                 this.moduleOption.isIndentSemantic = true
                 targetToken = token
                 targetType = 'インデント構文'
-                logger.info('indent semantic on')
+                log.info('indent semantic on')
                 hit = true
             } else if (token.type === 'word' && token.value === 'モジュール公開既定値') {
                 targetToken = token
@@ -430,7 +433,7 @@ export class Nako3TokenFixer {
                     if (token.type === 'string') {
                         this.moduleOption.isPrivateDefault = token.value === '非公開'
                         this.moduleOption.isExportDefault = token.value === '公開'
-                        logger.info(`change default publishing:${token.value}`)
+                        log.info(`change default publishing:${token.value}`)
                     } else if (token.type === 'STRING_EX') {
                         this.errorInfos.addFromToken('ERROR', `cannotUseTemplateString`, {}, token)
                         causeError = true
@@ -446,7 +449,7 @@ export class Nako3TokenFixer {
             } else if (i+1 < tokenCount && token.type === 'string' && token.josi === 'を' && tokens[i+1].type === 'word' && trimOkurigana(tokens[i+1].value) === '取込') {
                 targetToken = token
                 targetType = '取込'
-                logger.info(`import file:${token.value}`)
+                log.info(`import file:${token.value}`)
                 const importInfo: ImportStatementInfo = {
                     value: token.value,
                     tokenIndex: i,

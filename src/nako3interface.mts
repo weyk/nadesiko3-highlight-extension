@@ -30,6 +30,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     docs: Map<string, Nako3DocumentExt>
     fileWacther: FileSystemWatcher
     private isAnyTextUpdated: boolean 
+    protected log = logger.fromKey('/Nako3Documents')
 
     constructor () {
         super()
@@ -98,18 +99,19 @@ export class Nako3Documents extends EventEmitter implements Disposable {
      * @returns １対１対応するNako3DocumentExtを返す
      */
     public openFromDocument (document: TextDocument): Nako3DocumentExt {
+        const log = this.log.appendKey('.openFromDocument')
         const fileName = this.getFileName(document)
         let doc = this.get(document)
         if (!doc) {
             const uri = this.getUri(document)
             doc = this.newDocument(fileName, uri, document)
-            console.log(`document open: open by TextDocument(${fileName})`)
+            log.debug(`document open: open by TextDocument(${fileName})`)
         } else {
             if (!doc.isTextDocument) {
                 doc.isTextDocument = true
-                console.log(`document open: already opened, change to TextDocument(${fileName})`)
+                log.debug(`document open: already opened, change to TextDocument(${fileName})`)
             } else {
-                console.log(`document open: already opened by TextDocument(${fileName})`)
+                log.debug(`document open: already opened by TextDocument(${fileName})`)
             }
         }
         return doc
@@ -122,16 +124,17 @@ export class Nako3Documents extends EventEmitter implements Disposable {
      * @returns １対１対応するNako3DocumentExtを返す
      */
     public openFromFile (uri: Uri): Nako3DocumentExt {
+        const log = this.log.appendKey('.openFromFile')
         const fileName = this.getFileName(uri)
         let doc: Nako3DocumentExt|undefined = this.get(uri)
         if (!doc) {
             doc = this.newDocument(fileName, uri)
-            console.log(`document open: open by file(${fileName})`)
+            log.debug(`document open: open by file(${fileName})`)
         } else {
             if (doc.isTextDocument) {
-                console.log(`document open: already file opened by TextDocument(${fileName})`)
+                log.debug(`document open: already file opened by TextDocument(${fileName})`)
             } else {
-                console.log(`document open: already file opened by file(${fileName})`)
+                log.debug(`document open: already file opened by file(${fileName})`)
             }
         }
         return doc
@@ -154,46 +157,49 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     private fireChangeNakoRuntime (doc: Nako3DocumentExt, nakoRuntime:NakoRuntime) {
-        logger.debug(`docs:fireChangeNakoRuntime(${doc.uri.fsPath}:${nakoRuntime})`)
+        const log = this.log.appendKey('.fireChangeNakoRuntime')
+        log.debug(`docs:fireChangeNakoRuntime(${doc.uri.fsPath}:${nakoRuntime})`)
         this.emit('changeNakoRuntime', { fileName: doc.uri.fsPath, uri: doc.uri, nakoRuntime })
     }
 
     closeAtDocument (document: TextDocument):void {
+        const log = this.log.appendKey('.closeAtDocument')
         const fileName = document.uri.toString()
         if (!this.docs.has(fileName)) {
-            console.log(`document close: no open(${fileName})`)
+            log.debug(`document close: no open(${fileName})`)
         }
         const doc = this.get(document)
         if (doc && doc.isTextDocument) {
             doc.isTextDocument = false
             if (doc.link.importBy.size > 0) {
-                console.log(`document close: no close: import by other(${fileName})`)
+                log.debug(`document close: no close: import by other(${fileName})`)
                 return
             }
         }
         this.trushDocument(fileName, doc)
-        console.log(`document close: closed(${fileName})`)
+        log.debug(`document close: closed(${fileName})`)
         nako3diagnostic.refreshDiagnostics()
     }
 
     closeAtFile (uri: Uri):void {
+        const log = this.log.appendKey('.closeAtFile')
         const fileName = uri.toString()
         if (!this.docs.has(fileName)) {
-            console.log(`document close: no open(${fileName})`)
+            log.debug(`document close: no open(${fileName})`)
         }
         const doc = this.get(uri)
         if (doc) {
             if (doc.isTextDocument) {
-                console.log(`document close: no close: document is textDocument(${fileName})`)
+                log.debug(`document close: no close: document is textDocument(${fileName})`)
                 return
             }
             if (doc.link.importBy.size > 0) {
-                console.log(`document close: no close: import by other(${fileName})`)
+                log.debug(`document close: no close: import by other(${fileName})`)
                 return
             }
         }
         this.trushDocument(fileName, doc)
-        console.log(`document close: closed(${fileName})`)
+        log.debug(`document close: closed(${fileName})`)
         nako3diagnostic.refreshDiagnostics()
     }
 
@@ -244,7 +250,8 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     async analyze(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<boolean> {
-        logger.info(`interface:analyzeA:start        :${doc.uri.toString()}`)
+        const log = this.log.appendKey('.analyze')
+        log.info(`interface:analyzeA:start        :${doc.uri.toString()}`)
         let changed = false
         if (doc.nako3doc.tokenize(canceltoken)) {
             doc.nako3doc.validApplyerFuncToken = false
@@ -271,19 +278,20 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         if (doc.nako3doc.applyVarConst(canceltoken)) {
             changed = true
         }
-        logger.info(`interface:analyzeA:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
+        log.info(`interface:analyzeA:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
         return changed
     }
 
     async analyzeOnlyTokenize(doc: Nako3DocumentExt, canceltoken?: CancellationToken): Promise<boolean> {
-        logger.info(`interface:analyze1:start        :${doc.uri.toString()}`)
+        const log = this.log.appendKey('.analyzeOnlyTokenize')
+        log.info(`interface:analyze1:start        :${doc.uri.toString()}`)
         let changed = false
         if (doc.nako3doc.tokenize(canceltoken)) {
             doc.nako3doc.validApplyerFuncToken = false
             doc.nako3doc.validAst = false
             doc.nako3doc.validApplyerVarToken = false
         }
-        logger.info(`interface:analyze1:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
+        log.info(`interface:analyze1:end(${changed?'  changed':'unchaged'}):${doc.uri.toString()}`)
         return changed
     }
 
@@ -389,9 +397,10 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     private async importPlugins(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<boolean> {
+        const log = this.log.appendKey('.importPlugins')
         const pluginNames: string[] = []
         const importPlugins: Map<string, LinkPlugin> = new Map()
-        logger.debug(`importPlugins: pluginNames cleared`)
+        log.debug(`importPlugins: pluginNames cleared`)
         let changed = false
         let r: RegExpExecArray | null
         for (const importInfo of imports) {
@@ -421,16 +430,16 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                     if (info.contentKey) {
                         if (info.contentKey !== oldPlugin.contentKey) {
                             changed = true
-                            logger.debug(`importPlugins: replace old plugin(${info.pluginKey})`)
+                            log.debug(`importPlugins: replace old plugin(${info.pluginKey})`)
                         } else {
-                            logger.debug(`importPlugins: no changed plugin(${info.pluginKey})`)
+                            log.debug(`importPlugins: no changed plugin(${info.pluginKey})`)
                         }
                     } else {
-                        logger.debug(`importPlugins: builtin plugin(${info.pluginKey})`)
+                        log.debug(`importPlugins: builtin plugin(${info.pluginKey})`)
                     }
                 } else {
                     changed = true
-                    logger.debug(`importPlugins: import new plugin(${info.pluginKey})`)
+                    log.debug(`importPlugins: import new plugin(${info.pluginKey})`)
                 }
             }
         }
@@ -480,14 +489,15 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             moduleEnv.pluginNames.push(p)
         }
 
-        logger.info(`importPlugins: changed = ${changed}`)
+        log.info(`importPlugins: changed = ${changed}`)
         return changed
     }
 
     private async importNako3s(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): Promise<boolean> {
+        const log = this.log.appendKey('.importNako3s')
         // 以前も今度もnako3を取り込んでいないならば確実に差分は無い。
         if (doc.link.importNako3s.size === 0 && imports.length === 0) {
-            logger.info(`importNako3s: both empty, no changed`)
+            log.info(`importNako3s: both empty, no changed`)
             return false
         }
         doc.link.importNako3s.clear()
@@ -499,7 +509,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
         let newNakoUriList:DependNako3Info[] = []
         let tickCount = 0
         while (currentImportList.length > 0) {
-            console.log(`refreshLink:Nako3:tick=${tickCount}, count=${currentImportList.length}`)
+            log.debug(`refreshLink:Nako3:tick=${tickCount}, count=${currentImportList.length}`)
             for (const uriInfo of currentImportList) {
                 const target = await this.importNako3(doc, uriInfo)
                 if (target) {
@@ -537,11 +547,12 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             doc.nako3doc.validApplyerFuncToken = false
             doc.nako3doc.validApplyerVarToken = false
         }
-        logger.info(`importPlugins: changed = true`)
+        log.info(`importPlugins: changed = true`)
         return true
     }                                       
 
     private getDependNako3UriList(doc: Nako3DocumentExt, imports: ImportStatementInfo[]): DependNako3Info[] {
+        const log = this.log.appendKey('.importNako3s')
         const dependUriList: DependNako3Info[] = []
         const pushDepend = (dependInfo: DependNako3Info|DependNako3Info[]) => {
             const pushIfNotExist = (info: DependNako3Info) => {
@@ -565,10 +576,10 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             const target = this.get(impUri)
             const dependUriList: DependNako3Info[] = []
             if (target) {
-                console.log(`document exist ${impUri.toString()}`)
+                log.debug(`document exist ${impUri.toString()}`)
                 for (const [ uriStr, ] of target.nako3doc.moduleEnv.externalThings) {
                     const uri = Uri.parse(uriStr)
-                    console.log(`document exist and exist extern ${uriStr}`)
+                    log.debug(`document exist and exist extern ${uriStr}`)
                     pushDepend({ uri })
                     pushDepend(getDependUriList(uri))
                 }
@@ -620,6 +631,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     async importNako3(doc: Nako3DocumentExt, info: DependNako3Info): Promise<Nako3DocumentExt|null> {
+        const log = this.log.appendKey('.importNako3')
         const bindDocument = (doc: Nako3DocumentExt, impUri: Uri, target: Nako3DocumentExt) => {
             if (!doc.nako3doc.moduleEnv.externalThings.has(impUri.toString())) {
                 const info: ExternalInfo = {
@@ -659,17 +671,17 @@ export class Nako3Documents extends EventEmitter implements Disposable {
             let impUri : Uri = info.uri
             const target = this.get(impUri)
             if (target) {
-                logger.info(`refreshLink: found in docs(${impUri.toString()})`)
+                log.info(`refreshLink: found in docs(${impUri.toString()})`)
                 bindDocument(doc, impUri, target)
                 if (!target.isTextDocument && (!isRemote || target.nako3doc.text === '')) {
                     await target.updateText(impUri)
                 }
                 // await this.analyzeToSetNakoRuntime(target)
                 await this.analyze(target)
-                logger.info(`importNako3: success return(${impUri.toString()})`)
+                log.info(`importNako3: success return(${impUri.toString()})`)
                 return target
             } else {
-                logger.info(`importNako3: open from file(${impUri.toString()})`)
+                log.info(`importNako3: open from file(${impUri.toString()})`)
                 let target:Nako3DocumentExt|null
                 try {
                     console.log('before stat')
@@ -684,8 +696,8 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                     console.log('after  stat')
                     target = this.openFromFile(impUri)
                 } catch (err) {
-                    logger.info(`importNako3: failed(${impUri.toString()})`)
-                    console.log(err)
+                    log.info(`importNako3: failed(${impUri.toString()})`)
+                    log.info(err)
                     if (err instanceof Error) {
                         if (err.message.indexOf('NOENT') >= -1) {
                             if (!wasErrorReported) {
@@ -695,8 +707,8 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                                 wasErrorReported = true
                             }
                         } else {
-                            console.log(`importNako3: cause error in openFromFile`)
-                            console.log(err)
+                            log.error(`importNako3: cause error in openFromFile`)
+                            log.error(err)
                         }
                     }
                     if (!wasErrorReported) {
@@ -709,7 +721,7 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                     target = null
                 }
                 if (target) {
-                    logger.info(`importNako3: open successed(${impUri.toString()})`)
+                    log.info(`importNako3: open successed(${impUri.toString()})`)
                     try {
                         bindDocument(doc, impUri, target)
                         if (!target.isTextDocument) {
@@ -717,14 +729,14 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                         }
                         // await this.analyzeToSetNakoRuntime(target)
                         await this.analyze(target)
-                        logger.info(`importNako3: success return(${impUri.toString()})`)
+                        log.info(`importNako3: success return(${impUri.toString()})`)
                         return target
                     } catch (err) {
-                        logger.info(`importNako3: failed(${impUri.toString()})`)
+                        log.info(`importNako3: failed(${impUri.toString()})`)
                         unbindDocument(doc, impUri)
                         this.closeAtFile(impUri)
-                        console.log(`importNako3: cause error in new open file(${impUri.toString()})`)
-                        console.log(err)
+                        log.error(`importNako3: cause error in new open file(${impUri.toString()})`)
+                        log.error(err)
                     }
                 }
             }
@@ -733,12 +745,13 @@ export class Nako3Documents extends EventEmitter implements Disposable {
     }
 
     async loadAllFiles(canceltoken?: CancellationToken) {
-        logger.info(`loadAllFiles: start`)
-        logger.info(`loadAllFiles: call   findFiles`)
+        const log = this.log.appendKey('.loadAllFiles')
+        log.info(`loadAllFiles: start`)
+        log.info(`loadAllFiles: call   findFiles`)
         const uris = await workspace.findFiles('**/*.nako3','**/node_modules/**', undefined, canceltoken)
-        logger.info(`loadAllFiles: return findFiles(${uris.length})`)
+        log.info(`loadAllFiles: return findFiles(${uris.length})`)
         for (const uri of uris) {
-            logger.info(`loadAllFiles: file "${uri.toString()}"`)
+            log.info(`loadAllFiles: file "${uri.toString()}"`)
             if (canceltoken && canceltoken.isCancellationRequested) {
                 return null
             }
@@ -763,14 +776,14 @@ export class Nako3Documents extends EventEmitter implements Disposable {
                 const sortResult = this.sortImports(doc.nako3doc.importStatements)
                 const node = new ProjectNode(doc.uri)
             } catch (err) {
-                console.log(`cause error in enumlateRenameGlobalVar`)
-                console.log(err)
+                log.error(`cause error in enumlateRenameGlobalVar`)
+                log.error(err)
                 if (doc) {
                     this.closeAtFile(uri)
                 }
             }
         }
-        logger.info(`loadAllFiles: end`)
+        log.info(`loadAllFiles: end`)
         return
     }
 

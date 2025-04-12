@@ -11,6 +11,7 @@ import type { Token, TokenCallFunc, TokenRefVar, TokenRef } from './nako3token.m
 export class Nako3TokenApplyer {
     private moduleEnv: ModuleEnv
     public errorInfos: ErrorInfoManager
+    protected log = logger.fromKey('/Nako3TokenApplyer')
 
     constructor (moduleEnv: ModuleEnv, ) {
         this.moduleEnv = moduleEnv
@@ -95,9 +96,10 @@ export class Nako3TokenApplyer {
     }
 
     applyVarConst(tokens: Token[], scopeIdList: ScopeIdRange[]):void {
+        const log = this.log.appendKey('.applyVarConst')
         this.errorInfos.clear()
         let i = 0
-        let causeUnknownWordError = false
+        let unknownWords: string[] = []
         for (const token of tokens) {
             let type = token.parseType
             if (type === 'word') {
@@ -224,7 +226,9 @@ export class Nako3TokenApplyer {
                                     // ・Pluginの取り込み漏れによるシステム関数の名前が解決できていない。
                                     // ・打ち間違いによる変数・定数・関数の名称誤り。
                                     this.errorInfos.addFromToken('ERROR', 'unknwonWord', { value: token.value }, token)
-                                    causeUnknownWordError =  true
+                                    if (!unknownWords.includes(token.value)) {
+                                        unknownWords.push(token.value)
+                                    }
                                 }
                             }
                         }
@@ -252,10 +256,13 @@ export class Nako3TokenApplyer {
             token.type = type
             i++
         }
-        if (causeUnknownWordError) {
-            console.log(`unknownWord has raised`)
-            console.log(this.moduleEnv.declareThings)
-            console.log(this.moduleEnv.allScopeVarConsts)
+        if (unknownWords.length > 0) {
+            log.error(`unknownWord has raised`)
+            log.error(`words:${unknownWords.join(',')}`)
+            log.error(`moduleEnv.declareThings:`)
+            log.error(this.moduleEnv.declareThings)
+            log.error(`moduleEnv.allScopeVarConsts:`)
+            log.error(this.moduleEnv.allScopeVarConsts)
         }
     }
 }

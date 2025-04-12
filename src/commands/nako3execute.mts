@@ -26,16 +26,13 @@ interface ContentResources {
     cspSource: string
 }
 
-interface CombineNako3Info {
-    code: string
-    plugins: string[]
-}
-
 export class Nako3Execute implements Command {
 	public readonly id = 'nadesiko3highlight.nadesiko3.exec'
-	public readonly viewType = 'nadesiko3highlight.viewer'
+    public readonly type = 'normal'
 
+    public readonly viewType = 'nadesiko3highlight.viewer'
 	private webviewPanel: WebviewPanel | null = null
+    protected log = logger.fromKey('/commands/Nako3Execute')
 
 	public constructor(
 		private readonly context: ExtensionContext
@@ -44,7 +41,8 @@ export class Nako3Execute implements Command {
      }
 
     async execNako3 (uri: Uri) {
-        logger.debug(`command:nadesiko3.exec`)
+        const log = this.log.appendKey('.execNako3')
+        log.debug(`command:nadesiko3.exec`)
         let doc:Nako3DocumentExt|undefined
         const editor = window.activeTextEditor
         if (uri === undefined && editor && editor.document && editor.document.uri) {
@@ -57,7 +55,7 @@ export class Nako3Execute implements Command {
         let nakoRuntime: NakoRuntime
         let document = workspace.textDocuments.find(f => f.uri.toString() === uri.toString())
         if (document && nako3docs.has(document)) {
-            logger.log(`command:nadesiko3.exec:has document`)
+            log.trace(`command:nadesiko3.exec:has document`)
             // execute from editor's text
             doc = nako3docs.get(document)
         }
@@ -72,7 +70,7 @@ export class Nako3Execute implements Command {
         }
         let text: string|undefined
         if (doc && doc.isDirty && document) {
-            logger.log(`command:nadesiko3.exec:is dirty`)
+            log.trace(`command:nadesiko3.exec:is dirty`)
             text = document.getText()
         }
         if (nakoRuntime === 'wnako') {
@@ -101,8 +99,9 @@ export class Nako3Execute implements Command {
     }
 
     private async execOnTerminal(nakoRuntime: NakoRuntime, uri: Uri, text?: string) {
+        const log = this.log.appendKey('.execOnTerminal')
         if (text) {
-            logger.log(`command:nadesiko3.exec:is dirty`)
+            log.trace(`command:nadesiko3.exec:is dirty`)
             await nadesiko3.execForText(text, uri, nakoRuntime)
         } else {
             await nadesiko3.execForFile(uri, nakoRuntime)
@@ -114,6 +113,7 @@ export class Nako3Execute implements Command {
     }
 
     private async getNakoRuntimeFromFile (uri: Uri): Promise<NakoRuntime> {
+        const log = this.log.appendKey('.getNakoRuntimeFromFile')
         let runtime: NakoRuntime = ''
         try {
             const doc = nako3docs.openFromFile(uri)
@@ -137,7 +137,7 @@ export class Nako3Execute implements Command {
                 }
             }
         } catch (ex) {
-            logger.info('getRuntimeFromFile: casuse error on file read')
+            log.info('getRuntimeFromFile: casuse error on file read')
             runtime = ''
         }
         return runtime
@@ -281,14 +281,16 @@ ${nako3source}
     private registerEvents() {
 		this.context.subscriptions.push(
 			window.onDidCloseTerminal(async (e) => {
-                logger.info(`■ Nako3Execute: window.onDidCloseTerminal`)
+                const log = logger.fromKey('/commands/Nako3Execute.registerEvents:window.onDidCloseTerminal')
+                log.info(`■ Nako3Execute: window.onDidCloseTerminal`)
                 await nadesiko3.terminalClose(e)
             })
 		)
     }
 
     public execute(uri: Uri) {
-        logger.info(`■ Nako3Execute: execute`)
+        const log = this.log.appendKey('.execute')
+        log.info(`■ Nako3Execute: execute`)
    		this.execNako3(uri)
     }
 }

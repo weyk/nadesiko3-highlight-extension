@@ -14,24 +14,27 @@ import { logger } from '../logger.mjs'
 import type { Token, TokenRef, TokenLink, LinkDef, LinkRef } from '../nako3token.mjs'
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
+    protected log = logger.fromKey('/provider/Nako3DocumentHighlightProvider')
+
     async provideDocumentHighlights(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<DocumentHighlight[]> {
-        logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights start`)
+        const log = this.log.appendKey('.provideDocumentHighlights')
+        log.info(`■ DocumentHighlightProvider: provideDocumentHighlights start`)
         try {
             let highlight: DocumentHighlight[]|null = []
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDocumentHighlights: canceled begining`)
+                log.debug(`provideDocumentHighlights: canceled begining`)
                 return highlight
             }
             const nako3doc = nako3docs.get(document)
             if (nako3doc) {
                 await nako3doc.updateText(document, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`provideDocumentHighlights: canceled adter updateText`)
+                    log.debug(`provideDocumentHighlights: canceled adter updateText`)
                     return highlight
                 }
                 await nako3docs.analyze(nako3doc, canceltoken)
                 if (canceltoken.isCancellationRequested) {
-                    logger.debug(`provideDocumentHighlights: canceled after tokenize`)
+                    log.debug(`provideDocumentHighlights: canceled after tokenize`)
                     return highlight
                 }
                 highlight = this.getHighlight(position, nako3doc.nako3doc)
@@ -40,11 +43,11 @@ export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider
                 }
                 await nako3diagnostic.refreshDiagnostics(canceltoken)
             }
-            logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights end  (count = ${highlight.length})`)
+            log.info(`■ DocumentHighlightProvider: provideDocumentHighlights end  (count = ${highlight.length})`)
             return highlight
         } catch (err) {
-            logger.info(`■ DocumentHighlightProvider: provideDocumentHighlights exception`)
-            console.log(err)
+            log.error(`■ DocumentHighlightProvider: provideDocumentHighlights exception`)
+            log.error(err)
             throw err
         }
     }
@@ -73,6 +76,7 @@ export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider
     }
 
     getHighlight (position: Position, doc: Nako3Document): DocumentHighlight[] {
+        const log = this.log.appendKey('.getHighlight')
         const line = position.line
         const col = position.character
         const token = doc.getTokenByPosition(line, col)
@@ -106,7 +110,7 @@ export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider
                     }
                 }
             } else {
-                logger.info(`getHighlight: no havve meta "${token.value}"`)
+                log.info(`getHighlight: no havve meta "${token.value}"`)
             }
         } else if ((token as TokenLink).link) {
             let link = (token as TokenLink).link

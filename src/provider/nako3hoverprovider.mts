@@ -20,23 +20,26 @@ import type { GlobalFunction, LocalVariable, LocalConstant } from '../nako3types
 import type { Token, TokenCallFunc, TokenRefVar, TokenLink, LinkDef, LinkRef, TokenStatement, StatementDef } from '../nako3token.mjs'
 
 export class Nako3HoverProvider implements HoverProvider {
+    protected log = logger.fromKey('/provider/Nako3HoverProvider')
+
     async provideHover(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<Hover|null> {
-        logger.info(`■ HoverProvider: provideHover`)
+        const log = this.log.appendKey('.provideHover')
+        log.info(`■ HoverProvider: provideHover`)
         let hover: Hover|null = null
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideHover: canceled begining`)
+            log.debug(`provideHover: canceled begining`)
             return hover
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideHover: canceled after updateText`)
+                log.debug(`provideHover: canceled after updateText`)
                 return hover
             }
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideHover: canceled after tokenize`)
+                log.debug(`provideHover: canceled after tokenize`)
                 return hover
             }
             hover = this.getHover(position, nako3doc)

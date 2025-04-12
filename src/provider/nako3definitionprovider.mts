@@ -17,23 +17,26 @@ import type { LocalVariable } from '../nako3types.mjs'
 import type { TokenCallFunc, TokenRefVar } from '../nako3token.mjs'
 
 export class Nako3DefinitionProvider implements DefinitionProvider {
+    protected log = logger.fromKey('/provider/Nako3DefinitionProvider')
+
     async provideDefinition(document: TextDocument, position: Position, canceltoken: CancellationToken): Promise<Definition | DefinitionLink[] | null> {
-        logger.info(`■ DefinitionProvier: provideDefinition`)
+        const log = this.log.appendKey('.provideDefinition')
+        log.info(`■ DefinitionProvier: provideDefinition`)
         let definition: Definition|DefinitionLink[]|null = null
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideDefinition: canceled begining`)
+            log.debug(`provideDefinition: canceled begining`)
             return definition
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDefinition: canceled after updateText`)
+                log.debug(`provideDefinition: canceled after updateText`)
                 return definition
             }
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideDefinition: canceled after tokenize`)
+                log.debug(`provideDefinition: canceled after tokenize`)
                 return definition
             }
             definition = this.getDefinition(position, nako3doc)
@@ -43,10 +46,10 @@ export class Nako3DefinitionProvider implements DefinitionProvider {
             await nako3diagnostic.refreshDiagnostics(canceltoken)
         }
 		return definition
-    
     }
 
     getDefinition (position: Position, doc: Nako3DocumentExt): Definition|DefinitionLink[]|null {
+        const log = this.log.appendKey('.getDefinition')
         const line = position.line
         const col = position.character
         const token = doc.nako3doc.getTokenByPosition(line, col)
@@ -85,7 +88,7 @@ export class Nako3DefinitionProvider implements DefinitionProvider {
                 if (range === null) {
                     return null
                 }
-                console.log('getDefinition: func hit')
+                log.debug('getDefinition: func hit')
                 return new Location(meta.uri, range)
             } else  if (['user_var', 'user_const'].includes(token.type)) {
                 const meta = (token as TokenRefVar).meta
@@ -99,7 +102,7 @@ export class Nako3DefinitionProvider implements DefinitionProvider {
                         if (range === null) {
                             return null
                         }
-                        console.log('getDefinition: var hit in global scope')
+                        log.debug('getDefinition: var hit in global scope')
                         return new Location(thing.uri, range)
                     }                                     
                 } else {
@@ -107,7 +110,7 @@ export class Nako3DefinitionProvider implements DefinitionProvider {
                     if (range === null) {
                         return null
                     }
-                    console.log('getDefinition: var hit in local scope')
+                    log.debug('getDefinition: var hit in local scope')
                     return new Location(doc.nako3doc.moduleEnv.uri, range)
                 }
             }

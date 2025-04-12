@@ -21,6 +21,7 @@ export class Nako3Diagnostic implements Disposable {
     private requreRefreshDiagnostics: boolean
     private refreshTimer: NodeJS.Timeout|null
     private nako3docs: Nako3Documents|null
+    protected log = logger.fromKey('/provider/Nako3Diagnostic')
 
     constructor () {
         this.diagnosticsCollection = languages.createDiagnosticCollection("nadesiko3")
@@ -40,7 +41,8 @@ export class Nako3Diagnostic implements Disposable {
     }
 
     public async refreshDiagnostics (canceltoken?: CancellationToken): Promise<void> {
-        logger.log(`interface:getDiagnostics:start`)
+        const log = this.log.appendKey('.refreshDiagnostics')
+        log.trace(`interface:getDiagnostics:start`)
         if (!this.nako3docs) {
             return
         }
@@ -55,7 +57,7 @@ export class Nako3Diagnostic implements Disposable {
                 this.diagnosticsCollection.set(doc.uri, this.getDiagnosticsForDoc(doc))
             }
         }
-        logger.log(`interface:getDiagnostics:create diagnostic collection`)
+        log.trace(`interface:getDiagnostics:create diagnostic collection`)
         return
     }
 
@@ -110,25 +112,26 @@ export class Nako3Diagnostic implements Disposable {
     }
 
     private getDiagnosticsForDoc (doc: Nako3DocumentExt): Diagnostic[] {
+        const log = this.log.appendKey('.getDiagnosticsForDoc')
         const diagnostics: Diagnostic[] = []
         let problemsRemain = nako3extensionOption.problemsLimit
 
-        logger.log(`docext:get problems from lexer ${doc.nako3doc.lexer.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from lexer ${doc.nako3doc.lexer.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.nako3doc.lexer.errorInfos, problemsRemain)
 
-        logger.log(`docext:get problems from tokenFixer ${doc.nako3doc.fixer.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from tokenFixer ${doc.nako3doc.fixer.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.nako3doc.fixer.errorInfos, problemsRemain)
 
-        logger.log(`docext:get problems from doc ${doc.nako3doc.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from doc ${doc.nako3doc.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.nako3doc.errorInfos, problemsRemain)
 
-        logger.log(`docext:get problems from docext ${doc.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from docext ${doc.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.errorInfos, problemsRemain)
 
-        logger.log(`docext:get problems from tokenApplyer ${doc.nako3doc.applyer.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from tokenApplyer ${doc.nako3doc.applyer.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.nako3doc.applyer.errorInfos, problemsRemain)
 
-        logger.log(`docext:get problems from parser ${doc.nako3doc.parser.errorInfos.count}/${problemsRemain}`)
+        log.trace(`docext:get problems from parser ${doc.nako3doc.parser.errorInfos.count}/${problemsRemain}`)
         problemsRemain = this.addDiagnosticsFromErrorInfos(diagnostics, doc.nako3doc.parser.errorInfos, problemsRemain)
 
         return diagnostics

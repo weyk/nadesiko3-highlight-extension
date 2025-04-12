@@ -106,6 +106,7 @@ class Nako3Plugin {
     plugins: Map<string, PluginInfo>
     pluginMapping: Map<string, PluginMap>
     pluginsInNakoruntime: {[runtime:string]: string[]}
+    protected log = logger.fromKey('/Nako3Plugin')
 
     constructor () {
         this.plugins = new Map()
@@ -191,6 +192,7 @@ class Nako3Plugin {
     }
 
     async import (imp: string, baseFilepath: string): Promise<ImportResult> {
+        const log = this.log.appendKey('.import')
         let r: RegExpExecArray|null
         const result : ImportResult = {
             importKey: imp,
@@ -204,19 +206,19 @@ class Nako3Plugin {
         r = /[\\\/]?((plugin_|nadesiko3-)[a-zA-Z0-9][-_a-zA-Z0-9]*)(\.(js|mjs|cjs))?$/.exec(imp)
         if (r && r.length > 1 && r[1] != null) {
             const pluginName = r[1]
-            logger.info(`imports:check js plugin with plugin name:${pluginName}`)
+            log.info(`imports:check js plugin with plugin name:${pluginName}`)
             // Nako3Pluginに既にあるかどうかを名前でチェック。
             // 既にあるならそれをそのまま使う。
             if (nako3plugin.has(pluginName)) {
                 result.pluginKey = pluginName
                 result.hasCommandInfo = true
-                logger.info(`imports: already resist plugin("${pluginName}")`)
+                log.info(`imports: already resist plugin("${pluginName}")`)
             }
         }
         r = /[\\\/]?(([^\\\/]*)(\.(js|mjs|cjs))?)$/.exec(imp)
         if (r && r.length > 1 && r[1] != null) {
             const pluginFilename = r[1]
-            logger.info(`imports:add js plugin without plugin name:${pluginFilename}`)
+            log.info(`imports:add js plugin without plugin name:${pluginFilename}`)
             let impresult = await nako3plugin.importFromFile(imp, baseFilepath)
             if (impresult !== null) {
                 if (impresult.errorInfos && impresult.errorInfos.length > 0) {
@@ -244,7 +246,7 @@ class Nako3Plugin {
                             result.errorInfos.push(importError)
                         }
                     } else {
-                        logger.info(`ImportPlugins: no changed plugin "${pluginFilename}"`)
+                        log.info(`ImportPlugins: no changed plugin "${pluginFilename}"`)
                         result.existFile = true
                         result.filepath = impresult.pluginName
                         result.hasCommandInfo = true
@@ -254,7 +256,7 @@ class Nako3Plugin {
                 }
             } else {
                 // this.errorInfos.add('WARN', 'noSupport3rdPlugin', { plugin }, importInfo.startLine, importInfo.startCol, importInfo.endLine, importInfo.endCol)
-                logger.info(`ImportPlugins: error import 3rd plugin "${pluginFilename}"`)
+                log.info(`ImportPlugins: error import 3rd plugin "${pluginFilename}"`)
                 if (result.hasCommandInfo) {
                     const importError: ErrorInfoSubset = {
                         level: 'WARN',
@@ -290,6 +292,7 @@ class Nako3Plugin {
     }
 
     async importFromFile (pluginName: string, baseFilepath?: string): Promise<PluginImportResult|null> {
+        const log = this.log.appendKey('.importFromFile')
         let isRemote = false
         if (pluginName.startsWith('http://') || pluginName.startsWith('https://')) {
             // absolute uri
@@ -311,7 +314,7 @@ class Nako3Plugin {
             }
             let pluginInfo = this.plugins.get(pluginName)
             if (pluginInfo) {
-                logger.info(`importFromFile: absolute url and hit cache:${pluginName}`)
+                log.info(`importFromFile: absolute url and hit cache:${pluginName}`)
                 const result: PluginImportResult = {
                     pluginName,
                     changed: false,
@@ -319,25 +322,25 @@ class Nako3Plugin {
                 }
                 return result               
             } else {
-                logger.info(`importFromFile: absolute url and not hit cache:${pluginName}`)
+                log.info(`importFromFile: absolute url and not hit cache:${pluginName}`)
             }
         }
-        logger.debug(`importFromFile:${pluginName}`)
+        log.debug(`importFromFile:${pluginName}`)
         const f = await this.searchPlugin(pluginName, baseFilepath)
         if (f && f.exists) {
-            logger.info(`importFromFile: exist file "${pluginName}"`)
+            log.info(`importFromFile: exist file "${pluginName}"`)
             if (!f.changed) {
-                logger.info(`importFromFile: no changed "${pluginName}"`)
+                log.info(`importFromFile: no changed "${pluginName}"`)
                 const result: PluginImportResult = {
                     pluginName: f.filepath,
                     changed: false,
                 }
                 return result
             }
-            logger.info(`importFromFile: parse start "${pluginName}"`)
+            log.info(`importFromFile: parse start "${pluginName}"`)
             const p = this.parsePlugin(f.text, f.uri, isRemote)
             if (p !== null && p.declare.size > 0) {
-                logger.info(`importFromFile:plugin set ${pluginName}`)
+                log.info(`importFromFile:plugin set ${pluginName}`)
                 const info: PluginInfo = {
                     pluginName: p.meta.pluginName || pluginName,
                     location: f.location,
@@ -353,10 +356,10 @@ class Nako3Plugin {
                 }
                 return result
             } else {
-                logger.info(`importFromFile: parse failed in ${pluginName}`)
+                log.info(`importFromFile: parse failed in ${pluginName}`)
             }
         } else {
-            logger.info(`importFromFile: not found ${pluginName}`)
+            log.info(`importFromFile: not found ${pluginName}`)
         }
         return null
     }
@@ -401,6 +404,7 @@ class Nako3Plugin {
     }
 
     private async tryReadPluginFileFromRemote(pluginUrl: string): Promise<FileContent|null> {
+        const log = this.log.appendKey('.tryReadPluginFileFromRemote')
         const plugin = this.plugins.get(pluginUrl)
         try {
             const headers = new Headers()
@@ -421,7 +425,7 @@ class Nako3Plugin {
             const response = await fetch(request)
 
             if (response.status === 304) {
-                logger.info(`searchPlugin:find at url`)
+                log.info(`searchPlugin:find at url`)
                 return {
                     filepath: pluginUrl,
                     uri: Uri.parse(pluginUrl),
@@ -439,7 +443,7 @@ class Nako3Plugin {
                 } else if (response.headers.has('Last-Modified')) {
                     contentKey = `L:${response.headers.has('Last-Modified')}`
                 }
-                logger.info(`searchPlugin:find at url`)
+                log.info(`searchPlugin:find at url`)
                 return {
                     filepath: pluginUrl,
                     uri: Uri.parse(pluginUrl),
@@ -450,12 +454,12 @@ class Nako3Plugin {
                     text: text
                 }
             } else {
-                logger.info(`searchPlugin: bad status "${response.status}" in fetch "${pluginUrl}"`)
+                log.info(`searchPlugin: bad status "${response.status}" in fetch "${pluginUrl}"`)
                 return null
             }
         } catch (err) {
             // nop
-            logger.info(`searchPlugin: exception in fetch "${pluginUrl}"`)
+            log.info(`searchPlugin: exception in fetch "${pluginUrl}"`)
             return null
         }
     }
@@ -486,18 +490,19 @@ class Nako3Plugin {
     }
 
     private async searchPlugin (plugin: string, baseFilepath?: string): Promise<FileContent|null> {
+        const log = this.log.appendKey('.searchPlugin')
         const nako3home = await nadesiko3.getNako3Home()
-        logger.debug(`searchPlugin:home:${nako3home}`)
+        log.debug(`searchPlugin:home:${nako3home}`)
         // HTTPによるURL
         if (plugin.startsWith('https://') || plugin.startsWith('http://')) {
             return await this.tryReadPluginFileFromRemote(plugin)
         }
         // ローカルのフルパス指定
         if (plugin.startsWith('/') || /[A-Za-z]:\\/.test(plugin) || plugin.startsWith('file:/')) {
-            logger.debug(`searchPath:check local absulute path`)
+            log.debug(`searchPath:check local absulute path`)
             const f = await this.checkPluginFile(plugin)
             if (f) {
-                logger.info(`searchPlugin:find at absolute path`)
+                log.info(`searchPlugin:find at absolute path`)
                 return f
             } else {
                 return null
@@ -505,11 +510,11 @@ class Nako3Plugin {
         }
         // 相対パス
         if (baseFilepath && (plugin.startsWith('./') || plugin.startsWith('../'))) {
-            logger.debug(`searchPath:check local relative path`)
+            log.debug(`searchPath:check local relative path`)
             const fpath = path.join(path.resolve(path.dirname(baseFilepath), plugin))
             const f = await this.checkPluginFile(fpath)
             if (f) {
-                logger.info(`searchPlugin:find at sourve relative path`)
+                log.info(`searchPlugin:find at sourve relative path`)
                 return f
             } else {
                 return null
@@ -521,7 +526,7 @@ class Nako3Plugin {
             const fpath = path.join(path.resolve(path.dirname(baseFilepath), plugin))
             const f = await this.checkPluginFile(fpath)
             if (f) {
-                logger.info(`searchPlugin:find at sourve relative path`)
+                log.info(`searchPlugin:find at sourve relative path`)
                 return f
             }
         }
@@ -532,7 +537,7 @@ class Nako3Plugin {
                 const fpath = path.join(nako3home, 'src', plugin)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/src`)
+                    log.info(`searchPlugin:find at nadesiko3/src`)
                     return f
                 }
             }
@@ -541,7 +546,7 @@ class Nako3Plugin {
                 const fpath = path.join(nako3home, 'core', 'src', plugin)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/core/src`)
+                    log.info(`searchPlugin:find at nadesiko3/core/src`)
                     return f
                 }
             }
@@ -551,7 +556,7 @@ class Nako3Plugin {
             const fpath = path.join(process.env.NAKO_LIB, plugin)
             const f = await this.checkPluginFile(fpath)
             if (f) {
-                logger.info(`searchPlugin:find at NAKO_LIB`)
+                log.info(`searchPlugin:find at NAKO_LIB`)
                 return f
             }
         }
@@ -559,19 +564,19 @@ class Nako3Plugin {
         if (nako3home !== '') {
             {
                 const fpath = path.join(nako3home, 'node_modules', plugin)
-                logger.debug(`searchPlugin:check(${fpath})`)
+                log.debug(`searchPlugin:check(${fpath})`)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/node_modules`)
+                    log.info(`searchPlugin:find at nadesiko3/node_modules`)
                     return f
                 }
             }
             {
                 const fpath = path.join(nako3home, '..', plugin)
-                logger.debug(`searchPlugin:check(${fpath})`)
+                log.debug(`searchPlugin:check(${fpath})`)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/..`)
+                    log.info(`searchPlugin:find at nadesiko3/..`)
                     return f
                 }
             }
@@ -579,7 +584,7 @@ class Nako3Plugin {
                 const fpath = path.join(nako3home, plugin)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3`)
+                    log.info(`searchPlugin:find at nadesiko3`)
                     return f
                 }
             }
@@ -587,7 +592,7 @@ class Nako3Plugin {
                 const fpath = path.join(nako3home, 'node_modules', 'nadesiko3core', 'src', plugin)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
+                    log.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
                     return f
                 }
             }
@@ -595,7 +600,7 @@ class Nako3Plugin {
                 const fpath = path.join(nako3home, 'node_modules', 'nadesiko3core', 'src', plugin)
                 const f = await this.checkPluginFile(fpath)
                 if (f) {
-                    logger.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
+                    log.info(`searchPlugin:find at nadesiko3/node_modules/nadesiko3core/src`)
                     return f
                 }
             }
@@ -605,7 +610,7 @@ class Nako3Plugin {
             const fpath = path.join(process.env.NODE_PATH, plugin)
             const f = await this.checkPluginFile(fpath)
             if (f) {
-                logger.info(`searchPlugin:find at NODE_PATH`)
+                log.info(`searchPlugin:find at NODE_PATH`)
                 return f
             }
         }
@@ -628,6 +633,7 @@ class Nako3Plugin {
     }
 
     private parseMinifiedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
+        const log = this.log.appendKey('.parseMinifiedPlugin')
         const plugin: PluginContent = {
             meta:{ pluginName: '', description: '', nakoRuntime: [] },
             declare: new Map()
@@ -655,7 +661,7 @@ class Nako3Plugin {
                 }
             }
             if (meta.pluginName || meta.description || meta.nakoRuntime) {
-                logger.info(`parseMinifiedPlugin: meta info found`)
+                log.info(`parseMinifiedPlugin: meta info found`)
             }
 
             // 変数・定数の定義を列挙して取り込む
@@ -686,7 +692,7 @@ class Nako3Plugin {
                 commandEntry.set(name, varible)
             }
             if (commandEntry.size > 0) {
-                logger.info(`parseMinifiedPlugin: variable / constant found`)
+                log.info(`parseMinifiedPlugin: variable / constant found`)
             }
 
             // 関数の定義を列挙して取り込む
@@ -722,8 +728,8 @@ class Nako3Plugin {
                     try {
                         info.josi = JSON.parse(r[1].trim().replaceAll("'", '"'))
                     } catch (err) {
-                        logger.info(`parsePlugin: cause error in parse josi`)
-                        console.log(err)
+                        log.error(`parsePlugin: cause error in parse josi`)
+                        log.error(err)
                     }
                 }
                 // 定義-asyncFn
@@ -766,19 +772,20 @@ class Nako3Plugin {
                     }
                     commandEntry.set(info.name, func)
                 } else {
-                    console.log(`parseMinifiedPlugin: not match fn`)
-                    console.log(r)
-                    console.log(memo)
+                    log.debug(`parseMinifiedPlugin: not match fn`)
+                    log.debug(r)
+                    log.debug(memo)
                 }
             }
         } catch (err) {
-            console.log(err)
+            log.error(err)
             return null
         }
         return plugin
     }
 
     private parseWelformedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
+        const log = this.log.appendKey('.parseWelformedPlugin')
         const plugin: PluginContent = {
             meta:{ pluginName: '', description: '', nakoRuntime: [] },
             declare: new Map()
@@ -815,7 +822,7 @@ class Nako3Plugin {
                         try {
                             meta.nakoRuntime = JSON.parse(r[1].trim().replaceAll("'",'"')) as NakoRuntime[]
                         } catch (err) {
-                            logger.debug(`parseWenformedPlugin: cause error on parse nakoRuntime`)
+                            log.debug(`parseWenformedPlugin: cause error on parse nakoRuntime`)
                             console.log(err)
                         }
                         continue
@@ -823,16 +830,16 @@ class Nako3Plugin {
                     if (/^\s*\},$/.test(line)) {
                         inMeta = false
                         if (meta.pluginName || meta.description || meta.nakoRuntime) {
-                            logger.info(`parseWenformedPlugin: meta info found`)
+                            log.info(`parseWenformedPlugin: meta info found`)
                         } else {
-                            logger.info(`parseWenformedPlugin: meta info empty`)
+                            log.info(`parseWenformedPlugin: meta info empty`)
                         }
                     }
                     continue
                 }
                 if (/^\s*'meta':\s*\{/.test(line)) {
                     inMeta = true
-                    logger.info(`parseWenformedPlugin: meta tag found`)
+                    log.info(`parseWenformedPlugin: meta tag found`)
                     continue
                 }
                 // 見出し行
@@ -912,8 +919,8 @@ class Nako3Plugin {
                     try {
                         info.josi = JSON.parse(r[1].trim().replaceAll("'", '"'))
                     } catch (err) {
-                        logger.info(`parsePlugin: cause error in parse josi`)
-                        console.log(err)
+                        log.error(`parsePlugin: cause error in parse josi`)
+                        log.error(err)
                     }
                     continue
                 }
@@ -980,13 +987,13 @@ class Nako3Plugin {
                         }
                         commandEntry.set(info.name, func)
                     } else {
-                        logger.info(`parseplugin: no () in fn line:${line}`)
+                        log.info(`parseplugin: no () in fn line:${line}`)
                     }
                     continue
                 }
             }
         } catch (err) {
-            console.log(err)
+            log.error(err)
             return null
         }
         return plugin

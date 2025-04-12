@@ -19,37 +19,41 @@ import type { DeclareThing, GlobalVariable, GlobalConstant, LocalVariable, Local
 import type { Token, TokenCallFunc, TokenRefVar, TokenRefFunc, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
 
 export class Nako3ReferenceProvider implements ReferenceProvider {
+    protected log = logger.fromKey('/provider/Nako3ReferenceProvider')
+
     async provideReferences(document: TextDocument, position: Position, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]|null> {
-        logger.info(`■ ReferenceProvider: provideReferences`)
+        const log = this.log.appendKey('.provideReferences')
+
+        log.info(`■ ReferenceProvider: provideReferences`)
         let refs: Location[]|null = null
         if (canceltoken.isCancellationRequested) {
-            logger.debug(`provideReferences: canceled begining`)
+            log.debug(`provideReferences: canceled begining`)
             return refs
         }
         const nako3doc = nako3docs.get(document)
         if (nako3doc) {
-            logger.info('provideReferences: before updateText')
+            log.info('provideReferences: before updateText')
             await nako3doc.updateText(document, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideReferences: canceled after updateText`)
+                log.debug(`provideReferences: canceled after updateText`)
                 return refs
             }
-            logger.info('provideReferences: before tokenize')
+            log.info('provideReferences: before tokenize')
             await nako3docs.analyze(nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideReferences: canceled after tokenize`)
+                log.debug(`provideReferences: canceled after tokenize`)
                 return refs
             }
-            logger.info('provideReferences: before getReferences')
+            log.info('provideReferences: before getReferences')
             refs = await this.getReferences(position, context, nako3doc, canceltoken)
             if (canceltoken.isCancellationRequested) {
-                logger.debug(`provideReferences: canceled after getReferences`)
+                log.debug(`provideReferences: canceled after getReferences`)
                 return refs
             }
-            logger.info('provideReferences: before refreshDiagnostics')
+            log.info('provideReferences: before refreshDiagnostics')
             await nako3diagnostic.refreshDiagnostics(canceltoken)
         }
-        logger.info('provideReferences: end')
+        log.info('provideReferences: end')
 		return refs
     }
 
@@ -119,10 +123,11 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
      * @returns 参照箇所のUriとLine-Colの一覧。ない場合は空配列を返す。
      */
     private async enumlateRefFunction (thing:DeclareThing, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]> {
+        const log = this.log.appendKey('.enumlateRefFunction')
         const results: Location[] = []
-        logger.info(`enumlateRefFunction: call   findFiles`)
+        log.info(`enumlateRefFunction: call   findFiles`)
         const uris = await workspace.findFiles('**/*.nako3','**/node_modules/**', undefined, canceltoken)
-        logger.info(`enumlateRefFunction: return findFiles(${uris.length})`)
+        log.info(`enumlateRefFunction: return findFiles(${uris.length})`)
         let uristr: string
         if (thing.origin === 'plugin') {
             uristr = thing.uri ? thing.uri.toString() : 'builtin'
@@ -133,7 +138,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
             uristr = thing.uri.toString()
         }
         for (const uri of uris) {
-            logger.info(`enumlateRefFunction: file "${uri.toString()}"`)
+            log.info(`enumlateRefFunction: file "${uri.toString()}"`)
             if (canceltoken.isCancellationRequested) {
                 return []
             }
@@ -203,10 +208,11 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
     }
 
     private async enumlateRefGlobalVar (thing:DeclareThing, context: ReferenceContext, canceltoken: CancellationToken): Promise<Location[]> {
+        const log = this.log.appendKey('.enumlateRefGlobalVar')
         const results: Location[] = []
-        logger.info(`enumlateRefGlobalVar: call   findFiles`)
+        log.info(`enumlateRefGlobalVar: call   findFiles`)
         const uris = await workspace.findFiles('**/*.nako3','**/node_modules/**', undefined, canceltoken)
-        logger.info(`enumlateRefGlobalVar: return findFiles(${uris.length})`)
+        log.info(`enumlateRefGlobalVar: return findFiles(${uris.length})`)
         let uristr: string
         let type: Nako3TokenTypePlugin|Nako3TokenTypeApply
         if (thing.origin === 'plugin') {
@@ -220,7 +226,7 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
             type = thing.type === 'var' ? 'user_var' : 'user_const' 
         }
         for (const uri of uris) {
-            logger.info(`enumlateRefGlobalVar: file "${uri.toString()}"`)
+            log.info(`enumlateRefGlobalVar: file "${uri.toString()}"`)
             if (canceltoken.isCancellationRequested) {
                 return []
             }
@@ -276,8 +282,8 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                     }
                 }
             } catch (err) {
-                console.log(`cause error in enumlateRefGlobalVar`)
-                console.log(err)
+                log.error(`cause error in enumlateRefGlobalVar`)
+                log.error(err)
             } finally {
                 if (requireClose) {
                     nako3docs.closeAtFile(uri)
@@ -288,11 +294,12 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
     }
 
     private enumlateRefLocalVar (doc: Nako3DocumentExt, thing:LocalVarConst, context: ReferenceContext, canceltoken: CancellationToken): Location[] {
+        const log = this.log.appendKey('.enumlateRefLocalVar')
         const results: Location[] = []
-        logger.info(`enumlateRefLocalVar: start`)
+        log.info(`enumlateRefLocalVar: start`)
         let type: Nako3TokenTypeApply
         type = thing.type === 'const' ? 'user_const' : 'user_var' 
-        logger.info(`enumlateRefLocalVar: find "${thing.name}" of "${type}" in "${thing.scopeId}"`)
+        log.info(`enumlateRefLocalVar: find "${thing.name}" of "${type}" in "${thing.scopeId}"`)
         try {
             // user-global-var/const
             let i = 0
@@ -319,8 +326,8 @@ export class Nako3ReferenceProvider implements ReferenceProvider {
                 i++
             }
         } catch (err) {
-            console.log(`cause error in enumlateRefLocalVar`)
-            console.log(err)
+            log.error(`cause error in enumlateRefLocalVar`)
+            log.error(err)
         } 
         return results
     }
