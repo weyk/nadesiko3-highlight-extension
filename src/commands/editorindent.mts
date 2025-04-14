@@ -64,7 +64,7 @@ export class EditorIndent implements Command {
         const indentStr = this.createIndentString(editor.options)
 
 		const startLineIndex = selection.start.line
-		const endLineIndex = selection.end.line - selection.end.character === 0 ? 1 : 0
+		const endLineIndex = selection.end.line - (selection.end.character === 0 ? 1 : 0)
 
 		for (let lineIndex = startLineIndex; lineIndex <= endLineIndex; lineIndex++) {
 			const line = editor.document.lineAt(lineIndex)

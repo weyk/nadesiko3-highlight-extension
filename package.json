@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "engines": {
         "vscode": "^1.91.0"
     },
