@@ -179,6 +179,7 @@ export function activate(context: vscode.ExtensionContext):void {
 	commandManager.register(new commands.EditorNewLine(context))
 	commandManager.register(new commands.EditorIndent(context))
 	commandManager.register(new commands.EditorOutdent(context))
+	commandManager.register(new commands.EditorIndentZen2Han(context))
 
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(configurationChanged))
 	// register some listener that make sure the status bar 

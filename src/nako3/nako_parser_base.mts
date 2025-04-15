@@ -2,7 +2,7 @@ import { ModuleEnv, ModuleOption } from '../nako3module.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
-import { logger, Log } from '../logger.mjs'
+import { logger } from '../logger.mjs'
 import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
 import type { SourceMap, GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
 import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
@@ -52,10 +52,9 @@ export class NakoParserBase {
   protected scopeIdStack: [ string, number][]
   protected scopeList: ScopeIdRange[]
   protected hasDeclareThingsUpdate: boolean
-  protected log:Log
+  protected log = logger.fromKey('/nako3/NakoParserBase')
 
   constructor (moduleEnv: ModuleEnv, moduleOption: ModuleOption) {
-    this.log = logger.fromKey('/nako3/NakoParserBase')
     this.stackList = [] // 関数定義の際にスタックが混乱しないように整理する
     this.tokens = []
     this.usedFuncs = new Set()

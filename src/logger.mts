@@ -42,17 +42,20 @@ class Logger {
     setBaseFolder (baseFolder: string):void {
         if (baseFolder !== this.baseFolder) {
             this.baseFolder = baseFolder
+            console.log(`logger:change baseDirectory =  '${this.baseFolder}'`)
         }
     }
 
-    clearConfig ():void {
+    clearFilter ():void {
         this.config.length = 0
         this.levelCache.clear()
+        console.log(`logger:clear filters`)
     }
 
-    appendConfig (conf: LogConfig):void {
+    appendFilter (conf: LogConfig):void {
         this.config.push(conf)
         this.levelCache.clear()
+        console.log(`logger:append filter :[${conf.level}]: ${conf.filter}`)
     }
 
     getlogLevelForKey (key: string):number {
@@ -208,7 +211,7 @@ class Logger {
     }
 }
 
-export class Log {
+class Log {
     private key: string
     constructor (key: string) {
         this.key = key

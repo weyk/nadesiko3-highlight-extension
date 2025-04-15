@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.2.6",
+    "version": "0.2.7",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -12,7 +12,7 @@
         "eslint": "eslint -c eslint.config.mjs",
         "eslint:fix": "eslint . --ext ts,mts --fix",
         "preTest": "npm run build && tsc -p ./tsconfig.test.json",
-        "prebuild": "node ./tools/checkjosilist.mjs",
+        "prebuild": "node ./tools/checkjosilist.mjs && node ./tools/checkcmdjson.mjs",
         "build": "npm run prebuild && tsc -p ./tsconfig.build.json && rollup -c rollup.config.mjs  && node ./tools/copyjson.mjs",
         "clean": "node ./tools/clean.mjs"
     },
@@ -46,13 +46,17 @@
             {
                 "command": "nadesiko3highlight.nadesiko3.exec",
                 "title": "%nadesiko3.exec%"
+            },
+            {
+                "command": "nadesiko3highlight.editor.indentZenToHan",
+                "title": "%nadesiko3.editor.zentohan%"
             }
         ],
         "keybindings": [
             {
                 "command": "nadesiko3highlight.nadesiko3.exec",
                 "key": "F8",
-                "when": "editorFocus"
+                "when": "editorLangId == nadesiko3 && editorFocus"
             },
             {
                 "command": "nadesiko3highlight.nadesiko3.exec",
@@ -62,27 +66,27 @@
             {
                 "command": "nadesiko3highlight.editor.newline",
                 "key": "enter",
-                "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible"
+                "when": "editorLangId == nadesiko3 && nadesiko3.enableNewLine && editorTextFocus && !editorReadonly && !suggestWidgetVisible"
             },
             {
                 "command": "nadesiko3highlight.editor.indent",
                 "key": "tab",
-                "when": "editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == off"
+                "when": "editorLangId == nadesiko3 && nadesiko3.enableIndent && editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == off"
             },
             {
                 "command": "nadesiko3highlight.editor.indent",
                 "key": "tab",
-                "when": "editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == on && !hasOtherSuggestions"
+                "when": "editorLangId == nadesiko3 && nadesiko3.enableIndent && editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == on && !hasOtherSuggestions"
             },
             {
                 "command": "nadesiko3highlight.editor.outdent",
                 "key": "shift+tab",
-                "when": "editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == off"
+                "when": "editorLangId == nadesiko3 && nadesiko3.enableIndent && editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == off"
             },
             {
                 "command": "nadesiko3highlight.editor.outdent",
                 "key": "shift+tab",
-                "when": "editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == on && !hasOtherSuggestions"
+                "when": "editorLangId == nadesiko3 && nadesiko3.enableIndent && editorTextFocus && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible && !inSnippetMode && config.editor.tabCompletion == on && !hasOtherSuggestions"
             }
         ],
         "menus": {
@@ -90,6 +94,13 @@
                 {
                     "when": "resourceLangId == nadesiko3",
                     "command": "nadesiko3highlight.nadesiko3.exec",
+                    "group": "Nadesiko3Group@1"
+                }
+            ],
+            "editor/context":[
+                {
+                    "when": "resourceLangId == nadesiko3",
+                    "command": "nadesiko3highlight.editor.indentZenToHan",
                     "group": "Nadesiko3Group@1"
                 }
             ]
@@ -215,6 +226,18 @@
                     "default": true,
                     "description": "%wnako.autoTurtleStart.description%"
                 },
+                "nadesiko3Highlight.keybind.indent": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%keybind.indent.description%"
+                },
+                "nadesiko3Highlight.keybind.newline": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": true,
+                    "description": "%keybind.newline.description%"
+                },
                 "nadesiko3Highlight.trace": {
                     "scope": "window",
                     "type": "string",
@@ -234,6 +257,26 @@
                     ],
                     "default": "off",
                     "description": "%trace.descriptions%"
+                },
+                "nadesiko3Highlight.filter": {
+                    "scope": "resource",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "title": "%filter.title%",
+                        "properties": {
+                            "filter": {
+                                "type": ["string", "null"],
+                                "description": "%filter.filter.description%"
+                            },
+                            "level": {
+                                "type": "string",
+                                "pattern": "^(ALL|TRACE|DEBUG|INFO|WARN|ERROR|FATAL|NONE)$",
+                                "description": "%filter.level.description%"
+                            }
+                        }
+                    },
+                    "default": []
                 }
             }
         },

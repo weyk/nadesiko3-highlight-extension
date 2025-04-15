@@ -1,6 +1,7 @@
 import {
     ConfigurationChangeEvent,
     WorkspaceConfiguration,
+    commands,
     workspace
 } from 'vscode'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
@@ -21,6 +22,8 @@ class Nako3ExtensionOption {
     // for execute wnako setting
     enableCSP: boolean
     enableNonceForScript: boolean
+    enableInentOnEnter: boolean
+    enableIndentControl: boolean
     useCanvas: boolean
     canvasW: number
     canvasH: number
@@ -46,10 +49,13 @@ class Nako3ExtensionOption {
         this.canvasId = 'turtle_cv'
         this.autoDrawStart = true
         this.autoTurtleStart = true
+        this.enableIndentControl = true
+        this.enableInentOnEnter = true
     }
 
     loadAll (conf: WorkspaceConfiguration) {
         this.loadLogTrace(conf)
+        this.loadTraceFilter(conf)
         this.loadProbremsLimit(conf)
         this.loadNakoRuntime(conf)
         this.loadUseShebang(conf)
@@ -67,6 +73,8 @@ class Nako3ExtensionOption {
         this.loadCanvasH(conf)
         this.loadAutoDrawStart(conf)
         this.loadAutoTurtleStart(conf)
+        this.loadEnableKeyBindIndent(conf)
+        this.loadEnableKeyBindNewLine(conf)
     }
 
     loadProbremsLimit (conf: WorkspaceConfiguration) {
@@ -231,6 +239,26 @@ class Nako3ExtensionOption {
         }
     }
 
+    loadEnableKeyBindIndent (conf: WorkspaceConfiguration) {
+        const v = conf.get('keybind.indent')
+        if (typeof v === 'boolean') {
+            this.enableIndentControl = v
+        } else {
+            this.enableIndentControl = true
+        }
+        commands.executeCommand('setContext', 'nadesiko3.enableIndent', this.enableIndentControl)
+    }
+
+    loadEnableKeyBindNewLine (conf: WorkspaceConfiguration) {
+        const v = conf.get('keybind.newline')
+        if (typeof v === 'boolean') {
+            this.enableInentOnEnter = v
+        } else {
+            this.enableInentOnEnter = true
+        }
+        commands.executeCommand('setContext', 'nadesiko3.enableNewLine', this.enableInentOnEnter)
+    }
+
     loadLogTrace (conf: WorkspaceConfiguration) {
         const traceLevel = conf.get('trace')
         if (typeof traceLevel === 'string') {
@@ -250,9 +278,51 @@ class Nako3ExtensionOption {
                 level = 'NONE'
             }
             logger.setLevel(level)
-            // logger.appendConfig({filter: /Nako3OnTypeFormattingEditProvider/, level: 'DEBUG' })
-            // logger.appendConfig({filter: /\/EditorNewLine[\.#]/, level: 'DEBUG' })
-            // logger.appendConfig({filter: null, level: 'FATAL' })
+        }
+    }
+
+    loadTraceFilter (conf: WorkspaceConfiguration) {
+        const traceFilter = conf.get('filter')
+        logger.clearFilter()
+        if (Array.isArray(traceFilter)) {
+            for (const ent of traceFilter) {
+                let causeError = false
+                let filter: RegExp|null|""
+                let level:LogLevel
+                if (ent.filter === null || ent.filter === "") {
+                    filter = ent.filter
+                } else {
+                    try {
+                        filter = new RegExp(ent.filter)
+                    } catch (err) {
+                        console.log(`filter regexp invalid(${ent.filter})`)
+                        filter = null
+                        causeError = true
+                    }
+                }
+                if (ent.level === 'ALL' || ent.level === 'TRACE') {
+                    level = 'TRACE'
+                } else if (ent.level === 'DEBUG') {
+                    level = 'DEBUG'
+                } else if (ent.level === 'INFO') {
+                    level = 'INFO'
+                } else if (ent.level === 'WARN') {
+                    level = 'WARN'
+                } else if (ent.level === 'ERROR') {
+                    level = 'ERROR'
+                } else if (ent.level === 'FATAL') {
+                    level = 'FATAL'
+                } else if (ent.level === 'NONE') {
+                    level = 'NONE'
+                } else {
+                    console.log(`trace level invalid(${ent.level})`)
+                    level = 'NONE'
+                    causeError = true
+                }
+                if (!causeError) {
+                    logger.appendFilter({ filter, level })
+                }
+            }
         }
     }
 }
@@ -317,8 +387,17 @@ export function configurationChanged (e: ConfigurationChangeEvent) {
     } else if (e.affectsConfiguration('nadesiko3Highlight.wnako.autoTurtleStart')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadAutoTurtleStart(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.keybind.indent')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadEnableKeyBindIndent(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.keybind.newline')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadEnableKeyBindNewLine(conf)
     } else if (e.affectsConfiguration('nadesiko3Highlight.trace')) {
         const conf = workspace.getConfiguration('nadesiko3Highlight')
         nako3extensionOption.loadLogTrace(conf)
+    } else if (e.affectsConfiguration('nadesiko3Highlight.filter')) {
+        const conf = workspace.getConfiguration('nadesiko3Highlight')
+        nako3extensionOption.loadTraceFilter(conf)
     }
 }

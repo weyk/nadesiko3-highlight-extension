@@ -1,5 +1,6 @@
 {
     "nadesiko3.exec": "なでしこ３で実行する",
+    "nadesiko3.editor.zentohan": "インデント内の全角空白を半角に変換する",
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
     "useOperatorHint.description": "演算子に対するヒントの表示を有効にする",
@@ -21,10 +22,15 @@
     "wnako.canvas.size.height.description": "用意するCanvas要素の高さ(height)",
     "wnako.autoDrawStart.description": "事前にCanvasのIDを指定して『描画開始』する",
     "wnako.autoTurtleStart.description": "事前にCanvasのIDを『カメ描画先』に設定する",
+    "keybind.indent.description": "TAB/shift+TABへのキーバインドを有効にする",
+    "keybind.newline.description": "Enterへのキーバインドを有効にする",
     "trace.label.off": "無し",
     "trace.label.messages": "通常",
     "trace.label.verbose": "詳細",
     "trace.label.debug": "デバッグ",
     "trace.label.all": "詳細デバッグ",
-    "trace.descriptions": "本拡張機能のトレースを取得する。"
+    "trace.descriptions": "本拡張機能のトレースを取得する。トレースフィルターの設定が無い場合に適用する。",
+    "filter.title": "トレースフィルター",
+    "filter.filter.description": "フィルターとして使用する正規表現文字列(nullは常にマッチしたものとして扱う)",
+    "filter.level.description": "フィルターにマッチした際に適用するトレースレベル(null,TRACE,DEBUG,INFO,WARN,ERROR,FATAL)"
 }

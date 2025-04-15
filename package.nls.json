@@ -1,5 +1,6 @@
 {
     "nadesiko3.exec": "Execute on nadesiko3",
+    "nadesiko3.editor.zentohan": "Convert Zenkaku space to Hankaku space in indetation",
     "configuration.title": "nadesiko3Highlight",
     "maxNumberOfProblems.description": "Controls the maximum number of problems produced by the server.",
     "useOperatorHint.description": "Use hover hint for operator",
@@ -21,10 +22,15 @@
     "wnako.canvas.size.height.description": "Preset Canvas height",
     "wnako.autoDrawStart.description": "Execute 『描画開始』 before code",
     "wnako.autoTurtleStart.description": "Set 『カメ描画先』 before code",
+    "keybind.indent.description": "enable keybind on 'tab' and 'shift+tab'",
+    "keybind.newline.description": "enable keybind on 'enter'",
     "trace.label.off": "no trace",
     "trace.label.messages": "normal trace",
     "trace.label.verbose": "detail trace",
     "trace.label.debug": "debugging trace",
     "trace.label.all": "all trace",
-    "trace.descriptions": "Traces the nadesiko3 highlight extension."
+    "trace.descriptions": "Traces the nadesiko3 highlight extension.use if filter is blank.",
+    "filter.title": "trace filter",
+    "filter.filter.description": "filter regexp(null always match)",
+    "filter.level.description": "trace level if matched(null,TRACE,DEBUG,INFO,WARN,ERROR,FATAL)"
 }
