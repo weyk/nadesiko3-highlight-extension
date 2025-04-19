@@ -3,7 +3,8 @@ import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { Nako3Range } from '../nako3range.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
-import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
+import { trimOkurigana } from '../nako3util.mjs'
+import { newEmptyToken } from '../nako3token.mjs'
 import type { SourceMap, GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
 import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
 import type { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
@@ -476,12 +477,12 @@ export class NakoParserBase {
   getCur (): Token {
     if (this.isEOF()) {
        this.errorInfos.addFromToken('ERROR', 'nomoreToken', {}, this.peekDef())
-       return NewEmptyToken()
+       return newEmptyToken()
     }
     const t = this.tokens[this.index++]
     if (!t) {
       this.errorInfos.addFromToken('ERROR', 'nomoreToken', {}, this.peekDef())
-      return NewEmptyToken()
+      return newEmptyToken()
     }
     return t
   }
@@ -499,7 +500,7 @@ export class NakoParserBase {
   /** 解析中のトークンを返す、無理なら def を返す */
   peekDef (def: Token|null = null): Token {
     if (this.isEOF()) {
-      if (!def) { def = NewEmptyToken() }
+      if (!def) { def = newEmptyToken() }
       return def
     }
     return this.tokens[this.index]

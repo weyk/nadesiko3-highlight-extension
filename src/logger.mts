@@ -69,8 +69,8 @@ class Logger {
                 return level
             }
         }
-        this.levelCache.set(key, 0)
-        return 0
+        this.levelCache.set(key, this.level)
+        return this.level
     }
     /**
      * ロガーからLOGレベルのメッセージを出力する

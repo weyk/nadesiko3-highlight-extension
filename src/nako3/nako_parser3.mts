@@ -4,7 +4,8 @@
 import { Nako3Range } from '../nako3range.mjs'
 import { opPriority, RenbunJosi, operatorList } from './nako_parser_const.mjs'
 import { NakoParserBase, CHECK_WILDCARD } from './nako_parser_base.mjs'
-import { NewEmptyToken, trimOkurigana } from '../nako3util.mjs'
+import { trimOkurigana } from '../nako3util.mjs'
+import { newEmptyToken } from '../nako3token.mjs'
 import { getMessageWithArgs } from '../nako3message.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { cssColor } from '../csscolor.mjs'
@@ -220,7 +221,7 @@ export class NakoParser extends NakoParserBase {
     // </廃止された構文>
 
     if (this.check2([['user_func', 'sys_func'], 'eq'])) {
-      const word: Token = this.get() || NewEmptyToken()
+      const word: Token = this.get() || newEmptyToken()
       this.errorInfos.addFromToken('ERROR', 'cannnotSetToFunction', { func: word.value }, word)
       this.skipToEol()
       return this.yNop()
@@ -2859,7 +2860,7 @@ export class NakoParser extends NakoParserBase {
       let oneWordFuncToken = this.get()
       if (!oneWordFuncToken) {
         this.errorInfos.addFromToken('ERROR', 'checkedButNotget', {}, this.peekDef())
-        oneWordFuncToken = NewEmptyToken()
+        oneWordFuncToken = newEmptyToken()
       }
       const tt = oneWordFuncToken as TokenCallFunc
       const f = this.getVarNameRef(tt)
@@ -2917,7 +2918,7 @@ export class NakoParser extends NakoParserBase {
           ...this.fromSourceMap(map)
         } as AstCallFunc
       }
-      this.errorInfos.addFromToken('ERROR', 'errorCallForCstyleFunc', {}, funcNameToken || NewEmptyToken())
+      this.errorInfos.addFromToken('ERROR', 'errorCallForCstyleFunc', {}, funcNameToken || newEmptyToken())
       this.skipToEol()
       return this.yNop()
     }

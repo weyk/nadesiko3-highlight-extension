@@ -1,7 +1,7 @@
 import { Uri } from 'vscode'
 import { filenameToModName } from './nako3util.mjs'
 import { logger } from './logger.mjs'
-import { setSerialId, incSerialId } from './nako3util.mjs'
+import { setSerialId, incSerialId } from './nako3serialid.mjs'
 import type { NakoRuntime, DeclareThings, ExternThings as ExternalThings, AllScopeVarConsts, ScopeIdRange }  from './nako3types.mjs'
 
 export interface ImportInfo {

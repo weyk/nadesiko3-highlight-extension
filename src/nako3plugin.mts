@@ -1,14 +1,13 @@
 import { Uri } from 'vscode'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { ImportStatementInfo } from './nako3tokenfixer.mjs'
-import { ModuleLink, LinkPlugin, LinkPlugins } from './nako3module.mjs'
-import { ErrorInfoManager, ErrorInfoSubset } from './nako3errorinfo.mjs'
-import { Nako3Range } from './nako3range.mjs'
-import { mergeNakoRuntimes, trimOkurigana, trimQuote } from './nako3util.mjs'
+
+import { Nako3PluginParser } from './nako3plugin_parser.mjs'
+import { LinkPlugins } from './nako3module.mjs'
+import { ErrorInfoSubset } from './nako3errorinfo.mjs'
+import { mergeNakoRuntimes, trimOkurigana } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
-import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
 import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
 import type { Token } from './nako3token.mjs'
@@ -33,16 +32,6 @@ interface PluginMap {
     pluginFilepath: string
 }
 
-interface PluginMeta {
-    pluginName: string
-    description: string
-    nakoRuntime: NakoRuntime[]
-}
-
-interface PluginContent {
-    meta: PluginMeta
-    declare: DeclareThings
-}
 
 export interface PluginInfo {
     pluginName: string
@@ -103,12 +92,14 @@ const suggestWords: Map<string, NakoRuntime[]> = new Map([
 ])
 
 class Nako3Plugin {
+    pluginParser: Nako3PluginParser
     plugins: Map<string, PluginInfo>
     pluginMapping: Map<string, PluginMap>
     pluginsInNakoruntime: {[runtime:string]: string[]}
     protected log = logger.fromKey('/Nako3Plugin')
 
     constructor () {
+        this.pluginParser = new Nako3PluginParser()
         this.plugins = new Map()
         this.pluginMapping = new Map()
         this.pluginsInNakoruntime = {}
@@ -260,7 +251,7 @@ class Nako3Plugin {
                 if (result.hasCommandInfo) {
                     const importError: ErrorInfoSubset = {
                         level: 'WARN',
-                        messageId: 'warnImport3rdPlugin',
+                        messageId: 'warnImport3rdPlugin',      
                         args: {
                             plugin: pluginFilename
                         }
@@ -338,7 +329,7 @@ class Nako3Plugin {
                 return result
             }
             log.info(`importFromFile: parse start "${pluginName}"`)
-            const p = this.parsePlugin(f.text, f.uri, isRemote)
+            const p = this.pluginParser.parsePlugin(f.text, { uri: f.uri, isRemote })
             if (p !== null && p.declare.size > 0) {
                 log.info(`importFromFile:plugin set ${pluginName}`)
                 const info: PluginInfo = {
@@ -617,387 +608,6 @@ class Nako3Plugin {
         return null
     }
 
-    private parsePlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
-        let result:PluginContent|null = null
-        try {
-            result = this.parseWelformedPlugin(text, uri, isRemote)
-            if (!result || result.declare.size === 0) {
-                result = this.parseMinifiedPlugin(text, uri, isRemote)
-             }
-        } catch (err) {
-            (`parsePlugin: error in parse`)
-            console.log(err)
-            result = null
-        }
-        return result
-    }
-
-    private parseMinifiedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
-        const log = this.log.appendKey('.parseMinifiedPlugin')
-        const plugin: PluginContent = {
-            meta:{ pluginName: '', description: '', nakoRuntime: [] },
-            declare: new Map()
-        }
-        const meta = plugin.meta
-        const commandEntry = plugin.declare
-        try {
-            let r: RegExpExecArray|null
-            // metaタグをチェック
-            r = /meta:\{type:"const",value:\{([^\}]*)\}\}/.exec(text)
-            if (r && r.length > 1 && r[1] != null) {
-                const metastr = r[1]
-                for (const m of metastr.matchAll(/([a-zA-Z]+):("([^"]+)"|\[[^\]]\]*\])/g)) {
-                    if (m && m.length > 2 && m[1] != null && m[2] != null) {
-                        const key = m[1].trim()
-                        const v = m[3] != null ? m[3].trim() : m[2].trim()
-                        if (key === 'pluginName') {
-                            meta.pluginName = v
-                        } else if (key === 'description') {
-                            meta.description = v
-                        } else if (key === 'nakoRuntime') {
-                            meta.nakoRuntime = JSON.parse(v) as NakoRuntime[]
-                        }
-                    }
-                }
-            }
-            if (meta.pluginName || meta.description || meta.nakoRuntime) {
-                log.info(`parseMinifiedPlugin: meta info found`)
-            }
-
-            // 変数・定数の定義を列挙して取り込む
-            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9]+):\{type:"(var|const)",value:([^}]*)\}/g)) {
-                const name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
-                const type = m[3].trim() as ('var'|'const')
-                const v = m[4].trim()
-                if (['meta'].includes(name)) {
-                    continue
-                }
-                let isColor = type === 'const' && cssColor.isColorName(trimQuote(v))
-                const varible: GlobalVarConst = {
-                    name,
-                    nameNormalized: name,
-                    modName: '',
-                    type,
-                    isExport: true,
-                    isPrivate: false,
-                    value: v,
-                    hint: v,
-                    range: null,
-                    uri,
-                    origin: 'plugin',
-                    isRemote,
-                    isColor,
-                    activeDeclare: true
-                }
-                commandEntry.set(name, varible)
-            }
-            if (commandEntry.size > 0) {
-                log.info(`parseMinifiedPlugin: variable / constant found`)
-            }
-
-            // 関数の定義を列挙して取り込む
-            for (const m of text.matchAll(/("([^"]+)"|[A-Za-z0-9]+):\{(type:"func",[^\{]*)\{/g)) {
-                let name = trimOkurigana(m[2] != null ? m[2].trim() : m[1].trim())
-                let memo = m[3].trim()
-                let info:any = {
-                    name,
-                    type: '',
-                    pure: true,
-                    asyncFn: false,
-                    desc: '',
-                    josi: null,
-                    yomi: '',
-                    args: []
-                }
-                if (['初期化', '!クリア'].includes(info.name)) {
-                    continue
-                }
-                // 定義-type
-                r = /type:"([^"]+)",/.exec(memo)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.type = r[1].trim()
-                }
-                // 定義-pure
-                r = /pure:([^,]*),/.exec(memo)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.pure = r[1].trim() === "!0" || r[1].trim() === "true"
-                }
-                // 定義-josi
-                r = /josi:(\[(\[("[^"]*",?)*\],?)*\]),/.exec(memo)
-                if (r && r.length > 1 && r[1] != null) {
-                    try {
-                        info.josi = JSON.parse(r[1].trim().replaceAll("'", '"'))
-                    } catch (err) {
-                        log.error(`parsePlugin: cause error in parse josi`)
-                        log.error(err)
-                    }
-                }
-                // 定義-asyncFn
-                r = /asyncFn:([^,]*),/.exec(memo)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.asyncFn = r[1].trim() === "!0" || r[1].trim() === "true"
-                }
-                // 定義-fn
-                r = /fn:(async function|function)(\(.*\).*)/.exec(memo)
-                if (r && r.length > 2 && r[2] != null) {
-                    let args: FunctionArg[] = []
-                    for (let j = 0; j < info.josi.length; j++) {
-                        args.push({
-                            varname: String.fromCharCode(65 + j),
-                            josi: info.josi[j],
-                            attr: [],
-                            range: null
-                        })
-                    }
-                    info.args = args
-                    const func: GlobalFunction = {
-                        name: info.name,
-                        nameNormalized: info.name,
-                        modName: '',
-                        type: 'func',
-                        isPure: info.pure,
-                        isMumei: false,
-                        isAsync: info.asyncFn,
-                        isExport: true,
-                        isPrivate: false,
-                        isVariableJosi: false,
-                        hint: info.desc + info.asyncFn ? '(非同期関数)' : '',
-                        args,
-                        range: null,
-                        scopeId: null,
-                        uri,
-                        origin: 'plugin',
-                        isRemote,
-                        activeDeclare: true
-                    }
-                    commandEntry.set(info.name, func)
-                } else {
-                    log.debug(`parseMinifiedPlugin: not match fn`)
-                    log.debug(r)
-                    log.debug(memo)
-                }
-            }
-        } catch (err) {
-            log.error(err)
-            return null
-        }
-        return plugin
-    }
-
-    private parseWelformedPlugin (text: string, uri: Uri, isRemote: boolean): PluginContent|null {
-        const log = this.log.appendKey('.parseWelformedPlugin')
-        const plugin: PluginContent = {
-            meta:{ pluginName: '', description: '', nakoRuntime: [] },
-            declare: new Map()
-        }
-        const meta = plugin.meta
-        const commandEntry = plugin.declare
-        const lines = text.split(/[\r\n]/)
-        if (!lines) {
-            return null
-        }
-        try {
-            let currentTitle = ''
-            let inMeta = false
-            let info:any = {}
-            let r: RegExpExecArray|null
-            for (let i = 0;i < lines.length; i++) {
-                let line = lines[i]
-                if (line.length === 0) {
-                    continue
-                }
-                if (inMeta) {
-                    r = /^\s*pluginName:\s*'(.*)'/.exec(line)
-                    if (r && r.length > 1 && r[1] != null) {
-                        meta.pluginName = r[1].trim()
-                        continue
-                    }
-                    r = /^\s*description:\s*'(.*)'/.exec(line)
-                    if (r && r.length > 1 && r[1] != null) {
-                        meta.description = r[1].trim()
-                        continue
-                    }
-                    r = /^\s*nakoRuntime:\s*(\[.*\])/.exec(line)
-                    if (r && r.length > 1 && r[1] != null) {
-                        try {
-                            meta.nakoRuntime = JSON.parse(r[1].trim().replaceAll("'",'"')) as NakoRuntime[]
-                        } catch (err) {
-                            log.debug(`parseWenformedPlugin: cause error on parse nakoRuntime`)
-                            console.log(err)
-                        }
-                        continue
-                    }
-                    if (/^\s*\},$/.test(line)) {
-                        inMeta = false
-                        if (meta.pluginName || meta.description || meta.nakoRuntime) {
-                            log.info(`parseWenformedPlugin: meta info found`)
-                        } else {
-                            log.info(`parseWenformedPlugin: meta info empty`)
-                        }
-                    }
-                    continue
-                }
-                if (/^\s*'meta':\s*\{/.test(line)) {
-                    inMeta = true
-                    log.info(`parseWenformedPlugin: meta tag found`)
-                    continue
-                }
-                // 見出し行
-                r = /^\s*\/\/\s*@(.*)$/.exec(line)
-                if (r && r.length > 1 && r[1] != null && !r[1].startsWith('ts-')) {
-                    currentTitle = r[1].trim()
-                    continue
-                }
-                // 変数・定数行
-                r = /^(\s*)'([^']+)'\s*:\s*\{\s*type\s*:\s*'(const|var)'\s*,\s*value\s*:\s*([^\}]*)\}\s*,\s*(\/\/ @(.*))?$/.exec(line)
-                if (r && r.length > 4 && r[1] != null && r[2] != null && r[3] != null && r[4] != null) {
-                    const col = r[1].length + 1
-                    const resLen = r[2].length
-                    const name = trimOkurigana(r[2].trim())
-                    const type = r[3].trim() as 'var'|'const'
-                    const v = r[4].trim()
-                    let isColor = type === 'const' && cssColor.isColorName(trimQuote(v))
-                    const yomi = r[6] != null ? r[6].trim() : ''
-                    const varible: GlobalVarConst = {
-                        name,
-                        nameNormalized: name,
-                        modName: '',
-                        type,
-                        isExport: true,
-                        isPrivate: false,
-                        value: v,
-                        hint: v,
-                        range: new Nako3Range(i, col, i, col + resLen, col + resLen),
-                        uri,
-                        origin: 'plugin',
-                        isRemote,
-                        isColor,
-                        activeDeclare: true
-                    }
-                    commandEntry.set(name, varible)
-                    continue
-                }
-                // 関数定義開始行
-                r = /^(\s*)'([^']+)'\s*:\s*(\{|\[)\s*(\/\/\s*@(.+))?$/.exec(line)
-                if (r && r.length > 1 && r[1] != null && r[2] != null) {
-                    const col = r[1].length + 1
-                    const resLen = r[2].length
-                    const name = trimOkurigana(r[2].trim())
-                    let yomi = ''
-                    let desc = ''
-                    if (r.length > 4 && r[4] != null) {
-                        let memo = r[4].trim().split('// @', 2)
-                        if (memo.length >= 2) {
-                            desc = memo[0].trim()
-                            yomi = memo[1].trim()
-                        } else {
-                            desc = r[4].trim()
-                        }
-                    }
-                    info = {
-                        name,
-                        desc,
-                        yomi,
-                        type: '',
-                        josi: null,
-                        pure: true,
-                        asyncFn: false,
-                        args: [],
-                        range: new Nako3Range(i, col, i, col + resLen, col + resLen)
-                    }
-                    continue
-                }
-                // 定義-type行
-                r = /^\s*'?type'?\s*:\s*'([^']+)'\s*,$/.exec(line)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.type = r[1].trim()
-                    continue
-                }
-                // 定義-josi行
-                r = /^\s*'?josi'?\s*:\s*(.+),$/.exec(line)
-                if (r && r.length > 1 && r[1] != null) {
-                    try {
-                        info.josi = JSON.parse(r[1].trim().replaceAll("'", '"'))
-                    } catch (err) {
-                        log.error(`parsePlugin: cause error in parse josi`)
-                        log.error(err)
-                    }
-                    continue
-                }
-                // 定義-pure行
-                r = /^\s*'?pure'?\s*:\s*(true|false)\s*,$/.exec(line)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.pure = r[1].trim() === 'true'
-                    continue
-                }
-                // 定義-asyncFn行
-                r = /^\s*'?asyncFn'?\s*:\s*(true|false)\s*,$/.exec(line)
-                if (r && r.length > 1 && r[1] != null) {
-                    info.asyncFn = r[1].trim() === 'true'
-                    continue
-                }
-                // 定義-fn行
-                r = /^\s*'?fn'?\s*:\s*(async function|function)\s*(\(.*\).*)$/.exec(line)
-                if (r && r.length > 2 && r[2] != null) {
-                    let args: FunctionArg[] = []
-                    let argparam = r[2].trim()
-                    if (argparam.indexOf('//') > -1) {
-                        argparam = argparam.split('//')[0]
-                    }
-                    r = /^[^\(]*\((.*)\)[^\)]*$/.exec(argparam)
-                    if (r && r.length > 1 && r[1] != null) {
-                        argparam = r[1].trim()
-                        r = /^(\s*sys|(.*),\s*sys)\s*$/.exec(argparam)
-                        if (r && r.length > 2 && r[2] != null) {
-                            argparam = r[2].trim()
-                        }
-                        let params = argparam.split(',')
-                        for (let j = 0; j < params.length; j++) {
-                            let param = params[j].trim().toUpperCase()
-                            args.push({
-                                varname: param,
-                                josi: info.josi[j],
-                                attr: [],
-                                range: null
-                            })
-                        }
-                        info.args = args
-                        if (['初期化', '!クリア'].includes(info.name)) {
-                            continue
-                        }
-                        const func: GlobalFunction = {
-                            name: info.name,
-                            nameNormalized: info.name,
-                            modName: '',
-                            type: 'func',
-                            isPure: info.pure,
-                            isMumei: false,
-                            isAsync: info.asyncFn,
-                            isExport: true,
-                            isPrivate: false,
-                            isVariableJosi: false,
-                            hint: info.desc + info.asyncFn ? '(非同期関数)' : '',
-                            args,
-                            range: info.range,
-                            scopeId: null,
-                            uri,
-                            origin: 'plugin',
-                            isRemote,
-                            activeDeclare: true
-                        }
-                        commandEntry.set(info.name, func)
-                    } else {
-                        log.info(`parseplugin: no () in fn line:${line}`)
-                    }
-                    continue
-                }
-            }
-        } catch (err) {
-            log.error(err)
-            return null
-        }
-        return plugin
-    }
 }
 
 export const nako3plugin = new Nako3Plugin()

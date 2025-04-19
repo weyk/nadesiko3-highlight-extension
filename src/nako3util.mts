@@ -1,11 +1,7 @@
-import { Uri } from 'vscode'
 import { lexRulesRE } from './nako3lexer_rule.mjs'
 import { ModuleLink } from './nako3module.mjs'
 import type { FunctionArg, ScopeIdRange, NakoRuntime } from './nako3types.mjs'
-import type { Token, TokenType, TokenGroup } from './nako3token.mjs'
-
-const SerialIdStart = 0
-const SerialIdMax = 999999
+import type { Token} from './nako3token.mjs'
 
 const convertCharTable = new Map<number, string>([
     // ハイフンへの変換
@@ -190,33 +186,6 @@ export function argsFromString(argstr: string): FunctionArg[] {
     return args
 }
 
-export function NewEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent: number = -1, startLine: number = 0, uri: Uri|null = null): Token {
-    return {
-      type,
-      fixType: type,
-      funcType: type,
-      parseType: type,
-      group,
-      value,
-      indent: {
-        level: 0,
-        len: 0,
-        text: ''
-      },
-      len: 0,
-      lineCount: 0,
-      startLine,
-      startCol: 0,
-      endLine: startLine,
-      endCol: 0,
-      resEndCol: 0,
-      uri: uri === null ? Uri.parse('main.nako3') : uri,
-      josi: '',
-      text: '',
-      unit: ''
-    }
-}
-
 export function getScopeId (index: number, scopeList: ScopeIdRange[]): string {
     let scopeId: string = 'global'
     let currentLength: number = 0
@@ -255,16 +224,6 @@ export function trimQuote (str: string): string {
     return str
 }
 
-export function setSerialId(): number {
-    return SerialIdStart
-}
-
-export function incSerialId(serialId: number): number {
-    if (serialId >= SerialIdMax) {
-        return SerialIdStart
-    }
-    return serialId + 1
-}
 
 export function mergeNakoRuntimes(nakoRuntime: NakoRuntime[]|'invalid', runtimes: NakoRuntime[]|'invalid'|undefined):NakoRuntime[]|'invalid' {
     if (runtimes && runtimes.length > 0) {

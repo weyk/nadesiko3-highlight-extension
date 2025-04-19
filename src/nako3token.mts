@@ -248,3 +248,30 @@ export interface LinkDef {
 export interface LinkRef {
   mainTokenIndex: number
 }
+
+export function newEmptyToken(type: TokenType = '?', group: TokenGroup = '?', value: any = '', indent: number = -1, startLine: number = 0, uri: Uri|null = null): Token {
+  return {
+    type,
+    fixType: type,
+    funcType: type,
+    parseType: type,
+    group,
+    value,
+    indent: {
+      level: 0,
+      len: 0,
+      text: ''
+    },
+    len: 0,
+    lineCount: 0,
+    startLine,
+    startCol: 0,
+    endLine: startLine,
+    endCol: 0,
+    resEndCol: 0,
+    uri: uri === null ? Uri.parse('main.nako3') : uri,
+    josi: '',
+    text: '',
+    unit: ''
+  }
+}

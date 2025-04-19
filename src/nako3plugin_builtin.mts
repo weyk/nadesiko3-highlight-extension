@@ -103,6 +103,17 @@ function importCommandJson (json: CmdJsonEntry):void {
                 const hint = entry[3]
                 let type:'func'|'var'|'const'
                 if (rawType === '関数') {
+                    let hintmemo = hint
+                    let isAsync = false
+                    let isVariableJosi = false
+                    if (hintmemo.endsWith('(可変引数)')) {
+                        hintmemo = hintmemo.slice(0, hintmemo.length - '(可変引数)'.length)
+                        isVariableJosi = true
+                    }
+                    if (hintmemo.endsWith('(非同期関数)')) {
+                        hintmemo = hintmemo.slice(0, hintmemo.length - '(非同期関数)'.length)
+                        isAsync = true
+                    }
                     const func: GlobalFunction = {
                         name: command,
                         nameNormalized: command,
@@ -110,10 +121,10 @@ function importCommandJson (json: CmdJsonEntry):void {
                         type: 'func',
                         isPure: true,
                         isMumei: false,
-                        isAsync: false,
+                        isAsync,
                         isExport: true,
                         isPrivate: false,
-                        isVariableJosi: false,
+                        isVariableJosi,
                         hint,
                         args: argsFromString(args),
                         range: null,
