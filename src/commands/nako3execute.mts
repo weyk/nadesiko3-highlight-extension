@@ -15,7 +15,7 @@ import { nadesiko3 } from '../nako3nadesiko3.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { showMessage } from '../nako3message.mjs'
 import { logger } from '../logger.mjs'
-import type { NakoRuntime } from '../nako3types.mjs'
+import type { NakoRuntime } from '../nako3/nako3types.mjs'
 
 interface ContentResources {
     assistPluginJs: Uri

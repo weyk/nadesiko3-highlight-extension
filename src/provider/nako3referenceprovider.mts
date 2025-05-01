@@ -15,8 +15,8 @@ import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareThing, GlobalVariable, GlobalConstant, LocalVariable, LocalVarConst } from '../nako3types.mjs'
-import type { Token, TokenCallFunc, TokenRefVar, TokenRefFunc, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
+import type { DeclareThing, GlobalVariable, GlobalConstant, LocalVariable, LocalVarConst } from '../nako3/nako3types.mjs'
+import type { Token, TokenCallFunc, TokenRefVar, TokenRefFunc, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3/nako3token.mjs'
 
 export class Nako3ReferenceProvider implements ReferenceProvider {
     protected log = logger.fromKey('/provider/Nako3ReferenceProvider')

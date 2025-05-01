@@ -2,7 +2,7 @@
     "name": "nadesiko3-highlight-extension",
     "displayName": "nadesiko3 syntax highlight",
     "description": "Adds syntax highlighting support for nadesiko3",
-    "version": "0.2.8",
+    "version": "0.2.9",
     "engines": {
         "vscode": "^1.91.0"
     },
@@ -50,6 +50,10 @@
             {
                 "command": "nadesiko3highlight.editor.indentZenToHan",
                 "title": "%nadesiko3.editor.zentohan%"
+            },
+            {
+                "command": "nadesiko3highlight.editor.indentHanToZen",
+                "title": "%nadesiko3.editor.hantozen%"
             }
         ],
         "keybindings": [
@@ -101,6 +105,16 @@
                 {
                     "when": "resourceLangId == nadesiko3",
                     "command": "nadesiko3highlight.editor.indentZenToHan",
+                    "group": "Nadesiko3Group@1"
+                },
+                {
+                    "when": "resourceLangId == nadesiko3",
+                    "command": "nadesiko3highlight.editor.indentHanToZen",
+                    "group": "Nadesiko3Group@1"
+                },
+                {
+                    "when": "resourceLangId == nadesiko3",
+                    "command": "nadesiko3highlight.nadesiko3.exec",
                     "group": "Nadesiko3Group@1"
                 }
             ]

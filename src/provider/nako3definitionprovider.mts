@@ -13,8 +13,8 @@ import { Nako3Range } from '../nako3range.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { LocalVariable } from '../nako3types.mjs'
-import type { TokenCallFunc, TokenRefVar } from '../nako3token.mjs'
+import type { LocalVariable } from '../nako3/nako3types.mjs'
+import type { TokenCallFunc, TokenRefVar } from '../nako3/nako3token.mjs'
 
 export class Nako3DefinitionProvider implements DefinitionProvider {
     protected log = logger.fromKey('/provider/Nako3DefinitionProvider')

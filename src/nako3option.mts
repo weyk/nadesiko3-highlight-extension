@@ -6,7 +6,7 @@ import {
 } from 'vscode'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime} from './nako3types.mjs'
+import type { NakoRuntime} from './nako3/nako3types.mjs'
 import type { LogLevel } from './logger.mjs'
 
 class Nako3ExtensionOption {

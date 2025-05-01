@@ -2,7 +2,7 @@ import { trimOkurigana, trimQuote } from './nako3util.mjs'
 import { Nako3Range } from './nako3range.mjs'
 import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3/nako3types.mjs'
 
 interface PluginMeta {
     pluginName: string

@@ -1,6 +1,7 @@
 {
     "nadesiko3.exec": "Execute on nadesiko3",
     "nadesiko3.editor.zentohan": "Convert Zenkaku space to Hankaku space in indetation",
+    "nadesiko3.editor.hantozen": "Convert Hankaku space and tab to Zenkaku space in indetation",
     "configuration.title": "nadesiko3Highlight",
     "maxNumberOfProblems.description": "Controls the maximum number of problems produced by the server.",
     "useOperatorHint.description": "Use hover hint for operator",

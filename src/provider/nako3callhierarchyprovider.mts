@@ -17,8 +17,8 @@ import { argsToString, getScopeId } from '../nako3util.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { Token, TokenRef, TokenLink, LinkDef, LinkRef, TokenDefFunc, TokenCallFunc } from '../nako3token.mjs'
-import type { GlobalFunction } from '../nako3types.mjs'
+import type { Token, TokenRef, TokenLink, LinkDef, LinkRef, TokenDefFunc, TokenCallFunc } from '../nako3/nako3token.mjs'
+import type { GlobalFunction } from '../nako3/nako3types.mjs'
 
 export class Nako3CallHierarchyProvider implements CallHierarchyProvider {
   protected log = logger.fromKey('/provider/Nako3CallHierarchyProvider')

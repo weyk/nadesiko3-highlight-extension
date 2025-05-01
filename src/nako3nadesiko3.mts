@@ -5,7 +5,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { showMessage } from './nako3message.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime } from './nako3types.mjs'
+import type { NakoRuntime } from './nako3/nako3types.mjs'
 
 export interface TerminalExt extends Terminal {
     filePath?: string

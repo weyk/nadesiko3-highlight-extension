@@ -2,7 +2,7 @@ import { argsFromString, trimQuote } from './nako3util.mjs'
 import { nako3plugin, PluginInfo } from './nako3plugin.mjs'
 import { cssColor } from './csscolor.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, GlobalFunction, GlobalVariable, GlobalConstant } from './nako3types.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVariable, GlobalConstant } from './nako3/nako3types.mjs'
 
 import commandjson from './nako3/command.json'
 

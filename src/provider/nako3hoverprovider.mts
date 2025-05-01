@@ -16,8 +16,8 @@ import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { logger } from '../logger.mjs'
-import type { GlobalFunction, LocalVariable, LocalConstant } from '../nako3types.mjs'
-import type { Token, TokenCallFunc, TokenRefVar, TokenLink, LinkDef, LinkRef, TokenStatement, StatementDef } from '../nako3token.mjs'
+import type { GlobalFunction, LocalVariable, LocalConstant } from '../nako3/nako3types.mjs'
+import type { Token, TokenCallFunc, TokenRefVar, TokenLink, LinkDef, LinkRef, TokenStatement, StatementDef } from '../nako3/nako3token.mjs'
 
 export class Nako3HoverProvider implements HoverProvider {
     protected log = logger.fromKey('/provider/Nako3HoverProvider')

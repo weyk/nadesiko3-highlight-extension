@@ -1,7 +1,7 @@
-import { lexRulesRE } from './nako3lexer_rule.mjs'
+import { lexRulesRE } from './nako3/nako3lexer_rule.mjs'
 import { ModuleLink } from './nako3module.mjs'
-import type { FunctionArg, ScopeIdRange, NakoRuntime } from './nako3types.mjs'
-import type { Token} from './nako3token.mjs'
+import type { FunctionArg, ScopeIdRange, NakoRuntime } from './nako3/nako3types.mjs'
+import type { Token} from './nako3/nako3token.mjs'
 
 const convertCharTable = new Map<number, string>([
     // ハイフンへの変換

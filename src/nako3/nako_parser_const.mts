@@ -1,4 +1,4 @@
-import { TokenType } from '../nako3token.mjs'
+import { TokenType } from './nako3token.mjs'
 
 export const opPriority: {[key: string]: number} = {
   // and or

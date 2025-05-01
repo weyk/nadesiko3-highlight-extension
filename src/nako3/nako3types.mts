@@ -1,5 +1,6 @@
-import { Uri } from 'vscode'
-import { Nako3Range } from './nako3range.mjs'
+import { Nako3Range } from '../nako3range.mjs'
+import type { Uri } from './nako3typebase.mjs'
+export { Uri }
 
 export type NakoRuntime = 'wnako'|'cnako'|'snako'|''
 export type DeclareOrigin = 'plugin'|'global'|'local'|'system'
@@ -88,11 +89,3 @@ export type LocalVarConsts = Map<string, LocalVarConst>
 export type ExternThings = Map<string, ExternalInfo>
 export type AllScopeVarConsts = Map<string, LocalVarConsts>
 
-export interface SourceMap {
-    startLine: number
-    startCol: number
-    endLine: number
-    endCol: number
-    resEndCol: number
-    uri: Uri | undefined
-}

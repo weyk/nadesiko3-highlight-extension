@@ -1,4 +1,4 @@
-import { Nako3TokenTypeReserve } from '../nako3token.mjs'
+import { Nako3TokenTypeReserve } from './nako3token.mjs'
 /** 予約語 */
 const reserved: Map<string, Nako3TokenTypeReserve> = new Map([
   ['もし', 'もし'],

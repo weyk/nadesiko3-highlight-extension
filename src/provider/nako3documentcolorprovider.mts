@@ -17,8 +17,8 @@ import { cssColor, ColorFormat, ColorInfo } from '../csscolor.mjs'
 import { nako3extensionOption } from '../nako3option.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { Token, TokenRefVar } from '../nako3token.mjs'
-import type { GlobalConstant } from '../nako3types.mjs'
+import type { Token, TokenRefVar } from '../nako3/nako3token.mjs'
+import type { GlobalConstant } from '../nako3/nako3types.mjs'
 
 type ColorPresentationsContext = { readonly document: TextDocument; readonly range: Range }
 

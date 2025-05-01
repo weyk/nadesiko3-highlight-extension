@@ -1,6 +1,6 @@
 import { MessageArgs } from './nako3message.mjs'
-import type { SourceMap } from './nako3types.mjs'
-import type { Token } from './nako3token.mjs'
+import type { Nako3CodeLocation } from './nako3/nako3codelocation.mjs'
+import type { Token } from './nako3/nako3token.mjs'
 import type { Ast } from './nako3/nako_ast.mjs'
 
 export type MessageLevel = 'ERROR'|'WARN'|'INFO'|'HINT'
@@ -66,7 +66,7 @@ export class ErrorInfoManager {
         }
     }
 
-    addFromToken (type: MessageLevel, messageId: string, args: MessageArgs, tokenS: Token|SourceMap|Ast, tokenE?: Token|SourceMap|Ast) {
+    addFromToken (type: MessageLevel, messageId: string, args: MessageArgs, tokenS: Token|Nako3CodeLocation|Ast, tokenE?: Token|Nako3CodeLocation|Ast) {
         tokenE = tokenE || tokenS
         this.add (type, messageId, args, tokenS.startLine, tokenS.startCol, tokenE.endLine, tokenE.endCol)
     }
@@ -84,7 +84,7 @@ export class ErrorInfoManager {
         }
     }
 
-    addRawFromToken (type: MessageLevel, message: string, tokenS: Token|SourceMap|Ast, tokenE?: Token|SourceMap|Ast) {
+    addRawFromToken (type: MessageLevel, message: string, tokenS: Token|Nako3CodeLocation|Ast, tokenE?: Token|Nako3CodeLocation|Ast) {
         tokenE = tokenE || tokenS
         this.addRaw (type, message, tokenS.startLine, tokenS.startCol, tokenE.endLine, tokenE.endCol)
     }

@@ -1,8 +1,8 @@
-import { ModuleLink, ModuleEnv  } from './nako3module.mjs'
-import { ErrorInfoManager } from './nako3errorinfo.mjs'
+import { ModuleLink, ModuleEnv  } from '../nako3module.mjs'
+import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { lexRules, lexRulesRE, ProcMap, SubProcOptArgs } from './nako3lexer_rule.mjs'
-import { josiRE, removeJosiMap } from './nako3/nako_josi_list.mjs'
-import { filenameToModName, convert } from './nako3util.mjs'
+import { josiRE, removeJosiMap } from './nako_josi_list.mjs'
+import { filenameToModName, convert } from '../nako3util.mjs'
 import type { Token, Indent } from './nako3token.mjs'
 
 export interface TokenizeResult {

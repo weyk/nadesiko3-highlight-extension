@@ -5,7 +5,6 @@ import {
     Selection,
     TextEditor,
     TextEditorEdit,
-    TextEditorOptions,
     TextLine
 } from 'vscode'
 import { Command } from '../nako3command.mjs'

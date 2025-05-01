@@ -1,6 +1,7 @@
 {
     "nadesiko3.exec": "なでしこ３で実行する",
     "nadesiko3.editor.zentohan": "インデント内の全角空白を半角に変換する",
+    "nadesiko3.editor.hantozen": "インデント内の半角空白とTABを全角空白に変換する",
     "configuration.title": "なでしこ３ ハイライト",
     "maxNumberOfProblems.description": "表示する問題の最大数の制御する。",
     "useOperatorHint.description": "演算子に対するヒントの表示を有効にする",

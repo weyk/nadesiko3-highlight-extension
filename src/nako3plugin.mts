@@ -9,8 +9,8 @@ import { mergeNakoRuntimes, trimOkurigana } from './nako3util.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nadesiko3 } from './nako3nadesiko3.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3types.mjs'
-import type { Token } from './nako3token.mjs'
+import type { NakoRuntime, GlobalFunction, GlobalVarConst, DeclareThing, DeclareThings, FunctionArg } from './nako3/nako3types.mjs'
+import type { Token } from './nako3/nako3token.mjs'
 
 type LocationType = '?'|'remote'|'workspace'|'editor'|'fs'|'builtin'
 

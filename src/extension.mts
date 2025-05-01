@@ -26,7 +26,7 @@ import { nako3diagnostic } from './provider/nako3diagnotic.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
 
-import type { NakoRuntime } from './nako3types.mjs'
+import type { NakoRuntime } from './nako3/nako3types.mjs'
 
 const NAKO3_MODE = { scheme: 'file', language: 'nadesiko3' }
 
@@ -180,6 +180,7 @@ export function activate(context: vscode.ExtensionContext):void {
 	commandManager.register(new commands.EditorIndent(context))
 	commandManager.register(new commands.EditorOutdent(context))
 	commandManager.register(new commands.EditorIndentZen2Han(context))
+	commandManager.register(new commands.EditorIndentHan2Zen(context))
 
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(configurationChanged))
 	// register some listener that make sure the status bar 

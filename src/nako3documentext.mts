@@ -8,7 +8,7 @@ import { Nako3Document } from './nako3document.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
 import { ModuleLink } from './nako3module.mjs'
 import { logger } from './logger.mjs'
-import type { NakoRuntime } from './nako3types.mjs'
+import type { NakoRuntime } from './nako3/nako3types.mjs'
 
 export class Nako3DocumentExt {
     public nako3doc: Nako3Document

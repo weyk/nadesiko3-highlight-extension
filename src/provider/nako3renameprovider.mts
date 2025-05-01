@@ -16,8 +16,8 @@ import { nako3docs } from '../nako3interface.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { DeclareThing, GlobalFunction, GlobalVariable, GlobalVarConst, LocalVarConst } from '../nako3types.mjs'
-import type { Token, TokenCallFunc, TokenDefFunc, TokenRefVar, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3token.mjs'
+import type { DeclareThing, GlobalFunction, GlobalVariable, GlobalVarConst, LocalVarConst } from '../nako3/nako3types.mjs'
+import type { Token, TokenCallFunc, TokenDefFunc, TokenRefVar, Nako3TokenTypePlugin, Nako3TokenTypeApply } from '../nako3/nako3token.mjs'
 
 interface PrepareRenameResult {
     range: Range

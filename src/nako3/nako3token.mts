@@ -1,6 +1,5 @@
-import { Uri } from 'vscode'
-import type { GlobalFunction, GlobalVarConst, LocalVarConst } from './nako3types.mjs'
-import { Nako3Range } from './nako3range.mjs'
+import type { Uri, GlobalFunction, GlobalVarConst, LocalVarConst } from './nako3types.mjs'
+import { Nako3Range } from '../nako3range.mjs'
 
 export type Nako3TokenRawType = '?'
 | 'ここまで'
@@ -269,7 +268,7 @@ export function newEmptyToken(type: TokenType = '?', group: TokenGroup = '?', va
     endLine: startLine,
     endCol: 0,
     resEndCol: 0,
-    uri: uri === null ? Uri.parse('main.nako3') : uri,
+    uri: uri === null ? '' : uri,
     josi: '',
     text: '',
     unit: ''

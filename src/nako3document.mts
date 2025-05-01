@@ -1,9 +1,9 @@
 import { CancellationToken } from 'vscode'
-import { Nako3Tokenizer, TokenizeResult } from './nako3lexer.mjs'
-import { ImportStatementInfo, Nako3TokenFixer } from './nako3tokenfixer.mjs'
+import { Nako3Tokenizer, TokenizeResult } from './nako3/nako3lexer.mjs'
+import { ImportStatementInfo, Nako3TokenFixer } from './nako3/nako3tokenfixer.mjs'
 import { Nako3Project } from './nako3project.mjs'
 import { ErrorInfoManager } from './nako3errorinfo.mjs'
-import { Nako3TokenApplyer } from './nako3tokenapplyer.mjs'
+import { Nako3TokenApplyer } from './nako3/nako3tokenapplyer.mjs'
 import { NakoParser } from './nako3/nako_parser3.mjs'
 import { ModuleLink, ModuleEnv, ModuleOption } from './nako3module.mjs'
 import { dumpScopIdList } from './nako3util.mjs'
@@ -11,8 +11,8 @@ import { setSerialId, incSerialId } from './nako3serialid.mjs'
 import { nako3extensionOption } from './nako3option.mjs'
 import { nako3plugin } from './nako3plugin.mjs'
 import { logger } from './logger.mjs'
-import type { Token } from './nako3token.mjs'
-import type { NakoRuntime } from './nako3types.mjs'
+import type { Token } from './nako3/nako3token.mjs'
+import type { NakoRuntime } from './nako3/nako3types.mjs'
 
 export class Nako3Document {
     text: string

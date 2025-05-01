@@ -121,6 +121,12 @@ export const messages = new Map<string,string>([
     ['missArrayIndex', 'Miss at index for array "{arrayname}"'],
     ['errorCallForCstyleFunc', 'Error on call of c-style function'],
     ['mismatchFunctionArgumentNumber', 'Mismatch function "{funcname}" declared arguments number {defargsnum} vs function call arguments number {realargsnnum}'],
+    ['hasNoJosiArgFunc', ''],
+    ['over3ArrayLet', 'Let array "{varname}" dont over 3 dimensions'],
+    ['over3ArrayRef', 'Reference array dont over 3 dimensions'],
+    ['invalidTokenInCfunction', 'Invalid syntax in args of c-like fanction "{funcName}" call, ex)non c-like function call'],
+    ['invalidTokenInLetArrayIndex', 'Invalid syntax in index of let array "{varname}", ex)non c-like function call'],
+    ['invalidTokenInRefArrayIndex', 'Invalid syntax in index of ref array, ex)non c-like function call)'],
     // RenameProvider
     ['cannnotRenameInPluginEntry', '"{name}" is entity of plugin, it cannot rename'],
     ['cannnotRenameInRemoteEntry', '"{name}" is entity of remote file, it cannot rename'],

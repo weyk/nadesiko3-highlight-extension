@@ -11,7 +11,7 @@ import { Nako3Document } from '../nako3document.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { Token, TokenRef, TokenLink, LinkDef, LinkRef } from '../nako3token.mjs'
+import type { Token, TokenRef, TokenLink, LinkDef, LinkRef } from '../nako3/nako3token.mjs'
 
 export class Nako3DocumentHighlightProvider implements DocumentHighlightProvider {
     protected log = logger.fromKey('/provider/Nako3DocumentHighlightProvider')

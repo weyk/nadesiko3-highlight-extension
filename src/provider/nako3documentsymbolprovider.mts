@@ -14,7 +14,7 @@ import { ModuleEnv } from '../nako3module.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { GlobalFunction } from '../nako3types.mjs'
+import type { GlobalFunction } from '../nako3/nako3types.mjs'
 
 export class Nako3DocumentSymbolProvider implements DocumentSymbolProvider {
     protected log = logger.fromKey('/provider/Nako3DocumentSymbolProvider')

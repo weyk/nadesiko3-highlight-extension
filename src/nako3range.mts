@@ -1,4 +1,4 @@
-import type { Token } from './nako3token.mjs'
+import type { Token } from './nako3/nako3token.mjs'
 
 export class Nako3Range {
     startLine: number

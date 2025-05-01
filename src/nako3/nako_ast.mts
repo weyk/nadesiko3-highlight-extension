@@ -1,9 +1,8 @@
 /**
  * 抽象構文木( Abstract Syntax Tree )を定義したもの
  */
-import { Uri } from 'vscode'
-import type { GlobalFunction } from '../nako3types.mjs'
-import type { Token } from '../nako3token.mjs'
+import type { Uri, GlobalFunction } from './nako3types.mjs'
+import type { Token } from './nako3token.mjs'
 
 /** ASTのノードの種類を定義 */
 export type NodeType = 'nop'

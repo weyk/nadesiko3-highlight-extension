@@ -7,11 +7,11 @@ import {
     TextDocument
 } from 'vscode'
 import { Nako3DocumentExt } from '../nako3documentext.mjs'
-import { COL_START } from '../nako3lexer.mjs'
+import { COL_START } from '../nako3/nako3lexer.mjs'
 import { nako3docs } from '../nako3interface.mjs'
 import { nako3diagnostic } from './nako3diagnotic.mjs'
 import { logger } from '../logger.mjs'
-import type { Token } from '../nako3token.mjs'
+import type { Token } from '../nako3/nako3token.mjs'
 
 type HighlightMap = {[k:string]: string | [string, string |string[]]}
 const hilightMapping: HighlightMap = {

@@ -1,12 +1,13 @@
 import { ModuleEnv, ModuleOption } from '../nako3module.mjs'
 import { ErrorInfoManager } from '../nako3errorinfo.mjs'
 import { Nako3Range } from '../nako3range.mjs'
+import { Nako3CodeLocation } from './nako3codelocation.mjs'
 import { nako3plugin } from '../nako3plugin.mjs'
 import { logger } from '../logger.mjs'
 import { trimOkurigana } from '../nako3util.mjs'
-import { newEmptyToken } from '../nako3token.mjs'
-import type { SourceMap, GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from '../nako3types.mjs'
-import type { Token, TokenType, TokenDefFunc } from '../nako3token.mjs'
+import { newEmptyToken } from './nako3token.mjs'
+import type { GlobalFunction, GlobalVarConst, LocalConstant, LocalVarConst, LocalVarConsts, LocalVariable, DeclareThings, DeclareThing, ScopeIdRange } from './nako3types.mjs'
+import type { Token, TokenType, TokenDefFunc } from './nako3token.mjs'
 import type { Ast, AstBlocks, AstOperator, AstConst, AstStrValue } from './nako_ast.mjs'
 
 interface IndentLevel {
@@ -391,7 +392,7 @@ export class NakoParserBase {
    */
   check3 (pre: any[], loop: any[], post: any[], allowLoopZero?: boolean, loopLimit?: number): boolean {
     const tmpIndex = this.index
-    this.c = 0
+    let c = 0
     const fail = () => {
       this.index = tmpIndex
       return false
@@ -403,12 +404,13 @@ export class NakoParserBase {
     if (!this.check2(pre)) { return fail() }
     this.index += pre.length
     if (loopLimit === undefined) { loopLimit = Number.MAX_VALUE }
-    while (this.c < loopLimit && this.check2(loop)) {
+    while (c < loopLimit && this.check2(loop)) {
       this.index += loop.length
-      this.c++
+      c++
     }
-    if (allowLoopZero !== true && this.c === 0) { return fail() }
+    if (allowLoopZero !== true && c === 0) { return fail() }
     if (!this.check2(post)) { return fail() }
+    this.c = c
     return success()
   }
 
@@ -465,6 +467,39 @@ export class NakoParserBase {
   }
 
   /**
+   * acceptのループ対応版、型名の他にコールバック関数を指定できる
+   * 型にマッチしなければ false を返し、カーソルを巻き戻す
+   * @param pre [単語1の型, 単語2の型, ... ] ループ前のトークン列
+   * @param loop [単語1の型, 単語2の型, ... ] ループするトークン列
+   * @param post [単語1の型, 単語2の型, ... ] ループ後のトークン列
+   * @param allowLoopZero boolean ループ部分の０回を許容するならtrueを指定する。既定はfalse
+   * @param loopLimit number ループ部分の回数上限を指定する。既定はMAX_VALUE
+   */
+  accept3 (pre: any[], loop: any[], post: any[], allowLoopZero?: boolean, loopLimit?: number): boolean {
+      const log = this.log.appendKey('.accept3')
+      const y = []
+      let c = 0
+      const tmpIndex = this.index
+      const rollback = () => {
+        this.index = tmpIndex
+        return false
+      }
+      if (pre !== null && pre.length > 0 && !this.accept(pre)) { return rollback() }
+      y.push(...this.y)
+      if (loopLimit === undefined) { loopLimit = Number.MAX_VALUE }
+      while (c < loopLimit && this.accept(loop)) {
+        y.push(...this.y)
+        c++
+      }
+      if (allowLoopZero !== true && c === 0) { return rollback() }
+      if (post !== null && post.length > 0 && !this.accept(post)) { return rollback() }
+      y.push(...this.y)
+      this.c = c
+      this.y = y
+      return true
+    }
+  
+  /**
    * カーソル語句を取得して、カーソルを後ろに移動する
    */
   get (): Token | null {
@@ -509,35 +544,17 @@ export class NakoParserBase {
   /**
    * 現在のカーソル語句のソースコード上の位置を取得する。
    */
-  peekSourceMap (t: Token | undefined = undefined): SourceMap {
+  peekCodeLocation (t: Token | undefined = undefined): Nako3CodeLocation {
     let token = (t === undefined) ? this.peek() : t
     if (token === null) {
       token = this.tokens[this.tokens.length - 1]
     }
-    return { startLine: token.startLine, endLine: token.endLine, uri: token.uri, startCol: token.startCol, endCol: token.endCol, resEndCol: token.resEndCol }
+    return new Nako3CodeLocation(token)
   }
 
-  rangeMerge(start: SourceMap|Token|Ast, end: SourceMap|Token|Ast): SourceMap {
-    return {
-      startLine: start.startLine,
-      startCol: start.startCol,
-      endLine: end.endLine,
-      endCol: end.endCol,
-      resEndCol: end.resEndCol,
-      uri: start.uri
-    }
-  }
-
-  fromSourceMap(start: SourceMap|Token|Ast): SourceMap {
-    const end = this.peekSourceMap()
-    return {
-      startLine: start.startLine,
-      startCol: start.startCol,
-      endLine: end.endLine,
-      endCol: end.endCol,
-      resEndCol: end.resEndCol,
-      uri: start.uri
-    }
+  getCodeLocationFrom(start: Nako3CodeLocation|Token|Ast): Nako3CodeLocation {
+    const end = this.peekCodeLocation()
+    return end.mergeStart(start)
   }
 
   genDeclareSore(): LocalVariable {
