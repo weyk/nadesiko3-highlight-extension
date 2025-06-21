@@ -63,7 +63,7 @@ export const lexRules: LexRule[] = [
     { name: 'COMMENT_BLOCK', group: 'コメント', pattern: '／＊', proc: 'cbCommentBlock', procArgs: ['／＊', '＊／'] },
     { name: 'def_func', group: '記号', pattern: '●' },
     { name: 'def_func', group: '記号', pattern: '*', isFirstCol: true },
-    { name: 'func_ptr', group: '属性', pattern: '{関数}' },
+    { name: 'func_ptr', group: '属性', pattern: /^[\{｛]関数[\}｝]/ },
     { name: 'string', group: '文字列', pattern: '\'', proc: 'cbString', procArgs: ['\'', '\'', 'string'] },
     { name: 'string', group: '文字列', pattern: '’', proc: 'cbString', procArgs: ['’', '’', 'string'] },
     { name: 'string', group: '文字列', pattern: '『', proc: 'cbString', procArgs: ['『', '』', 'string'] },
@@ -84,7 +84,7 @@ export const lexRules: LexRule[] = [
     { name: 'gteq', group: '演算子', pattern: /^(≧|>=|=>|＞＝|＝＞)/ },
     { name: 'lteq', group: '演算子', pattern: /^(≦|<=|=<|＜＝|＝＜)/ },
     { name: 'noteq', group: '演算子', pattern: /^(≠|<>|!=|＜＞|！＝)/ },
-    { name: '===', group: '演算子', pattern: /^(===|＝＝＝)/ },
+    { name: '===', group: '演算子', pattern: /^([=＝][=＝][=＝])/ },
     { name: '!==', group: '演算子', pattern: /^(!==|！＝＝)/ },
     { name: 'eq', group: '演算子', pattern: /^(==?|＝＝?)/ },
     { name: 'not', group: '演算子', pattern: /^(!|💡|！)/ },
@@ -110,7 +110,7 @@ export const lexRules: LexRule[] = [
     { name: '(', group: '演算子', pattern: /^(\(|（)/ },
     { name: ')', group: '演算子', pattern: /^(\)|）)/, withJosi: true },
     { name: '|', group: '演算子', pattern: /^(\||｜)/ },
-    { name: '??', group: '命令', pattern: /^(\?\?|？？)/ }, // 「表示」のエイリアス #1745
+    { name: '??', group: '命令', pattern: /^([\?？][\?？])/ }, // 「表示」のエイリアス #1745
     { name: '$', group: '記号', pattern: /^[\$\.＄．]/ }, // #1793 プロパティアクセス
     { name: '」', group: '記号', pattern: '」', withJosi: true },
     { name: '』', group: '記号', pattern: '』', withJosi: true },

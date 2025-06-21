@@ -1037,7 +1037,7 @@ export class NakoParser extends NakoParserBase {
   yDebugPrint (): AstCallFunc | null {
     const map = this.peekCodeLocation()
     const t = this.get() // skip '??'
-    if (!t || t.value !== '??') {
+    if (!t || t.type !== '??') {
       this.errorInfos.addFromToken('ERROR', 'suggestPrint', {}, map)
       this.skipToEol()
       return this.yNop() as AstCallFunc
